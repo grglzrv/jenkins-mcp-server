@@ -66,20 +66,7 @@ Requests pass through up to two independent enforcement layers before reaching
 Jenkins. The server's own policy always applies. The minibridge proxy is
 optional and adds a second layer in front of it.
 
-```mermaid
-flowchart TD
-    A["Agent"] --> MB
-
-    subgraph MB["minibridge · optional proxy"]
-        direction LR
-        T["<b>tools</b><br/>which tools"]
-        G["<b>guardrails</b><br/>content checks"]
-        P["<b>policer</b><br/>enforcement"]
-    end
-
-    MB --> S["<b>jenkins mcp server</b><br/>mcp.* policy, always enforced"]
-    S --> J["Jenkins"]
-```
+![Jenkins MCP Server architecture](docs/architecture.svg)
 
 Inside minibridge the three settings do different jobs, which is easy to
 confuse because they sit side by side in `values.yaml`:
@@ -378,17 +365,52 @@ make integration
 
 ## Releases and versioning
 
-One canonical semantic version is synchronized across the Python package, Helm chart, application image, and production Kustomize overlay.
+One canonical semantic version is synchronized across the Python package, Helm
+chart, application image, and production Kustomize overlay. The chart is never
+left pointing at a stale image, because it does not pin an image tag at all:
 
-```bash
-make version VERSION=1.2.1
-git add .
-git commit -m "chore(release): prepare v1.2.1"
-git tag -a v1.2.1 -m "Release v1.2.1"
-git push origin main v1.2.1
+```yaml
+image:
+  repository: ghcr.io/grglzrv/jenkins-mcp-server
+  tag: ""        # empty means use Chart.appVersion
 ```
 
-The tag publishes the multi-architecture image, Helm OCI chart, provenance/SBOM metadata, and GitHub Release.
+So `Chart.appVersion` *is* the image tag. Bumping the version moves the chart and
+the image together by construction.
+
+```bash
+make version VERSION=1.8.0     # rewrites 9 version locations across 8 files
+git commit -am "chore(release): prepare v1.8.0"
+git tag -a v1.8.0 -m "Release v1.8.0"
+git push origin main v1.8.0
+```
+
+`make version` updates `VERSION`, `pyproject.toml`,
+`src/jenkins_mcp_server/__init__.py`, the chart's `version` **and** `appVersion`
+(two locations in one file), the Kustomize base and production overlay, the
+example values, and the Argo CD application.
+`scripts/check_version.py` then asserts all nine agree.
+
+The release workflow refuses to publish anything if they do not:
+
+```bash
+test "${version}" = "$(cat VERSION)"   # git tag must match VERSION
+python scripts/check_version.py        # all 9 locations must agree
+```
+
+Only after that gate passes does it build the multi-architecture image (tagged
+`1.8.0`, `1.8`, `1`, and `latest`), package the chart at the same version, push
+both to GHCR, and create the GitHub Release with provenance and SBOM metadata.
+
+Two consequences worth knowing:
+
+- **`:edge` never touches the chart.** Every push to `main` publishes
+  `ghcr.io/grglzrv/jenkins-mcp-server:edge`, but the chart only ever references
+  `appVersion`. Edge images are opt-in via `image.tag: edge`.
+- **Chart-only changes still need a full version bump**, since chart `version`
+  and `appVersion` are deliberately locked together. That trades Helm's
+  convention of versioning the chart independently for the guarantee that a
+  chart version identifies exactly one application build.
 
 ## Repository setup
 
