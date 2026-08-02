@@ -146,6 +146,11 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           path: release-assets
+          # Only the real release assets. Without a pattern this also pulls the
+          # .dockerbuild build-summary artifact that docker/build-push-action
+          # uploads, which fails to extract and would otherwise be attached to
+          # the release.
+          pattern: "{python-dist,helm-chart}"
           merge-multiple: true
       - name: Attest release assets
         uses: actions/attest@v4
