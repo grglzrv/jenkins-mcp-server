@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jenkins-mcp-server"
-version = "1.7.0"
+version = "1.8.0"
 description = "Production-ready Jenkins MCP server with Streamable HTTP and stdio transports"
 readme = "README.md"
 license = {text = "MIT"}
@@ -23,7 +23,7 @@ classifiers = [
   "Topic :: Software Development :: Build Tools",
 ]
 dependencies = [
-  "mcp>=1.28,<2",
+  "mcp>=2.0.0,<3",
   "httpx>=0.28.1,<1",
   "pydantic>=2.13.4,<3",
   "pydantic-settings>=2.14.2,<3",

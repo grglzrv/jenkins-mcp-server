@@ -20,11 +20,15 @@ def main() -> None:
         mcp.run(transport="stdio")
     else:
         start_health_server(settings)
-        # FastMCP serves Streamable HTTP at the configured path.
-        mcp.settings.host = settings.host
-        mcp.settings.port = settings.port
-        mcp.settings.streamable_http_path = settings.mount_path
-        mcp.run(transport="streamable-http")
+        # In mcp 2.x the listener and transport options are arguments to the
+        # transport call rather than mutable attributes on mcp.settings.
+        mcp.run(
+            transport="streamable-http",
+            host=settings.host,
+            port=settings.port,
+            streamable_http_path=settings.mount_path,
+            stateless_http=True,
+        )
 
 
 if __name__ == "__main__":

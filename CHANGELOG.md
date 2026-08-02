@@ -2,6 +2,37 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.8.0] - 2026-08-02
+
+### Changed
+
+- **Migrated to the MCP Python SDK 2.x.** `mcp.server.fastmcp.FastMCP` was removed
+  in mcp 2.0 and replaced by `mcp.server.mcpserver.MCPServer`, which has the same
+  surface (`.tool()`, `.run()`, `.streamable_http_app()`). Two call sites moved:
+  - `stateless_http` is now an argument to the transport call rather than to the
+    constructor.
+  - The listener options (`host`, `port`, `streamable_http_path`) are transport
+    arguments instead of mutable attributes on `mcp.settings`.
+- `MCPServer` accepts `version` directly, so the private `mcp._mcp_server.version`
+  assignment added in 1.3.0 is gone. `initialize` still reports the application
+  version in `serverInfo`, now through a supported API.
+- The integration workflow's standalone `mcp` pin moved to 2.x alongside the
+  package.
+
+### Removed
+
+- The Dependabot ignore rule holding `mcp` on 1.x. It was never effective — the
+  `update-types: version-update:semver-major` filter is not honoured for pip range
+  requirements, so Dependabot re-proposed the major bump six hours after the rule
+  landed. With the migration done the rule is unnecessary.
+
+### Verified
+
+Migration checked end to end against mcp 2.0.0: mypy, ruff and the full suite
+pass, and a wheel built from the migrated source serves `/healthz` and `/readyz`,
+completes an `initialize` handshake reporting version 1.8.0, and registers all 23
+tools.
+
 ## [1.7.0] - 2026-08-02
 
 ### Added

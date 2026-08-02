@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from . import __version__
 from .audit import AuditLogger
@@ -34,11 +34,10 @@ def get_client() -> JenkinsClient:
     return create_client(get_settings())
 
 
-mcp = FastMCP("Jenkins MCP Server", stateless_http=True)
-# FastMCP exposes no `version` argument, and the underlying server falls back to
-# reporting the MCP SDK version when unset. Advertise our own version so clients
-# see the server they are actually talking to in `initialize` -> serverInfo.
-mcp._mcp_server.version = __version__
+# MCPServer takes the version directly, so clients see the server they are
+# actually talking to in `initialize` -> serverInfo rather than the SDK version.
+# stateless_http moved from the constructor to the transport call in mcp 2.x.
+mcp = MCPServer("Jenkins MCP Server", version=__version__)
 
 
 @mcp.tool()

@@ -10,7 +10,7 @@ spec:
   source:
     chart: jenkins-mcp-server
     repoURL: ghcr.io/grglzrv/charts
-    targetRevision: 1.7.0
+    targetRevision: 1.8.0
     helm:
       releaseName: jenkins-mcp
       valuesObject:
