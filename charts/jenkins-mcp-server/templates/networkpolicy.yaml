@@ -1,0 +1,62 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "jenkins-mcp-server.fullname" . }}
+  labels:
+    {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "jenkins-mcp-server.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: helm-test
+      ports:
+        - protocol: TCP
+          port: {{ .Values.mcp.healthPort }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.tailscaleNamespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.mcp.port }}
+    {{- if .Values.networkPolicy.allowDirectHermesAccess }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.hermesNamespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.mcp.port }}
+    {{- end }}
+    {{- with .Values.networkPolicy.additionalIngress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # ProxyGroup egress maps service ports to dynamic proxy ports, so allow
+    # traffic to the Tailscale namespace without a destination-port filter.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.tailscaleNamespace }}
+    {{- if .Values.networkPolicy.allowInternetEgress }}
+    - {}
+    {{- end }}
+    {{- with .Values.networkPolicy.additionalEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,46 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jenkins-mcp-server
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    chart: jenkins-mcp-server
+    repoURL: ghcr.io/grglzrv/charts
+    targetRevision: 1.7.0
+    helm:
+      releaseName: jenkins-mcp
+      valuesObject:
+        image:
+          repository: ghcr.io/grglzrv/jenkins-mcp-server
+        ingress:
+          enabled: true
+          className: tailscale
+          hostname: jenkins-mcp
+          annotations:
+            tailscale.com/proxy-group: jenkins-mcp-ingress
+        jenkins:
+          url: https://jenkins.example-tailnet.ts.net
+          credentials:
+            existingSecret: jenkins-mcp-secrets
+        tailscale:
+          magicDNS:
+            createDNSConfig: false
+            name: ts-dns
+          egress:
+            enabled: true
+            tailnetFQDN: jenkins.example-tailnet.ts.net
+            proxyGroup: jenkins-egress
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: jenkins-mcp
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

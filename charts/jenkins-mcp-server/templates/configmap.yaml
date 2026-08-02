@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "jenkins-mcp-server.fullname" . }}
+  labels:
+    {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
+data:
+  JENKINS_URL: {{ .Values.jenkins.url | quote }}
+  JENKINS_VERIFY_TLS: {{ .Values.jenkins.verifyTls | quote }}
+  JENKINS_TIMEOUT_SECONDS: {{ .Values.jenkins.timeoutSeconds | quote }}
+  JENKINS_MAX_RETRIES: {{ .Values.jenkins.maxRetries | quote }}
+  {{- if .Values.jenkins.caBundlePath }}
+  JENKINS_CA_BUNDLE: {{ .Values.jenkins.caBundlePath | quote }}
+  {{- else if .Values.jenkins.caBundle.existingSecret }}
+  JENKINS_CA_BUNDLE: "/certs/ca.crt"
+  {{- end }}
+  MCP_TRANSPORT: {{ .Values.mcp.transport | quote }}
+  MCP_HOST: {{ .Values.mcp.host | quote }}
+  MCP_PORT: {{ .Values.mcp.port | quote }}
+  MCP_PATH: {{ .Values.mcp.path | quote }}
+  MCP_HEALTH_HOST: {{ .Values.mcp.healthHost | quote }}
+  MCP_HEALTH_PORT: {{ .Values.mcp.healthPort | quote }}
+  MCP_READ_ONLY: {{ .Values.mcp.readOnly | quote }}
+  MCP_ALLOW_JOB_WRITE: {{ .Values.mcp.allowJobWrite | quote }}
+  MCP_ALLOW_BUILD_WRITE: {{ .Values.mcp.allowBuildWrite | quote }}
+  MCP_ALLOW_NODE_WRITE: {{ .Values.mcp.allowNodeWrite | quote }}
+  MCP_ALLOW_ADMIN_REQUEST: {{ .Values.mcp.allowAdminRequest | quote }}
+  MCP_ALLOW_DESTRUCTIVE: {{ .Values.mcp.allowDestructive | quote }}
+  MCP_ALLOW_JOB_DELETE: {{ .Values.mcp.allowJobDelete | quote }}
+  MCP_ALLOW_JOB_UPDATE: {{ .Values.mcp.allowJobUpdate | quote }}
+  MCP_ALLOW_BUILD_STOP: {{ .Values.mcp.allowBuildStop | quote }}
+  MCP_ALLOWED_JOBS: {{ .Values.mcp.allowedJobs | quote }}
+  MCP_MAX_LOG_BYTES: {{ .Values.mcp.maxLogBytes | quote }}
+  {{- if .Values.audit.fileEnabled }}
+  MCP_AUDIT_LOG_PATH: {{ .Values.audit.path | quote }}
+  {{- end }}

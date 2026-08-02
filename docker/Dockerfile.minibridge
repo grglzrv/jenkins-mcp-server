@@ -1,0 +1,71 @@
+# syntax=docker/dockerfile:1.7
+#
+# Hardened variant: the Jenkins MCP server behind Acuvity's minibridge, which
+# applies the Rego guardrail policy in docker/policy.rego to every MCP request
+# and response.
+#
+# Build from the repository root:
+#   docker build -f docker/Dockerfile.minibridge -t jenkins-mcp-server:minibridge .
+#
+# The plain Dockerfile at the repo root remains the default image; this one is
+# published separately (tag suffix -minibridge) for deployments that want the
+# proxy in the path.
+ARG PYTHON_IMAGE=python:3.12-slim-bookworm
+ARG MINIBRIDGE_VERSION=latest
+
+FROM golang:1.24-alpine AS minibridge
+ENV GO111MODULE=on
+ARG TARGETOS TARGETARCH
+ARG MINIBRIDGE_VERSION
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go install go.acuvity.ai/minibridge@${MINIBRIDGE_VERSION}
+
+FROM ${PYTHON_IMAGE} AS builder
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+WORKDIR /build
+COPY pyproject.toml README.md LICENSE ./
+COPY src ./src
+RUN python -m pip wheel --wheel-dir=/wheels .
+
+FROM ${PYTHON_IMAGE} AS runtime
+ARG APP_VERSION=dev
+ARG APP_UID=10001
+ARG APP_GID=10001
+LABEL org.opencontainers.image.title="Jenkins MCP Server (minibridge)" \
+      org.opencontainers.image.description="Jenkins MCP server behind minibridge with Rego guardrails" \
+      org.opencontainers.image.source="https://github.com/grglzrv/jenkins-mcp-server" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${APP_VERSION}"
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid "${APP_GID}" app \
+    && useradd --uid "${APP_UID}" --gid "${APP_GID}" --create-home --shell /usr/sbin/nologin app \
+    && mkdir -p /data /certs \
+    && chown -R app:app /data /certs
+
+COPY --from=builder /wheels /wheels
+RUN python -m pip install /wheels/*.whl && rm -rf /wheels
+
+COPY --from=minibridge /go/bin/minibridge /usr/bin/minibridge
+COPY docker/policy.rego /policy.rego
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod 0555 /entrypoint.sh && chmod 0444 /policy.rego
+
+USER app:app
+WORKDIR /home/app
+
+# 8000 = minibridge MCP listener, 8080 = minibridge health.
+EXPOSE 8000 8080
+VOLUME ["/data"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/', timeout=2).read()"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

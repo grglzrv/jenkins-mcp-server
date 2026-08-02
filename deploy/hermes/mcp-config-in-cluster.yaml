@@ -1,0 +1,7 @@
+# Alternative when Hermes runs in the same Kubernetes cluster and you prefer
+# direct ClusterIP traffic instead of hairpinning through the tailnet.
+mcp_servers:
+  jenkins:
+    transport: streamable_http
+    url: http://jenkins-mcp.jenkins-mcp.svc.cluster.local:8000/mcp
+    timeout_seconds: 60

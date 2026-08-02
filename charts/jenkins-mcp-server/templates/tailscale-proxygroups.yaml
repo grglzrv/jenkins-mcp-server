@@ -1,0 +1,19 @@
+{{- if .Values.tailscale.proxyGroups.create }}
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyGroup
+metadata:
+  name: {{ .Values.tailscale.proxyGroups.ingress.name }}
+spec:
+  type: ingress
+  replicas: {{ .Values.tailscale.proxyGroups.ingress.replicas }}
+  hostnamePrefix: {{ .Values.tailscale.proxyGroups.ingress.hostnamePrefix }}
+---
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyGroup
+metadata:
+  name: {{ .Values.tailscale.proxyGroups.egress.name }}
+spec:
+  type: egress
+  replicas: {{ .Values.tailscale.proxyGroups.egress.replicas }}
+  hostnamePrefix: {{ .Values.tailscale.proxyGroups.egress.hostnamePrefix }}
+{{- end }}

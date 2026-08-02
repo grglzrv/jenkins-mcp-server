@@ -1,0 +1,11 @@
+# Cluster-scoped prerequisite for resolving *.ts.net from application pods.
+# After this resource is ready, configure CoreDNS to forward the tailnet's
+# .ts.net zone to the nameserver IP reported in DNSConfig status.
+apiVersion: tailscale.com/v1alpha1
+kind: DNSConfig
+metadata:
+  name: ts-dns
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  nameserver: {}

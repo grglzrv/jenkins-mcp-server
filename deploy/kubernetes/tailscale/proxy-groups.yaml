@@ -1,0 +1,21 @@
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyGroup
+metadata:
+  name: jenkins-mcp-ingress
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  type: ingress
+  replicas: 2
+  hostnamePrefix: jenkins-mcp-ingress
+---
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyGroup
+metadata:
+  name: jenkins-egress
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  type: egress
+  replicas: 2
+  hostnamePrefix: jenkins-egress

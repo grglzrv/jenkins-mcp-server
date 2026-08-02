@@ -1,0 +1,45 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/grglzrv/jenkins-mcp-server
+  tag: "1.7.0"
+
+ingress:
+  enabled: true
+  className: tailscale
+  hostname: jenkins-mcp
+  annotations:
+    tailscale.com/proxy-group: jenkins-mcp-ingress
+
+jenkins:
+  url: https://jenkins.example-tailnet.ts.net
+  verifyTls: true
+  credentials:
+    existingSecret: jenkins-mcp-secrets
+  caBundlePath: /certs/ca.crt
+  caBundle:
+    existingSecret: jenkins-internal-ca
+    key: ca.crt
+
+mcp:
+  readOnly: false
+  allowJobWrite: true
+  allowBuildWrite: true
+  allowNodeWrite: false
+  allowAdminRequest: false
+  allowedJobs: "AI/*,Platform/*"
+
+tailscale:
+  magicDNS:
+    createDNSConfig: false
+    name: ts-dns
+  egress:
+    enabled: true
+    serviceName: jenkins-tailnet
+    tailnetFQDN: jenkins.example-tailnet.ts.net
+    proxyGroup: jenkins-egress
+  proxyGroups:
+    create: false
+
+externalSecret:
+  enabled: false

@@ -1,0 +1,204 @@
+"""Regression tests for path-traversal, log pagination, and CSRF crumb handling."""
+
+import httpx
+import pytest
+
+from jenkins_mcp_server.audit import AuditLogger
+from jenkins_mcp_server.client import JenkinsClient, _job_path
+from jenkins_mcp_server.config import Settings
+from jenkins_mcp_server.security import Policy, PolicyError
+
+
+def settings(**overrides: object) -> Settings:
+    values: dict[str, object] = {
+        "JENKINS_URL": "https://jenkins.test",
+        "JENKINS_USERNAME": "admin",
+        "JENKINS_TOKEN": "token",
+        "JENKINS_MAX_RETRIES": 0,
+    }
+    values.update(overrides)
+    return Settings(**values)  # type: ignore[arg-type]
+
+
+def policy(**overrides: object) -> Policy:
+    values: dict[str, object] = {
+        "read_only": False,
+        "allow_job_write": True,
+        "allow_build_write": True,
+        "allow_node_write": True,
+        "allow_admin_request": True,
+        "job_patterns": ["*"],
+    }
+    values.update(overrides)
+    return Policy(**values)  # type: ignore[arg-type]
+
+
+def client(handler, **setting_overrides: object) -> JenkinsClient:
+    return JenkinsClient(
+        settings(**setting_overrides),
+        policy(),
+        AuditLogger(None),
+        transport=httpx.MockTransport(handler),
+    )
+
+
+# --- path traversal -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "job_name",
+    ["..", ".", "AI/../Production/secret", "AI/./build", "../../scriptText"],
+)
+def test_job_path_rejects_traversal_segments(job_name: str) -> None:
+    with pytest.raises(ValueError, match="path segments"):
+        _job_path(job_name)
+
+
+def test_job_path_still_accepts_normal_folder_nesting() -> None:
+    assert _job_path("AI/team/build") == "job/AI/job/team/job/build"
+
+
+def test_dotted_job_names_are_not_over_rejected() -> None:
+    # Only the exact '.' and '..' segments are traversal; real jobs may contain dots.
+    assert _job_path("AI/release.v2") == "job/AI/job/release.v2"
+
+
+def test_policy_rejects_traversal_even_when_pattern_would_match() -> None:
+    """'AI/../Production/x' matches the glob 'AI/*' but must not be allowed."""
+    restricted = policy(job_patterns=["AI/*"])
+    with pytest.raises(PolicyError, match="traversal"):
+        restricted.check_job("AI/../Production/secret")
+
+
+def test_policy_rejects_empty_job_name() -> None:
+    with pytest.raises(PolicyError, match="must not be empty"):
+        policy().check_job("/")
+
+
+def test_policy_allows_legitimate_job_under_pattern() -> None:
+    policy(job_patterns=["AI/*"]).check_job("AI/nightly-build")
+
+
+# --- admin request path validation ---------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    ["//evil.example/steal", "/safe/../../etc", "/./relative"],
+)
+async def test_admin_request_rejects_unsafe_paths(path: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
+        raise AssertionError("request must never be issued")
+
+    jc = client(handler)
+    with pytest.raises(ValueError):
+        await jc.admin_request("GET", path)
+    await jc.close()
+
+
+# --- console log pagination ----------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_console_truncation_resumes_from_delivered_bytes() -> None:
+    """A clipped page must not advance next_start past the bytes we returned."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"x" * 500,
+            headers={"X-Text-Size": "500", "X-More-Data": "false"},
+        )
+
+    jc = client(handler, MCP_MAX_LOG_BYTES=100)
+    result = await jc.console("AI/build", 7, start=0)
+    assert len(result["text"]) == 100
+    assert result["truncated"] is True
+    assert result["next_start"] == 100, "must resume where the caller stopped reading"
+    assert result["more_data"] is True
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_console_untruncated_uses_jenkins_offset() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"hello",
+            headers={"X-Text-Size": "1234", "X-More-Data": "true"},
+        )
+
+    jc = client(handler)
+    result = await jc.console("AI/build", 7, start=0)
+    assert result["truncated"] is False
+    assert result["next_start"] == 1234
+    assert result["more_data"] is True
+    await jc.close()
+
+
+# --- CSRF crumb refresh ---------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stale_crumb_is_reissued_and_request_retried() -> None:
+    crumbs = iter(["stale-crumb", "fresh-crumb"])
+    sent_crumbs: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(
+                200,
+                json={"crumbRequestField": "Jenkins-Crumb", "crumb": next(crumbs)},
+            )
+        sent_crumbs.append(request.headers["Jenkins-Crumb"])
+        if request.headers["Jenkins-Crumb"] == "fresh-crumb":
+            return httpx.Response(200, json={"ok": True})
+        return httpx.Response(403, text="No valid crumb was included in the request")
+
+    # max_retries=0 proves the crumb refresh does not consume a retry budget.
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    response = await jc.request("POST", "/job/AI/job/build/build", action="test")
+    assert response.status_code == 200
+    assert sent_crumbs == ["stale-crumb", "fresh-crumb"]
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_crumb_is_only_refreshed_once_before_failing() -> None:
+    attempts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(
+                200,
+                json={"crumbRequestField": "Jenkins-Crumb", "crumb": "always-stale"},
+            )
+        attempts.append(request.url.path)
+        return httpx.Response(403, text="No valid crumb was included in the request")
+
+    jc = client(handler)
+    with pytest.raises(Exception, match="403"):
+        await jc.request("POST", "/job/AI/job/build/build", action="test")
+    assert len(attempts) == 2, "one original attempt plus exactly one crumb retry"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_unrelated_403_is_not_treated_as_a_crumb_problem() -> None:
+    attempts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(
+                200,
+                json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"},
+            )
+        attempts.append(request.url.path)
+        return httpx.Response(403, text="user is missing the Job/Build permission")
+
+    jc = client(handler)
+    with pytest.raises(Exception, match="403"):
+        await jc.request("POST", "/job/AI/job/build/build", action="test")
+    assert len(attempts) == 1, "permission errors must not trigger a crumb retry"
+    await jc.close()

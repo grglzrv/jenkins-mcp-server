@@ -1,0 +1,175 @@
+{{- include "jenkins-mcp-server.validate" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jenkins-mcp-server.fullname" . }}
+  labels:
+    {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "jenkins-mcp-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "jenkins-mcp-server.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "jenkins-mcp-server.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: jenkins-mcp-server
+          image: {{ include "jenkins-mcp-server.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+{{- if not .Values.minibridge.enabled }}
+          args: ["--transport", {{ .Values.mcp.transport | quote }}]
+{{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "jenkins-mcp-server.fullname" . }}
+          env:
+            - name: JENKINS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "jenkins-mcp-server.credentialsSecretName" . }}
+                  key: {{ .Values.jenkins.credentials.usernameKey }}
+            - name: JENKINS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "jenkins-mcp-server.credentialsSecretName" . }}
+                  key: {{ .Values.jenkins.credentials.tokenKey }}
+            {{- if .Values.minibridge.enabled }}
+            {{- include "jenkins-mcp-server.minibridgeEnv" . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.mcp.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: mcp
+              containerPort: {{ include "jenkins-mcp-server.mcpPort" . }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ include "jenkins-mcp-server.healthPort" . }}
+              protocol: TCP
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ include "jenkins-mcp-server.healthPath" . }}
+              port: health
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ include "jenkins-mcp-server.readyPath" . }}
+              port: health
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ include "jenkins-mcp-server.healthPath" . }}
+              port: health
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- if and .Values.minibridge.enabled .Values.minibridge.tls.enabled }}
+            - name: minibridge-tls
+              mountPath: /tls
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.audit.fileEnabled }}
+            - name: audit
+              mountPath: /data
+            {{- end }}
+            {{- if .Values.jenkins.caBundle.existingSecret }}
+            - name: jenkins-ca
+              mountPath: /certs
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- if and .Values.minibridge.enabled .Values.minibridge.tls.enabled }}
+        - name: minibridge-tls
+          secret:
+            secretName: {{ required "minibridge.tls.existingSecret is required when TLS is enabled" .Values.minibridge.tls.existingSecret }}
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.audit.fileEnabled }}
+        - name: audit
+          {{- if eq .Values.audit.storage.type "pvc" }}
+          persistentVolumeClaim:
+            claimName: {{ required "audit.storage.persistentVolumeClaim.claimName is required for pvc storage" .Values.audit.storage.persistentVolumeClaim.claimName }}
+          {{- else }}
+          emptyDir:
+            {{- toYaml .Values.audit.storage.emptyDir | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.jenkins.caBundle.existingSecret }}
+        - name: jenkins-ca
+          secret:
+            secretName: {{ .Values.jenkins.caBundle.existingSecret }}
+            items:
+              - key: {{ .Values.jenkins.caBundle.key }}
+                path: ca.crt
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

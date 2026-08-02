@@ -1,0 +1,31 @@
+{
+  "tagOwners": {
+    "tag:jenkins": ["autogroup:admin"],
+    "tag:hermes": ["autogroup:admin"],
+    "tag:k8s-operator": ["autogroup:admin"],
+    "tag:k8s": ["autogroup:admin"]
+  },
+
+  "autoApprovers": {
+    "services": {
+      "svc:jenkins": ["tag:jenkins"],
+      "svc:*": ["tag:k8s"]
+    }
+  },
+
+  "grants": [
+    {
+      // Tailscale Kubernetes egress proxies can reach the Jenkins service.
+      "src": ["tag:k8s"],
+      "dst": ["svc:jenkins"],
+      "ip": ["tcp:443"]
+    },
+    {
+      // Hermes can reach the MCP Tailscale Service created by the operator.
+      // Confirm the exact generated service name in the Tailscale admin console.
+      "src": ["tag:hermes"],
+      "dst": ["svc:jenkins-mcp"],
+      "ip": ["tcp:443"]
+    }
+  ]
+}

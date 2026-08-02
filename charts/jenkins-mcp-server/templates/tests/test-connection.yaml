@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "jenkins-mcp-server.fullname" . }}-test-connection"
+  labels:
+    {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
+    app.kubernetes.io/component: helm-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: wget
+      image: busybox:1.37
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        readOnlyRootFilesystem: true
+      command: ["wget"]
+      args:
+        - "--spider"
+        - "--timeout=5"
+        - "--tries=1"
+        - "http://{{ include "jenkins-mcp-server.fullname" . }}:{{ .Values.mcp.healthPort }}/readyz"

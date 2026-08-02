@@ -1,0 +1,7 @@
+configuration-as-code
+workflow-aggregator
+git
+branch-api
+workflow-multibranch
+cloudbees-folder
+matrix-auth

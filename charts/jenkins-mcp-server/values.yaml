@@ -1,0 +1,350 @@
+# Default values for jenkins-mcp-server.
+# Never commit Jenkins usernames, API tokens, or private CA keys to this file.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/grglzrv/jenkins-mcp-server
+  # Empty means use Chart.appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+
+service:
+  type: ClusterIP
+  port: 8000
+  annotations: {}
+
+# Tailscale Operator L7 ingress. The value in hostname becomes the MagicDNS
+# service name, e.g. jenkins-mcp.<tailnet>.ts.net.
+ingress:
+  enabled: true
+  className: tailscale
+  annotations:
+    tailscale.com/proxy-group: jenkins-mcp-ingress
+  hostname: jenkins-mcp
+  path: /mcp
+  pathType: Prefix
+  tls: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startup:
+    enabled: true
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 30
+
+podDisruptionBudget:
+  enabled: true
+  # Configure exactly one of minAvailable or maxUnavailable.
+  minAvailable: 1
+  maxUnavailable: null
+
+networkPolicy:
+  enabled: true
+  tailscaleNamespace: tailscale
+  hermesNamespace: hermes
+  allowDirectHermesAccess: true
+  allowInternetEgress: false
+  additionalIngress: []
+  additionalEgress: []
+
+jenkins:
+  # Use the exact Jenkins Tailscale MagicDNS FQDN so TLS hostname validation
+  # matches the certificate. The DNSConfig/CoreDNS integration routes this
+  # hostname through the Operator-managed egress proxy.
+  url: https://jenkins.example-tailnet.ts.net
+  verifyTls: true
+  caBundlePath: ""
+  timeoutSeconds: 30
+  maxRetries: 3
+  credentials:
+    existingSecret: jenkins-mcp-secrets
+    usernameKey: JENKINS_USERNAME
+    tokenKey: JENKINS_TOKEN
+    # Only for disposable development environments. Prefer existingSecret or
+    # External Secrets in production.
+    create: false
+    username: ""
+    token: ""
+  caBundle:
+    existingSecret: ""
+    key: ca.crt
+
+mcp:
+  transport: streamable-http
+  host: 0.0.0.0
+  port: 8000
+  path: /mcp
+  healthHost: 0.0.0.0
+  healthPort: 8081
+  readOnly: false
+  allowJobWrite: true
+  allowBuildWrite: true
+  allowNodeWrite: false
+  allowAdminRequest: false
+  # Destructive (irreversible) actions: job delete/update, build stop, queue
+  # cancel, node offline. allowDestructive is the master switch — set it false
+  # to disable all of them at once regardless of the per-action flags below.
+  # Each action must clear its category flag above AND its flag here.
+  allowDestructive: true
+  # Deleting a job cannot be undone, so it stays opt-in even with
+  # allowJobWrite: true. Set true only if the agent must remove jobs.
+  allowJobDelete: false
+  # Overwrites an existing job's config.xml.
+  allowJobUpdate: true
+  # Aborts running builds and cancels queued items. Does not affect triggering.
+  allowBuildStop: true
+  allowedJobs: "AI/*,Platform/*"
+  maxLogBytes: 1000000
+  extraEnv: []
+
+audit:
+  fileEnabled: true
+  path: /data/audit.jsonl
+  storage:
+    type: emptyDir
+    emptyDir: {}
+    # type: pvc
+    # persistentVolumeClaim:
+    #   claimName: jenkins-mcp-audit
+
+tailscale:
+  # Optional cluster-scoped DNSConfig. Platform teams commonly manage this
+  # once per cluster; enable only when this release owns the resource.
+  magicDNS:
+    createDNSConfig: false
+    name: ts-dns
+  # Registers the Jenkins MagicDNS target with the Tailscale Operator. MCP
+  # pods still connect using jenkins.url so the TLS hostname is preserved.
+  egress:
+    enabled: true
+    serviceName: jenkins-tailnet
+    tailnetFQDN: jenkins.example-tailnet.ts.net
+    proxyGroup: jenkins-egress
+    port: 443
+  # ProxyGroups are cluster-scoped prerequisites. Keep create=false when your
+  # platform team manages them separately.
+  proxyGroups:
+    create: false
+    ingress:
+      name: jenkins-mcp-ingress
+      replicas: 2
+      hostnamePrefix: jenkins-mcp-ingress
+    egress:
+      name: jenkins-egress
+      replicas: 2
+      hostnamePrefix: jenkins-egress
+
+# External Secrets Operator integration. Mutually exclusive with
+# jenkins.credentials.create — both would render <fullname>-credentials and
+# fight for ownership, so enabling both fails the render with a clear message.
+externalSecret:
+  enabled: false
+  # Use external-secrets.io/v1beta1 on ESO installations older than v0.15.
+  apiVersion: external-secrets.io/v1
+  refreshInterval: 1h
+  # Reference to an existing store, or the one created below.
+  secretStoreRef:
+    name: gcp-secret-store
+    kind: ClusterSecretStore
+  # Optionally have this chart create the store too, instead of requiring the
+  # platform team to provision it first. provider is passed through verbatim,
+  # so any ESO provider works (gcpsm, vault, aws, azurekv, ...).
+  secretStore:
+    create: false
+    kind: ClusterSecretStore
+    annotations: {}
+    conditions: []
+    provider: {}
+    # provider:
+    #   gcpsm:
+    #     projectID: my-project
+    #     auth:
+    #       workloadIdentity:
+    #         clusterLocation: europe-west1
+    #         clusterName: my-cluster
+    #         serviceAccountRef:
+    #           name: jenkins-mcp-server
+  creationPolicy: Owner
+  deletionPolicy: Retain
+  annotations: {}
+  usernameRemoteKey: jenkins-mcp-username
+  tokenRemoteKey: jenkins-mcp-token
+  # Set when the remote secret stores JSON and the credential lives under a
+  # field, e.g. remote key "jenkins-mcp" with property "username".
+  usernameRemoteProperty: ""
+  tokenRemoteProperty: ""
+  # Pin a specific remote secret version; empty means latest.
+  remoteVersion: ""
+  # Extra data entries appended to the generated ExternalSecret.
+  extraData: []
+  # Use dataFrom instead of the per-key data block above (mutually exclusive).
+  dataFrom: []
+  # Optional target.template for custom Secret shaping.
+  template: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+terminationGracePeriodSeconds: 30
+extraVolumes: []
+extraVolumeMounts: []
+
+# Optional minibridge proxy (Acuvity) in front of the MCP server. When enabled
+# the container runs `minibridge aio -- jenkins-mcp-server --transport stdio`,
+# so minibridge owns the listener and evaluates docker/policy.rego on every MCP
+# request and response. Requires the -minibridge image variant, which is built
+# from docker/Dockerfile.minibridge.
+#
+# Credential injection is unchanged: JENKINS_TOKEN still comes from a Kubernetes
+# Secret via secretKeyRef, so an External Secrets-managed secret works exactly
+# the same with minibridge on or off.
+minibridge:
+  enabled: false
+  image:
+    # Empty repository means reuse image.repository with the tag suffix below.
+    repository: ""
+    tag: ""
+    tagSuffix: "-minibridge"
+  # http    = MCP over HTTP (minibridge aio), compatible with standard clients.
+  # websocket = websocket-to-stdio (minibridge backend); needs minibridge
+  #             on the client side too.
+  mode: http
+  # Port minibridge listens on for MCP traffic.
+  port: 8000
+  # Port minibridge serves health on (it does not expose /readyz).
+  healthPort: 8080
+  log:
+    level: info
+  tracing:
+    # OTEL collector endpoint, e.g. http://otel-collector:4317. Empty disables.
+    url: ""
+  # Ship the SBOM baked into the image. Set false to disable the check.
+  sbom: true
+
+  # TLS on the minibridge listener. Certificates come from an existing Secret
+  # rather than inline values, so nothing sensitive lives in values.yaml.
+  tls:
+    enabled: false
+    # Secret holding the server certificate and key.
+    existingSecret: ""
+    certKey: tls.crt
+    keyKey: tls.key
+    # Optional passphrase for the private key, from the same Secret.
+    passSecretKey: ""
+    # Optional client CA to enable mTLS, from the same Secret.
+    clientCASecretKey: ""
+
+  # Tool and capability policy over the server's full surface.
+  #
+  # DEFAULT: both lists empty, so every tool and capability is allowed.
+  #
+  # Entries are either a bare tool name or a group:
+  #   @read         list_jobs, get_job, get_job_config, get_build_info,
+  #                 get_build_console, list_running_builds, get_queue,
+  #                 list_nodes, get_node
+  #   @write        create_job_from_xml, copy_job, enable_job, disable_job,
+  #                 create_pipeline_job, create_multibranch_pipeline,
+  #                 scan_multibranch_pipeline, trigger_build
+  #   @destructive  update_job_config, delete_job, stop_build,
+  #                 cancel_queue_item, set_node_offline
+  #   @admin        jenkins_admin_request
+  #   @all          every tool
+  #
+  # Denied tools are refused on tools/call AND removed from tools/list, so the
+  # agent never sees them. deny always wins over allow.
+  tools:
+    # Exclude only the destructive tools, keeping everything else:
+    #   deny: ["@destructive"]
+    deny: []
+    # When non-empty this becomes a strict allowlist, e.g. read-only access:
+    #   allow: ["@read"]
+    allow: []
+  # Deny whole MCP capabilities by method name, e.g. ["resources/read"].
+  # Empty means every capability is allowed.
+  methodsDeny: []
+
+  # Heuristic content guardrails from docker/policy.rego. Empty disables them.
+  # These inspect content and are independent of the tool policy above.
+  guardrails: []
+  # - covert-instruction-detection
+  # - sensitive-pattern-detection
+  # - shadowing-pattern-detection
+  # - schema-misuse-prevention
+  # - cross-origin-tool-access
+  # - secrets-redaction
+
+  # Shared-secret auth enforced by the policy against the Authorization header.
+  # Referenced from a Secret (an ExternalSecret target works); never inlined.
+  basicAuth:
+    enabled: false
+    existingSecret: ""
+    secretKey: BASIC_AUTH_SECRET
+
+  policer:
+    # Enforce verdicts. false logs the verdict as a warning and passes traffic.
+    enforce: true
+    # Rego policer using the policy baked into the image (default).
+    rego:
+      enabled: true
+      policy: /policy.rego
+    # Remote HTTP policer. Mutually exclusive with the rego policer.
+    http:
+      enabled: false
+      url: ""
+      token:
+        existingSecret: ""
+        secretKey: MINIBRIDGE_POLICER_TOKEN
+      # Path to a CA bundle for the policer's certificate, from a mounted volume.
+      caPath: ""

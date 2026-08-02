@@ -1,0 +1,24 @@
+Jenkins MCP Server has been installed.
+
+MCP endpoint inside the cluster:
+  http://{{ include "jenkins-mcp-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{ .Values.mcp.path }}
+
+{{- if .Values.ingress.enabled }}
+Tailscale endpoint (after the operator populates ADDRESS):
+  kubectl get ingress {{ include "jenkins-mcp-server.fullname" . }} -n {{ .Release.Namespace }}
+{{- end }}
+
+Hermes configuration:
+  mcp_servers:
+    jenkins:
+      transport: streamable_http
+      url: https://<TAILSCALE_INGRESS_ADDRESS>{{ .Values.mcp.path }}
+
+{{- if .Values.tailscale.egress.enabled }}
+Jenkins TLS target:
+  {{ .Values.jenkins.url }}
+
+Ensure the cluster resolves the Jenkins MagicDNS hostname through a Tailscale
+DNSConfig/CoreDNS forwarder. Do not replace it with the Kubernetes Service DNS
+name when TLS hostname verification is enabled.
+{{- end }}

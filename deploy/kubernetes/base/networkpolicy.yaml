@@ -1,0 +1,42 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jenkins-mcp
+  namespace: jenkins-mcp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: jenkins-mcp
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    # Tailscale ProxyGroup pods run in the tailscale namespace.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tailscale
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Keep direct in-cluster access available for a Hermes deployment in its own namespace.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: hermes
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Tailscale egress ProxyGroup maps service ports to dynamic proxy ports.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tailscale

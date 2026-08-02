@@ -1,0 +1,10 @@
+{{- if .Values.tailscale.magicDNS.createDNSConfig }}
+apiVersion: tailscale.com/v1alpha1
+kind: DNSConfig
+metadata:
+  name: {{ .Values.tailscale.magicDNS.name }}
+  labels:
+    {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
+spec:
+  nameserver: {}
+{{- end }}

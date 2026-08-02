@@ -1,0 +1,9 @@
+# Add this zone to the CoreDNS Corefile after obtaining the nameserver IP:
+# kubectl get dnsconfig ts-dns -o jsonpath='{.status.nameserver.ip}'
+
+# Forward the parent ts.net zone. This covers the tailnet's MagicDNS names.
+ts.net:53 {
+    errors
+    cache 30
+    forward . REPLACE_WITH_TAILSCALE_NAMESERVER_IP
+}

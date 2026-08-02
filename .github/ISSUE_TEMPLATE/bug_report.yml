@@ -1,0 +1,46 @@
+name: Bug report
+description: Report a reproducible defect in the MCP server, chart, or deployment examples.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include Jenkins API tokens, private certificates, or sensitive logs.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: 1.2.0 or edge SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - MCP server
+        - Jenkins API integration
+        - Docker image
+        - Helm chart
+        - Kubernetes or Tailscale deployment
+        - GitHub Actions
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include expected behavior, actual behavior, and sanitized logs.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Jenkins version, Kubernetes version, Tailscale Operator version, architecture

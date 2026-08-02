@@ -1,0 +1,86 @@
+# Kubernetes, Tailscale and Argo CD deployment
+
+## Traffic paths
+
+```text
+Hermes (tag:hermes)
+  -> HTTPS 443 over tailnet
+  -> Tailscale Ingress ProxyGroup / svc:jenkins-mcp
+  -> Kubernetes Service jenkins-mcp:8000
+  -> MCP server /mcp
+
+MCP server Pod
+  -> Jenkins MagicDNS FQDN on HTTPS 443
+  -> Tailscale Egress ProxyGroup
+  -> svc:jenkins TailVIP
+  -> Jenkins host Tailscale Serve
+  -> Jenkins loopback listener
+```
+
+## Cluster prerequisites
+
+- Tailscale Kubernetes Operator installed in namespace `tailscale`.
+- Operator identity/tag permitted to advertise Services.
+- `ProxyGroup` and `DNSConfig` CRDs available.
+- CoreDNS forwards the tailnet `.ts.net` zone to the IP reported by `DNSConfig/ts-dns`.
+- `jenkins-mcp-secrets` exists before the Deployment becomes ready.
+
+## Required edits before push
+
+1. Replace `grglzrv` in the image and Argo CD manifests.
+2. Replace `example-tailnet.ts.net` everywhere with the actual tailnet DNS suffix.
+3. Set `JENKINS_URL` and `tailscale.com/tailnet-fqdn` to the exact `svc:jenkins` FQDN.
+4. Adjust `MCP_ALLOWED_JOBS` and write controls.
+5. Review namespace names in `networkpolicy.yaml`.
+6. Create the Jenkins credential Secret through your secret manager.
+
+## CoreDNS
+
+```bash
+kubectl apply -f deploy/kubernetes/tailscale/dnsconfig.yaml
+TS_DNS_IP="$(kubectl get dnsconfig ts-dns -o jsonpath='{.status.nameserver.ip}')"
+echo "Tailscale DNS IP: ${TS_DNS_IP}"
+```
+
+Add the block from `coredns-snippet.example`, forward the parent `ts.net` zone to `${TS_DNS_IP}`, then restart CoreDNS.
+
+## Render and validate
+
+```bash
+kubectl kustomize deploy/kubernetes/overlays/production > /tmp/jenkins-mcp.yaml
+kubectl apply --server-side --dry-run=server -f /tmp/jenkins-mcp.yaml
+```
+
+## Deploy with Argo CD
+
+```bash
+kubectl apply -f deploy/argocd/application.yaml
+argocd app get jenkins-mcp
+argocd app sync jenkins-mcp
+```
+
+## Discover the MCP URL
+
+```bash
+kubectl get ingress jenkins-mcp -n jenkins-mcp
+```
+
+Use the `ADDRESS` value and append `/mcp`, then update Hermes:
+
+```yaml
+mcp_servers:
+  jenkins:
+    transport: streamable_http
+    url: https://jenkins-mcp.<tailnet>.ts.net/mcp
+```
+
+## Verification
+
+```bash
+kubectl rollout status deployment/jenkins-mcp -n jenkins-mcp
+kubectl get proxygroup,dnsconfig
+kubectl get ingress,svc,pods -n jenkins-mcp
+kubectl logs -n jenkins-mcp deploy/jenkins-mcp
+```
+
+From a tagged Hermes node, verify TLS and the MCP endpoint with the MCP Inspector or Hermes itself. A plain browser GET is not a valid MCP protocol test.

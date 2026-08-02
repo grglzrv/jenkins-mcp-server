@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: ai-platform
+  namespace: argocd
+spec:
+  description: AI Platform services
+  sourceRepos:
+    - https://github.com/grglzrv/jenkins-mcp-server.git
+  destinations:
+    - namespace: jenkins-mcp
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: tailscale.com
+      kind: ProxyGroup
+    - group: tailscale.com
+      kind: DNSConfig
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

@@ -1,0 +1,7 @@
+# Use the full ADDRESS reported by:
+# kubectl get ingress jenkins-mcp -n jenkins-mcp
+mcp_servers:
+  jenkins:
+    transport: streamable_http
+    url: https://jenkins-mcp.example-tailnet.ts.net/mcp
+    timeout_seconds: 60

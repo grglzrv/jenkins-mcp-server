@@ -1,0 +1,24 @@
+name: Feature request
+description: Propose a Jenkins tool, policy, transport, or deployment enhancement.
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Explain the workflow or operational gap.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the MCP tool/API behavior, authorization model, and expected result.
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security considerations
+      description: Note required Jenkins permissions, destructive actions, secret handling, and approval needs.

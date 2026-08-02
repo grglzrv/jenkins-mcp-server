@@ -1,0 +1,21 @@
+jenkins:
+  systemMessage: "Jenkins MCP integration test"
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "admin-test-password"
+  authorizationStrategy:
+    globalMatrix:
+      entries:
+        - user:
+            name: "admin"
+            permissions:
+              - "Overall/Administer"
+security:
+  apiToken:
+    creationOfLegacyTokenEnabled: true
+unclassified:
+  location:
+    url: "https://localhost:8443/"
