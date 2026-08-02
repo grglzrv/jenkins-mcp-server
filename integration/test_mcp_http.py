@@ -19,6 +19,29 @@ async def call(session, name, args):
     return result
 
 
+async def wait_for_build(session, job_name, build_number, timeout=120):
+    """Block until the build record exists in Jenkins.
+
+    trigger_build only enqueues. The build leaves the queue and gets its number
+    some seconds later, depending on how quickly Jenkins allocates an executor,
+    so anything that addresses the build by number has to wait for it rather
+    than sleeping a fixed interval.
+    """
+    deadline = asyncio.get_event_loop().time() + timeout
+    last = None
+    while asyncio.get_event_loop().time() < deadline:
+        result = await session.call_tool(
+            "get_build_info", {"job_name": job_name, "build_number": build_number}
+        )
+        if not result.is_error:
+            return result
+        last = " ".join(getattr(c, "text", "") for c in (result.content or [])).strip()
+        await asyncio.sleep(2)
+    raise AssertionError(
+        f"{job_name} #{build_number} did not start within {timeout}s: {last}"
+    )
+
+
 async def main() -> None:
     # mcp 2.x yields two streams; 1.x also yielded a session-id callback.
     async with streamable_http_client("http://localhost:8000/mcp") as streams:
@@ -58,7 +81,9 @@ async def main() -> None:
                 "trigger_build",
                 {"job_name": "mcp-smoke"},
             )
-            await asyncio.sleep(4)
+            # The pipeline sleeps 20s, so once the build exists there is time to
+            # observe and stop it.
+            await wait_for_build(session, "mcp-smoke", 1)
             running = await call(session, "list_running_builds", {})
             print(running)
             await call(
