@@ -18,6 +18,11 @@ services:
       MCP_TRANSPORT: streamable-http
       MCP_PATH: /mcp
       MCP_ALLOW_ADMIN_REQUEST: "false"
+      # This suite deliberately exercises stop_build and delete_job, which are
+      # gated off by default. Without these the calls are refused and the test
+      # silently proves nothing.
+      MCP_ALLOW_JOB_DELETE: "true"
+      MCP_ALLOW_BUILD_STOP: "true"
     ports: ["8000:8000", "8081:8081"]
     volumes:
       - jenkins-home:/jenkins-home:ro
