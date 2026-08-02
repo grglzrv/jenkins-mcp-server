@@ -412,23 +412,14 @@ Two consequences worth knowing:
   convention of versioning the chart independently for the guarantee that a
   chart version identifies exactly one application build.
 
-## Repository setup
-
-For the `grglzrv` GitHub account, follow [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) or run:
-
-```bash
-./scripts/github-bootstrap.sh
-```
-
 ## Documentation
 
-- [GitHub setup](docs/GITHUB_SETUP.md)
 - [Release process](docs/releasing/RELEASE.md)
 - [Kubernetes, Tailscale, and Argo CD](docs/KUBERNETES_TAILSCALE_ARGOCD.md)
 - [Helm chart](charts/jenkins-mcp-server/README.md)
 - [Security model](SECURITY.md)
-- [Original source attribution](ORIGINAL_SOURCE.md)
 
 ## Attribution
 
-Originally based on the MIT-licensed `akhilthomas236/jenkins_mcp_server` project and substantially rewritten for production deployment. This is not an official Jenkins project.
+This is not an official Jenkins project. Jenkins is a registered trademark of
+the Continuous Delivery Foundation.

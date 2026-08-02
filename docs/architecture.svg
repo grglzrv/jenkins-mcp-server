@@ -1,49 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1420 400" width="1420" height="400" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 736" width="1440" height="736" role="img" aria-labelledby="t d">
 <title id="t">Jenkins MCP Server request path</title>
-<desc id="d">An agent request passes through the optional minibridge proxy, which holds three settings: tools (which tools), guardrails (content checks) and policer (enforcement). It then reaches the Jenkins MCP server, which always enforces its mcp policy, before reaching Jenkins.</desc>
+<desc id="d">An agent request passes through the optional minibridge proxy, which holds three settings side by side: tools (which tools), guardrails (content checks) and policer (enforcement). It then reaches the Jenkins MCP server, which always enforces its mcp policy, before reaching Jenkins.</desc>
 
-<rect width="1420" height="400" fill="#1b1b19"/>
+<rect width="1440" height="736" fill="#1c1c1a"/>
 
 <defs>
 <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-<path d="M1 1L9 5L1 9" fill="none" stroke="#8b8b85" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1 1L9 5L1 9" fill="none" stroke="#8f8f88" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 </marker>
 </defs>
 
 <!-- Agent -->
-<rect x="30" y="165" width="150" height="72" rx="10" fill="#3a3a37" stroke="#57574f"/>
-<text x="105" y="201" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="21" fill="#e8e6e1">Agent</text>
-
-<line x1="184" y1="201" x2="222" y2="201" stroke="#8b8b85" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="137" y="148" width="234" height="90" rx="12" fill="#3d3d39" stroke="#5a5a52"/>
+<text x="254" y="193" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="25" fill="#e9e7e2">Agent</text>
+<line x1="375" y1="193" x2="444" y2="193" stroke="#8f8f88" stroke-width="1.8" marker-end="url(#a)"/>
 
 <!-- minibridge -->
-<rect x="232" y="78" width="536" height="246" rx="22" fill="#3b389c" stroke="#5b58bd"/>
-<text x="500" y="116" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="21" fill="#ffffff">minibridge: optional proxy</text>
+<rect x="450" y="78" width="852" height="230" rx="24" fill="#413d9e" stroke="#5d59bd"/>
+<text x="876" y="120" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="25" fill="#ffffff">minibridge: the proxy</text>
 
-<rect x="254" y="150" width="160" height="150" rx="10" fill="#3a3a37" stroke="#57574f"/>
-<text x="334" y="205" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="19" fill="#e8e6e1">tools</text>
-<text x="334" y="236" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="15" fill="#b8b6ae">which tools</text>
+<rect x="487" y="160" width="240" height="116" rx="12" fill="#3d3d39" stroke="#5a5a52"/>
+<text x="607" y="200" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="24" fill="#e9e7e2">tools</text>
+<text x="607" y="238" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="19" fill="#bab8b0">which tools</text>
 
-<rect x="420" y="150" width="160" height="150" rx="10" fill="#7b2d12" stroke="#c2410c" stroke-width="1.6"/>
-<text x="500" y="205" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="19" fill="#fde3c4">guardrails</text>
-<text x="500" y="236" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="15" fill="#f0b892">content checks</text>
+<rect x="755" y="160" width="240" height="116" rx="12" fill="#7d2d10" stroke="#c2410c" stroke-width="1.8"/>
+<text x="875" y="200" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="24" fill="#fbdcbd">guardrails</text>
+<text x="875" y="238" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="19" fill="#f0b18a">content checks</text>
 
-<rect x="586" y="150" width="160" height="150" rx="10" fill="#3a3a37" stroke="#57574f"/>
-<text x="666" y="205" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="19" fill="#e8e6e1">policer</text>
-<text x="666" y="236" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="15" fill="#b8b6ae">enforcement</text>
+<rect x="1023" y="160" width="240" height="116" rx="12" fill="#3d3d39" stroke="#5a5a52"/>
+<text x="1143" y="200" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="24" fill="#e9e7e2">policer</text>
+<text x="1143" y="238" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="19" fill="#bab8b0">enforcement</text>
 
-<line x1="772" y1="201" x2="810" y2="201" stroke="#8b8b85" stroke-width="1.6" marker-end="url(#a)"/>
+<line x1="876" y1="310" x2="876" y2="396" stroke="#8f8f88" stroke-width="1.8" marker-end="url(#a)"/>
 
 <!-- jenkins mcp server -->
-<rect x="820" y="140" width="320" height="122" rx="14" fill="#064e3b" stroke="#0f766e"/>
-<text x="980" y="184" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="20" fill="#ffffff">jenkins mcp server</text>
-<text x="980" y="216" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="15" fill="#6ee7b7">mcp.* policy, always enforced</text>
+<rect x="450" y="402" width="852" height="108" rx="14" fill="#0a5442" stroke="#0f766e"/>
+<text x="876" y="437" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="25" fill="#ffffff">jenkins mcp server</text>
+<text x="876" y="477" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="21" fill="#5ec99f">mcp.* policy, always enforced</text>
 
-<line x1="1144" y1="201" x2="1182" y2="201" stroke="#8b8b85" stroke-width="1.6" marker-end="url(#a)"/>
+<line x1="876" y1="512" x2="876" y2="578" stroke="#8f8f88" stroke-width="1.8" marker-end="url(#a)"/>
 
 <!-- Jenkins -->
-<rect x="1192" y="165" width="196" height="72" rx="10" fill="#3a3a37" stroke="#57574f"/>
-<text x="1290" y="201" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="21" fill="#e8e6e1">Jenkins</text>
-
-<text x="710" y="360" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="15" fill="#8b8b85">minibridge is the component; guardrails is one setting inside it, beside tools and policer.</text>
+<rect x="566" y="584" width="620" height="88" rx="12" fill="#4a4a45" stroke="#5a5a52"/>
+<text x="876" y="628" text-anchor="middle" dominant-baseline="central" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="25" fill="#eceae5">Jenkins</text>
 </svg>
