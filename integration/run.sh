@@ -86,9 +86,21 @@ mkdir -p integration/shared-certs
 CID=$(docker compose -f docker-compose.integration.yml ps -q jenkins)
 docker cp "$CID:/var/jenkins_home/certs/ca.crt" integration/shared-certs/ca.crt
 export JENKINS_TOKEN="$TOKEN"
-docker compose -f docker-compose.integration.yml up -d --build mcp
+# --no-deps is essential. Without it compose rebuilds and recreates the jenkins
+# service too, and because that image runs apt-get update its ID changes on
+# every build, so Jenkins restarts here and answers 503 while it boots.
+docker compose -f docker-compose.integration.yml up -d --build --no-deps mcp
 step "Waiting for the MCP server to become ready"
 for _ in {1..60}; do curl -sf http://localhost:8081/readyz >/dev/null && break; sleep 1; done
 curl -sf http://localhost:8081/readyz >/dev/null || { echo "MCP server did not become ready within 60s"; exit 1; }
+
+# /readyz only reports that credentials are configured, not that Jenkins is
+# reachable, so confirm Jenkins is still serving before exercising any tool.
+for _ in {1..60}; do jcurl -o /dev/null -w '%{http_code}' "$JENKINS_LOCAL/api/json" | grep -q '^200$' && break; sleep 2; done
+JENKINS_CODE="$(jcurl -o /dev/null -w '%{http_code}' "$JENKINS_LOCAL/api/json")"
+if [ "$JENKINS_CODE" != "200" ]; then
+  echo "Jenkins is not serving requests before the MCP calls (last HTTP $JENKINS_CODE)"
+  exit 1
+fi
 echo "::endgroup::"
 python3 integration/test_mcp_http.py
