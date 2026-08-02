@@ -26,10 +26,62 @@ step "Waiting for Jenkins to become reachable"
 for _ in {1..90}; do curl -skf https://localhost:8443/login >/dev/null && break; sleep 2; done
 curl -skf https://localhost:8443/login >/dev/null || { echo "Jenkins did not come up within 180s"; exit 1; }
 echo "::endgroup::"
-CRUMB_JSON=$(curl -sk -u admin:admin-test-password 'https://localhost:8443/crumbIssuer/api/json')
-CRUMB_FIELD=$(printf '%s' "$CRUMB_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["crumbRequestField"])')
-CRUMB=$(printf '%s' "$CRUMB_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["crumb"])')
-TOKEN=$(curl -sk -u admin:admin-test-password -H "$CRUMB_FIELD: $CRUMB" -X POST 'https://localhost:8443/me/descriptorByName/jenkins.security.ApiTokenProperty/generateNewToken' --data 'newTokenName=mcp-integration' | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["tokenValue"])')
+JENKINS_LOCAL="https://localhost:8443"
+COOKIE_JAR="$(mktemp)"
+trap 'rm -f "$COOKIE_JAR"' EXIT
+
+# -L because /me/... redirects to /user/<id>/...; without it the POST returns an
+# empty body. The cookie jar keeps the crumb and the request on one session,
+# which Jenkins requires when authenticating with a password rather than a token.
+jcurl() {
+  curl -sk -L -b "$COOKIE_JAR" -c "$COOKIE_JAR" -u admin:admin-test-password "$@"
+}
+
+# Fails with the actual payload instead of a bare JSONDecodeError.
+json_field() {
+  local raw="$1"; shift
+  printf '%s' "$raw" | python3 -c '
+import sys, json
+raw = sys.stdin.read()
+if not raw.strip():
+    sys.exit("Jenkins returned an empty response where JSON was expected")
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError:
+    sys.exit("Jenkins returned non-JSON: " + raw[:400].replace("\n", " "))
+for key in sys.argv[1:]:
+    try:
+        data = data[key]
+    except (KeyError, TypeError):
+        sys.exit("key %r missing from Jenkins response: %s" % (key, json.dumps(data)[:400]))
+print(data)
+' "$@"
+}
+
+step "Waiting for the Jenkins security realm to accept authentication"
+# /login answers before JCasC has finished creating the admin user, so poll an
+# authenticated endpoint rather than the login page.
+for _ in {1..60}; do
+  [ "$(jcurl -o /dev/null -w '%{http_code}' "$JENKINS_LOCAL/me/api/json")" = "200" ] && break
+  sleep 2
+done
+AUTH_CODE="$(jcurl -o /dev/null -w '%{http_code}' "$JENKINS_LOCAL/me/api/json")"
+if [ "$AUTH_CODE" != "200" ]; then
+  echo "Jenkins did not accept admin authentication within 120s (last HTTP $AUTH_CODE)"
+  exit 1
+fi
+echo "::endgroup::"
+
+step "Generating a Jenkins API token"
+CRUMB_JSON="$(jcurl "$JENKINS_LOCAL/crumbIssuer/api/json")"
+CRUMB_FIELD="$(json_field "$CRUMB_JSON" crumbRequestField)"
+CRUMB="$(json_field "$CRUMB_JSON" crumb)"
+USER_ID="$(json_field "$(jcurl "$JENKINS_LOCAL/me/api/json")" id)"
+TOKEN_JSON="$(jcurl -H "$CRUMB_FIELD: $CRUMB" -X POST \
+  "$JENKINS_LOCAL/user/$USER_ID/descriptorByName/jenkins.security.ApiTokenProperty/generateNewToken" \
+  --data 'newTokenName=mcp-integration')"
+TOKEN="$(json_field "$TOKEN_JSON" data tokenValue)"
+echo "::endgroup::"
 mkdir -p integration/shared-certs
 CID=$(docker compose -f docker-compose.integration.yml ps -q jenkins)
 docker cp "$CID:/var/jenkins_home/certs/ca.crt" integration/shared-certs/ca.crt
