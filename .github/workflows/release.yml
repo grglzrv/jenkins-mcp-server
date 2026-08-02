@@ -137,6 +137,9 @@ jobs:
       attestations: write
       artifact-metadata: write
       id-token: write
+      # Declaring any permissions sets every unlisted scope to none, and
+      # download-artifact needs actions:read to enumerate the run's artifacts.
+      actions: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

@@ -7,6 +7,12 @@ updates:
     groups:
       python-dependencies:
         patterns: ["*"]
+    ignore:
+      # mcp 2.0 removed mcp.server.fastmcp entirely; the server needs porting to
+      # the new mcp.server.mcpserver API before the major bump can land. Minor
+      # and patch updates within 1.x still come through.
+      - dependency-name: mcp
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /
     schedule:
