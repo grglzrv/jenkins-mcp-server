@@ -17,16 +17,31 @@ COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
 
 # Empty derives the line from the core version, 2.504.1 -> 2.504.
 ARG JENKINS_UC_LINE=""
-RUN set -eu; \
+# Jenkins publishes per-line update centres, but the path differs by release
+# type: an LTS line lives at stable-<line>, weeklies at <line>. Guessing wrong
+# gives a 404 from the resolver, so try each candidate and keep the first that
+# resolves, falling back to the default update centre.
+RUN set -u; \
     VER="${JENKINS_VERSION:-}"; \
     LINE="${JENKINS_UC_LINE:-}"; \
     if [ -z "$LINE" ] && [ -n "$VER" ]; then LINE="$(echo "$VER" | cut -d. -f1,2)"; fi; \
-    echo "core=${VER:-unknown} line=${LINE:-default}"; \
-    if [ -n "$LINE" ]; then \
-      export JENKINS_UC="https://updates.jenkins.io/${LINE}"; \
-      echo "JENKINS_UC=$JENKINS_UC"; \
-    fi; \
-    jenkins-plugin-cli --verbose --plugin-file /usr/share/jenkins/ref/plugins.txt
+    echo "core=${VER:-unknown} line=${LINE:-none}"; \
+    OK=0; \
+    for UC in \
+        "${LINE:+https://updates.jenkins.io/stable-${LINE}}" \
+        "${LINE:+https://updates.jenkins.io/${LINE}}" \
+        "https://updates.jenkins.io/stable" \
+        "https://updates.jenkins.io"; do \
+      [ -z "$UC" ] && continue; \
+      echo "=== trying update centre: $UC ==="; \
+      if JENKINS_UC="$UC" jenkins-plugin-cli \
+           --plugin-file /usr/share/jenkins/ref/plugins.txt; then \
+        echo "=== resolved plugins from $UC ==="; OK=1; break; \
+      fi; \
+      echo "=== $UC did not work, trying the next ===" >&2; \
+      rm -rf /usr/share/jenkins/ref/plugins/*.jpi /usr/share/jenkins/ref/plugins/*.jpi.pinned 2>/dev/null || true; \
+    done; \
+    if [ "$OK" -ne 1 ]; then echo "no update centre could resolve the plugin set" >&2; exit 1; fi
 
 COPY casc/jenkins.yaml /usr/share/jenkins/ref/casc/jenkins.yaml
 COPY entrypoint-tls.sh /usr/local/bin/entrypoint-tls.sh
