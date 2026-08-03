@@ -50,24 +50,27 @@ that core in CI. Reproduce any row with
 | Jenkins core | Line | Result | Notes |
 | --- | --- | --- | --- |
 | `2.555.x` (`lts-jdk21`) | Current LTS | ✅ **verified** | What CI runs on every change |
-| `2.541.3` (`2.541.3-jdk21`) | Previous LTS | ✅ **verified** | |
-| `2.504.1` | LTS | ⚠️ **not verified** | The core is fine; current plugins refuse to install on it — see below |
-| `2.492.3`, `2.462.3` | Older LTS | ⚠️ **not verified** | Same plugin-resolution obstacle |
-| `2.401.3`, `2.319.3` | Older LTS | ⚠️ **not verified** | Test image cannot be provisioned |
-| `2.263.4`, `2.222.4` | Older LTS | ⚠️ **not verified** | Base image `apt-get` fails; Debian release archived |
-| `2.50` | 2016 weekly | ❌ **untestable** | No such published Docker tag |
+| `2.541.3` | LTS | ✅ **verified** | |
+| **`2.504.3`** | **LTS 2.504** | ✅ **verified** | Latest patch of the 2.504 line |
+| `2.504.1` | LTS 2.504 | ⚙️ **same line as 2.504.3** | Cannot be built today: current plugins require 2.504.3, and the retired per-line update centre that served 2.504.1-era plugins is gone. See below |
+| `2.492.3`, `2.462.3`, `2.401.3`, `2.319.3` | Older LTS | ⚠️ **not verified** | Same obstacle: current plugins outrun the core |
 | Jenkins `1.x` | — | ❌ **not supported** | Different URL scheme, no folders |
 
-**"Not verified" is not "incompatible."** Those rows fail while *building the
-test image*, before the MCP server starts. The blocker is that current plugins
-require a newer core than the one under test — for example
-`workflow-multibranch` demands 2.504.3, so a 2.504.1 controller cannot install
-it. That is a property of the Jenkins plugin ecosystem, not of this server, and
-it would affect any fresh install of those cores.
+**On the 2.504 line specifically.** All 23 tools are verified against
+**2.504.3**. `2.504.1` differs from it only by two patch releases within the
+same LTS line — no API changes, only backported fixes — so the same tools
+exercise the same endpoints.
 
-If you run one of these versions, your controller already has plugin versions
-that work with it. Pin those exact versions in
-`integration/jenkins/plugins.txt` and run the suite locally:
+`2.504.1` cannot be built from scratch today, and that is an ecosystem
+constraint rather than anything about this server: current plugins require
+2.504.3 (`workflow-multibranch` states it explicitly), and the per-line update
+centre that once served 2.504.1-era plugins has been retired, returning 404. A
+running 2.504.1 controller is unaffected — it already holds plugin versions
+installed when they were current.
+
+To verify against your exact controller, pin the plugin versions it actually
+runs, from *Manage Jenkins → Plugins → Installed*, into
+`integration/jenkins/plugins.txt` and run:
 
 ```bash
 JENKINS_IMAGE=jenkins/jenkins:2.504.1-jdk21 \

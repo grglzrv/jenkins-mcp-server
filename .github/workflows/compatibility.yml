@@ -128,7 +128,9 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          # The version actually in use by the maintainers of this repository.
+          # The 2.504 LTS line. 2.504.3 builds; 2.504.1 cannot, because current
+          # plugins require 2.504.3 and the retired 2.504 update centre 404s.
+          - jenkins/jenkins:2.504.3-jdk21
           - jenkins/jenkins:2.504.1-jdk21
           - jenkins/jenkins:2.492.3-jdk21
           - jenkins/jenkins:2.462.3-jdk21

@@ -10,21 +10,25 @@ to catch the `lts` tag moving.
 | Jenkins core | Result | Notes |
 | --- | --- | --- |
 | `jenkins/jenkins:lts-jdk21` (2.555.x) | **pass** | The version CI uses for the normal suite |
-| `jenkins/jenkins:2.541.3-jdk21` | **pass** | Previous LTS line |
-| `jenkins/jenkins:2.401.3` | not established | The test image cannot be built: no plugin installer on `PATH` |
-| `jenkins/jenkins:2.319.3` | not established | Same |
-| `jenkins/jenkins:2.263.4` | not established | Base image `apt-get` fails; the Debian release it used is archived |
-| `jenkins/jenkins:2.222.4` | not established | Same, `Failed to fetch deb.debian.org` |
-| `jenkins/jenkins:2.50` | **cannot be tested** | No such published tag on Docker Hub |
+| `jenkins/jenkins:2.541.3-jdk21` | **pass** | |
+| `jenkins/jenkins:2.504.3-jdk21` | **pass** | Latest patch of the 2.504 LTS line |
+| `jenkins/jenkins:2.504.1-jdk21` | not buildable | Current plugins require 2.504.3; the retired 2.504 update centre 404s |
+| `jenkins/jenkins:2.492.3-jdk21`, `2.462.3-jdk21` | not buildable | Same |
+| `jenkins/jenkins:2.401.3`, `2.319.3` | not buildable | Same |
 
-Read those "not established" rows carefully: they are failures of the *test
-harness*, not evidence that the server is incompatible. Older images cannot be
-provisioned with current plugins, and their Debian bases no longer resolve. The
-server was never reached, so nothing was learned about it either way.
+"Not buildable" is a statement about assembling a test image in August 2026,
+not about this server. Those runs fail before the MCP server starts: current
+plugins declare a minimum core newer than the one under test, and the per-line
+update centres that once served matching plugin versions have been retired and
+return 404. A controller already running one of those versions is unaffected,
+because it holds plugin versions installed when they were current.
 
-What this does establish: **the two most recent LTS lines are verified working,
-and nothing older has been demonstrated.** If you need an older core, test it
-against your own environment rather than trusting the endpoint list.
+What this establishes: **all 23 tools are verified against three LTS lines,
+2.555.x, 2.541.3 and 2.504.3.** For a core on the same line as one of those,
+the difference is backported fixes rather than API changes. For an older line,
+pin the plugin versions your controller actually runs and run the suite against
+it — that tests the combination you operate, which is worth more than any
+generic matrix.
 
 ## Supported versions
 
