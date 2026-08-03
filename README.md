@@ -68,9 +68,14 @@ centre that once served 2.504.1-era plugins has been retired, returning 404. A
 running 2.504.1 controller is unaffected — it already holds plugin versions
 installed when they were current.
 
-To verify against your exact controller, pin the plugin versions it actually
-runs, from *Manage Jenkins → Plugins → Installed*, into
-`integration/jenkins/plugins.txt` and run:
+To verify against your exact controller, dump its plugin versions and pin them:
+
+```bash
+JENKINS_URL=... JENKINS_USERNAME=... JENKINS_TOKEN=... \
+  ./scripts/dump_jenkins_plugins.sh > integration/jenkins/plugins.txt
+```
+
+then run the suite against your core:
 
 ```bash
 JENKINS_IMAGE=jenkins/jenkins:2.504.1-jdk21 \
