@@ -5,6 +5,10 @@ set -euo pipefail
 
 COMPOSE="docker compose -f docker-compose.integration.yml"
 
+# Jenkins core under test. The compatibility matrix sets this; the normal suite
+# uses the default baked into the compose file.
+echo "Jenkins image under test: ${JENKINS_IMAGE:-jenkins/jenkins:lts-jdk21 (default)}"
+
 # Without this a failure surfaces only as "exit code 1", with the actual cause
 # locked inside the containers. Dump everything useful before tearing down.
 on_failure() {

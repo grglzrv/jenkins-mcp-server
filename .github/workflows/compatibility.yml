@@ -1,0 +1,73 @@
+name: Jenkins compatibility matrix
+
+# Answers "which Jenkins versions actually work" empirically rather than by
+# reading changelogs. Not part of CI: it is slow, and older cores are expected
+# to fail, so failures here are data rather than a broken build.
+on:
+  workflow_dispatch:
+    inputs:
+      extra_image:
+        description: "Additional Jenkins image to test, e.g. jenkins/jenkins:2.500"
+        required: false
+        type: string
+  schedule:
+    # Monthly, to catch the current LTS moving underneath us.
+    - cron: "0 5 1 * *"
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Old cores are expected to fail; record the result instead of stopping.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          # Current LTS, what the normal suite uses.
+          - jenkins/jenkins:lts-jdk21
+          # Previous LTS line, to catch regressions against slightly older cores.
+          - jenkins/jenkins:2.541.3-jdk21
+          # Java 11 baseline era.
+          - jenkins/jenkins:2.401.3
+          # Older still, before jenkins-plugin-cli existed.
+          - jenkins/jenkins:2.319.3
+          # The oldest 2.x commonly asked about. Java 8, long EOL.
+          - jenkins/jenkins:2.50
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install 'mcp>=2.0.0,<3'
+      - name: Run the integration suite against ${{ matrix.image }}
+        id: run
+        env:
+          JENKINS_IMAGE: ${{ matrix.image }}
+        run: ./integration/run.sh
+      - name: Result
+        if: always()
+        run: |
+          echo "### ${{ matrix.image }}: ${{ steps.run.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+
+  extra:
+    name: ${{ inputs.extra_image }}
+    if: inputs.extra_image != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install 'mcp>=2.0.0,<3'
+      - env:
+          JENKINS_IMAGE: ${{ inputs.extra_image }}
+        run: ./integration/run.sh

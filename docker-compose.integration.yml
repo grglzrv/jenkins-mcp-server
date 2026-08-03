@@ -1,6 +1,10 @@
 services:
   jenkins:
-    build: ./integration/jenkins
+    build:
+      context: ./integration/jenkins
+      args:
+        # Overridden by the compatibility matrix to test other Jenkins cores.
+        JENKINS_IMAGE: ${JENKINS_IMAGE:-jenkins/jenkins:lts-jdk21}
     environment:
       CASC_JENKINS_CONFIG: /usr/share/jenkins/ref/casc/jenkins.yaml
       JAVA_OPTS: -Djenkins.install.runSetupWizard=false
