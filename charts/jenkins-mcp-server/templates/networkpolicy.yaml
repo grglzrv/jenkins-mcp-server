@@ -17,14 +17,14 @@ spec:
               app.kubernetes.io/component: helm-test
       ports:
         - protocol: TCP
-          port: {{ .Values.mcp.healthPort }}
+          port: {{ include "jenkins-mcp-server.healthPort" . }}
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.networkPolicy.tailscaleNamespace }}
       ports:
         - protocol: TCP
-          port: {{ .Values.mcp.port }}
+          port: {{ include "jenkins-mcp-server.mcpPort" . }}
     {{- if .Values.networkPolicy.allowDirectHermesAccess }}
     - from:
         - namespaceSelector:
@@ -32,7 +32,7 @@ spec:
               kubernetes.io/metadata.name: {{ .Values.networkPolicy.hermesNamespace }}
       ports:
         - protocol: TCP
-          port: {{ .Values.mcp.port }}
+          port: {{ include "jenkins-mcp-server.mcpPort" . }}
     {{- end }}
     {{- with .Values.networkPolicy.additionalIngress }}
     {{- toYaml . | nindent 4 }}

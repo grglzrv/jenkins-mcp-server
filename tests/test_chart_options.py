@@ -443,3 +443,48 @@ def test_minibridge_settings_are_not_silently_ignored() -> None:
 def test_ingress_tls_secret_requires_tls() -> None:
     validate = (CHART / "templates/_validate.tpl").read_text()
     assert "ingress.tlsSecretName is set but ingress.tls is false" in validate
+
+
+# --- port consistency and schema completeness ----------------------------
+
+
+def test_service_and_networkpolicy_follow_the_effective_ports() -> None:
+    """minibridge moves the health port; these must not stay on the raw value."""
+    for name in ["service.yaml", "networkpolicy.yaml"]:
+        text = (CHART / "templates" / name).read_text()
+        assert ".Values.mcp.healthPort" not in text, f"{name} hardcodes the health port"
+        assert ".Values.mcp.port" not in text, f"{name} hardcodes the mcp port"
+        assert "jenkins-mcp-server." in text and "Port" in text
+
+
+def test_pdb_guard_covers_static_replicas_and_autoscaling() -> None:
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    assert "replicaCount" in validate
+    assert "autoscaling.minReplicas" in validate
+    assert "node drains block" in validate
+
+
+def test_audit_pvc_claim_name_key_exists_for_required_to_work() -> None:
+    """Without the key, .claimName dereferences nil before `required` fires."""
+    storage = values()["audit"]["storage"]
+    assert "persistentVolumeClaim" in storage
+    assert storage["persistentVolumeClaim"]["claimName"] == ""
+
+
+def test_schema_covers_every_value_and_rejects_typos() -> None:
+    sc = schema()
+    unvalidated = sorted(set(values()) - set(sc["properties"]))
+    assert not unvalidated, f"values with no schema entry: {unvalidated}"
+    # Otherwise replicaCoun: 3 is silently ignored.
+    assert sc.get("additionalProperties") is False
+    # Helm injects this for subcharts; strict validation must still allow it.
+    assert "global" in sc["properties"]
+
+
+def test_notes_describe_the_actual_deployment() -> None:
+    notes = (CHART / "templates/NOTES.txt").read_text()
+    # Must not assume Tailscale, and must reflect the real enforcement state.
+    assert 'eq .Values.ingress.className "tailscale"' in notes
+    assert "policer.enforce" in notes
+    assert "minibridge.enabled" in notes
+    assert "verifyTls" in notes

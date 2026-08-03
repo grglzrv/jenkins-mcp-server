@@ -844,6 +844,104 @@
           "type": "object"
         }
       }
+    },
+    "nameOverride": {
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "type": "string"
+    },
+    "podAnnotations": {
+      "type": "object"
+    },
+    "podLabels": {
+      "type": "object"
+    },
+    "podSecurityContext": {
+      "type": "object"
+    },
+    "securityContext": {
+      "type": "object"
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "requests": {
+          "type": "object"
+        },
+        "limits": {
+          "type": "object"
+        }
+      }
+    },
+    "nodeSelector": {
+      "type": "object"
+    },
+    "tolerations": {
+      "type": "array"
+    },
+    "affinity": {
+      "type": "object"
+    },
+    "topologySpreadConstraints": {
+      "type": "array"
+    },
+    "priorityClassName": {
+      "type": "string"
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "extraVolumes": {
+      "type": "array"
+    },
+    "extraVolumeMounts": {
+      "type": "array"
+    },
+    "probes": {
+      "type": "object"
+    },
+    "audit": {
+      "type": "object",
+      "properties": {
+        "fileEnabled": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "storage": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "emptyDir",
+                "pvc"
+              ]
+            },
+            "emptyDir": {
+              "type": "object"
+            },
+            "persistentVolumeClaim": {
+              "type": "object",
+              "properties": {
+                "claimName": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "global": {
+      "type": "object"
     }
-  }
+  },
+  "additionalProperties": false
 }

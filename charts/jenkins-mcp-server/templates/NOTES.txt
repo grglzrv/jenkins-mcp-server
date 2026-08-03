@@ -1,24 +1,55 @@
-Jenkins MCP Server has been installed.
+Jenkins MCP Server {{ .Chart.AppVersion }} installed as {{ .Release.Name }}.
 
 MCP endpoint inside the cluster:
   http://{{ include "jenkins-mcp-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{ .Values.mcp.path }}
 
 {{- if .Values.ingress.enabled }}
-Tailscale endpoint (after the operator populates ADDRESS):
+{{- if eq .Values.ingress.className "tailscale" }}
+
+Tailscale endpoint, once the Operator populates ADDRESS:
   kubectl get ingress {{ include "jenkins-mcp-server.fullname" . }} -n {{ .Release.Namespace }}
+
+The URL is https://{{ .Values.ingress.hostname }}.<your-tailnet>.ts.net{{ .Values.mcp.path }}
+{{- else }}
+
+Ingress endpoint:
+  http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.hostname }}{{ .Values.mcp.path }}
+{{- end }}
 {{- end }}
 
-Hermes configuration:
+Client configuration:
   mcp_servers:
     jenkins:
       transport: streamable_http
-      url: https://<TAILSCALE_INGRESS_ADDRESS>{{ .Values.mcp.path }}
+      url: {{ if .Values.ingress.enabled }}{{ if eq .Values.ingress.className "tailscale" }}https://<TAILSCALE_INGRESS_ADDRESS>{{ else }}http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.hostname }}{{ end }}{{ else }}http://{{ include "jenkins-mcp-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{ end }}{{ .Values.mcp.path }}
 
+{{- if .Values.minibridge.enabled }}
+
+minibridge is in front of the server, {{ if .Values.minibridge.policer.enforce }}ENFORCING{{ else }}in LOG-ONLY mode{{ end }}.
+  Guardrails: {{ if .Values.minibridge.guardrails }}{{ join ", " .Values.minibridge.guardrails }}{{ else }}none enabled{{ end }}
+  Tools denied: {{ if .Values.minibridge.tools.deny }}{{ join ", " .Values.minibridge.tools.deny }}{{ else }}none{{ end }}
+  Tools allowed: {{ if .Values.minibridge.tools.allow }}{{ join ", " .Values.minibridge.tools.allow }} (strict allowlist){{ else }}all{{ end }}
+  Policer: {{ if .Values.minibridge.policer.enforce }}enforcing{{ else }}LOGGING ONLY, violations are not blocked{{ end }}
+
+  Health is served on "/" at port {{ include "jenkins-mcp-server.healthPort" . }}; the
+  server's own /healthz and /readyz are not exposed while the proxy is in front.
+  Requires the image tag {{ include "jenkins-mcp-server.image" . }} to exist.
+{{- end }}
+
+Server policy in effect (applies with or without minibridge):
+  Read only: {{ .Values.mcp.readOnly }}
+  Allowed jobs: {{ .Values.mcp.allowedJobs }}
+  Job delete: {{ .Values.mcp.allowJobDelete }}{{ if not .Values.mcp.allowJobDelete }} (irreversible, off by default){{ end }}
+  Admin requests: {{ .Values.mcp.allowAdminRequest }}
+{{- if not .Values.jenkins.verifyTls }}
+
+WARNING: jenkins.verifyTls is false. Any certificate is accepted on a
+connection that carries a Jenkins API token. Prefer jenkins.caBundle.
+{{- end }}
 {{- if .Values.tailscale.egress.enabled }}
-Jenkins TLS target:
-  {{ .Values.jenkins.url }}
 
-Ensure the cluster resolves the Jenkins MagicDNS hostname through a Tailscale
-DNSConfig/CoreDNS forwarder. Do not replace it with the Kubernetes Service DNS
-name when TLS hostname verification is enabled.
+Jenkins target: {{ .Values.jenkins.url }}
+The cluster must resolve that MagicDNS hostname through a Tailscale DNSConfig
+or CoreDNS forwarder. Do not substitute a Kubernetes Service DNS name while TLS
+hostname verification is enabled. See docs/TAILSCALE.md.
 {{- end }}

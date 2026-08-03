@@ -215,8 +215,13 @@ audit:
   fileEnabled: true
   path: /data/audit.jsonl
   storage:
+    # emptyDir keeps audit records for the pod's lifetime only. Records are
+    # always written to stdout as well, so a log pipeline is the durable path.
     type: emptyDir
     emptyDir: {}
+    # Required when type is pvc. The claim must already exist.
+    persistentVolumeClaim:
+      claimName: ""
     # type: pvc
     # persistentVolumeClaim:
     #   claimName: jenkins-mcp-audit

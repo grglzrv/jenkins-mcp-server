@@ -48,13 +48,18 @@ Cross-field validation that would otherwise only surface at runtime.
 
 {{- /* PodDisruptionBudget and autoscaling must agree, or a voluntary
        disruption can never proceed at minimum scale. */ -}}
-{{- if and .Values.autoscaling.enabled .Values.podDisruptionBudget.enabled }}
+{{- if .Values.podDisruptionBudget.enabled }}
 {{- $min := .Values.podDisruptionBudget.minAvailable -}}
+{{- /* The floor is the autoscaler minimum when it owns the count, otherwise
+       the static replica count. Either way minAvailable must sit below it, or
+       no pod is ever evictable and a node drain blocks indefinitely. */ -}}
+{{- $floor := .Values.replicaCount -}}
+{{- if .Values.autoscaling.enabled }}{{- $floor = .Values.autoscaling.minReplicas -}}{{- end -}}
 {{- /* --set yields float64, values.yaml yields int, and a percentage such as
        "50%" is a string that cannot be compared numerically. */ -}}
 {{- if and $min (not (kindIs "string" $min)) }}
-{{- if ge (int $min) (int .Values.autoscaling.minReplicas) }}
-{{- fail (printf "podDisruptionBudget.minAvailable (%v) must be lower than autoscaling.minReplicas (%v), otherwise no pod can ever be evicted when scaled to the minimum." $min .Values.autoscaling.minReplicas) }}
+{{- if ge (int $min) (int $floor) }}
+{{- fail (printf "podDisruptionBudget.minAvailable (%v) must be lower than the minimum pod count (%v, from %s), otherwise no pod can ever be evicted and node drains block indefinitely. Lower minAvailable, raise the replica count, or disable the PodDisruptionBudget." $min $floor (ternary "autoscaling.minReplicas" "replicaCount" .Values.autoscaling.enabled)) }}
 {{- end }}
 {{- end }}
 {{- end }}

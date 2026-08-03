@@ -2,6 +2,36 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.11.0] - 2026-08-03
+
+### Fixed
+
+- **The NetworkPolicy blocked the health port whenever minibridge was enabled.**
+  Both `networkpolicy.yaml` and `service.yaml` used `mcp.healthPort` directly
+  instead of the effective port, which minibridge moves from 8081 to 8080. The
+  Service still worked through its named target port, but the NetworkPolicy
+  allowed a port nothing was listening on.
+- `audit.storage.type: pvc` produced a raw Go nil-pointer error rather than the
+  intended message, because `audit.storage.persistentVolumeClaim` did not exist
+  in values, so `.claimName` dereferenced nil before `required` could fire.
+- The PodDisruptionBudget guard only considered `autoscaling.minReplicas`. With
+  autoscaling off, `replicaCount: 1` and the default `minAvailable: 1` left no
+  evictable pod, so a node drain would block indefinitely. The guard now uses
+  whichever minimum applies.
+- `NOTES.txt` assumed Tailscale and reported the wrong endpoint for any other
+  ingress class, said nothing about minibridge, and did not reflect whether the
+  policer was enforcing or only logging.
+
+### Changed
+
+- The values schema now covers all 17 previously unvalidated top-level values
+  and sets `additionalProperties: false`, so a typo such as `replicaCoun` fails
+  the render instead of being silently ignored. `global` is permitted so the
+  chart still works as a subchart.
+- `NOTES.txt` prints the effective endpoint for the configured ingress class,
+  the minibridge policy in force, the server policy that applies regardless, and
+  a warning when `jenkins.verifyTls` is false.
+
 ## [1.10.0] - 2026-08-03
 
 ### Fixed
