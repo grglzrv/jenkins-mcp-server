@@ -49,7 +49,20 @@ jobs:
         id: run
         env:
           JENKINS_IMAGE: ${{ matrix.image }}
-        run: ./integration/run.sh
+        run: |
+          set +e
+          ./integration/run.sh > /tmp/out.txt 2>&1
+          code=$?
+          set -e
+          tail -n 120 /tmp/out.txt
+          if [ "$code" -ne 0 ]; then
+            # Emit the cause as an annotation. Job logs live in blob storage that
+            # is awkward to fetch; annotations come back from the check-runs API,
+            # so the reason a core failed is readable without downloading logs.
+            reason="$(grep -hoE '(AssertionError|Exception|ERROR:|error:|no plugin installer|Unsupported|requires Jenkins|manifest unknown|not found|Cannot|Failed to|did not|denied)[^\r]{0,150}' /tmp/out.txt | tail -4 | tr '\n' ' ~ ')"
+            echo "::error::${JENKINS_IMAGE} FAILED :: ${reason:-no recognisable error line, see log}"
+          fi
+          exit "$code"
       - name: Result
         if: always()
         run: |
