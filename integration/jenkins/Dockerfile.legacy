@@ -33,8 +33,12 @@ RUN set -u; \
     if [ -n "$LINE" ]; then \
       UC="https://updates.jenkins.io/${LINE}/update-center.actual.json"; \
       echo "resolving plugins from $UC"; \
-      jenkins-plugin-cli --jenkins-version "$VER" --update-center "$UC" \
-        --plugin-file /usr/share/jenkins/ref/plugins.txt; \
+      jenkins-plugin-cli --jenkins-version "$VER" --jenkins-update-center "$UC" \
+        --plugin-file /usr/share/jenkins/ref/plugins.txt \
+      || { echo "line update centre failed; retrying via JENKINS_UC" >&2; \
+           JENKINS_UC="https://updates.jenkins.io/${LINE}" \
+             jenkins-plugin-cli --jenkins-version "$VER" \
+               --plugin-file /usr/share/jenkins/ref/plugins.txt; }; \
     else \
       echo "could not determine the core version; falling back to the default update centre" >&2; \
       jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt; \
