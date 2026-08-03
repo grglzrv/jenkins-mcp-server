@@ -567,3 +567,61 @@ def test_no_stale_version_pins_anywhere() -> None:
         capture_output=True, text=True, cwd=ROOT,
     )
     assert result.returncode == 0, result.stderr
+
+
+# --- cluster smoke test ---------------------------------------------------
+
+
+def test_smoke_workflow_and_values_exist() -> None:
+    wf = ROOT / ".github/workflows/chart-smoke.yml"
+    vals = ROOT / ".github/smoke-values.yaml"
+    assert wf.is_file() and vals.is_file()
+    text = wf.read_text()
+    # The value of a cluster test is what only an API server can tell you.
+    for step in ["helm install", "helm test", "helm upgrade", "helm uninstall",
+                 "rollout status"]:
+        assert step in text, f"smoke test should cover {step}"
+
+
+def test_smoke_test_is_reused_not_duplicated() -> None:
+    """CI and release must call the same workflow rather than copy the steps."""
+    for name in ["ci.yml", "release.yml"]:
+        text = (ROOT / ".github/workflows" / name).read_text()
+        assert "uses: ./.github/workflows/chart-smoke.yml" in text, name
+        assert "get.k3s.io" not in text, f"{name} duplicates the smoke steps"
+
+
+def test_release_is_gated_on_the_smoke_test() -> None:
+    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+    assert "chart-smoke" in release["jobs"]
+    assert "chart-smoke" in release["jobs"]["github-release"]["needs"]
+    # A published image tag the chart references must also exist.
+    assert "minibridge-image" in release["jobs"]
+
+
+def test_smoke_values_disable_what_the_cluster_lacks() -> None:
+    v = yaml.safe_load((ROOT / ".github/smoke-values.yaml").read_text())
+    assert v["ingress"]["enabled"] is False
+    assert v["tailscale"]["egress"]["enabled"] is False
+    # The NetworkPolicy must stay on: the helm test reaching the Service through
+    # it is a large part of what the smoke test proves.
+    assert v["networkPolicy"]["enabled"] is True
+
+
+def test_chart_readme_documents_kubernetes_support() -> None:
+    readme = (CHART / "README.md").read_text()
+    assert "kubeVersion" in readme
+    for minor in ["1.36", "1.35", "1.34", "1.33"]:
+        assert minor in readme, f"Kubernetes {minor} missing from the matrix"
+    for api in ["policy/v1", "autoscaling/v2", "networking.k8s.io/v1"]:
+        assert api in readme, f"{api} missing from the API version table"
+
+
+def test_helm_test_pod_uses_the_effective_port_and_path() -> None:
+    """It targeted mcp.healthPort and /readyz, both wrong under minibridge."""
+    text = (CHART / "templates/tests/test-connection.yaml").read_text()
+    assert ".Values.mcp.healthPort" not in text
+    assert 'jenkins-mcp-server.healthPort' in text
+    assert 'jenkins-mcp-server.readyPath' in text
+    # No test pod when the health port is not published on the Service.
+    assert ".Values.service.exposeHealthPort" in text

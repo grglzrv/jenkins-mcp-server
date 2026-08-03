@@ -1,0 +1,43 @@
+# Values for the k3s smoke test: a bare cluster with no ingress controller,
+# no Tailscale Operator and no External Secrets. Everything that depends on
+# those is off so the test exercises the chart itself.
+jenkins:
+  url: https://jenkins.smoke.invalid
+  credentials:
+    existingSecret: jenkins-mcp-secrets
+    create: false
+
+# Single replica: the runner has two cores, and the PodDisruptionBudget default
+# of minAvailable 1 would then block eviction, which the chart rejects.
+replicaCount: 2
+
+ingress:
+  enabled: false
+
+tailscale:
+  egress:
+    enabled: false
+  magicDNS:
+    createDNSConfig: false
+  proxyGroups:
+    create: false
+
+# Kept on deliberately: the helm test pod reaching the Service through it is
+# the point, and a policy that blocks legitimate traffic should fail here.
+networkPolicy:
+  enabled: true
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi
+  limits:
+    cpu: 500m
+    memory: 384Mi
+
+mcp:
+  allowedJobs: "AI/*,Platform/*"

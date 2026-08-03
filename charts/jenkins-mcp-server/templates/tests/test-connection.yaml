@@ -1,3 +1,4 @@
+{{- if .Values.service.exposeHealthPort }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -29,4 +30,7 @@ spec:
         - "--spider"
         - "--timeout=5"
         - "--tries=1"
-        - "http://{{ include "jenkins-mcp-server.fullname" . }}:{{ .Values.mcp.healthPort }}/readyz"
+        # Helpers, not the raw values: minibridge moves the health port and
+        # serves "/" rather than /readyz.
+        - "http://{{ include "jenkins-mcp-server.fullname" . }}:{{ include "jenkins-mcp-server.healthPort" . }}{{ include "jenkins-mcp-server.readyPath" . }}"
+{{- end }}

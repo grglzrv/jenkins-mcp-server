@@ -190,8 +190,17 @@ jobs:
           name: helm-chart
           path: dist/*
 
+  chart-smoke:
+    # The release must not publish a chart that cannot install. Same reusable
+    # workflow CI runs, so the steps are defined once.
+    needs: validate
+    uses: ./.github/workflows/chart-smoke.yml
+    with:
+      # The two newest supported minors; CI covers the full range on every push.
+      k3s_versions: '["v1.36.2+k3s1","v1.35.6+k3s1"]'
+
   github-release:
-    needs: [validate, image, helm]
+    needs: [validate, image, minibridge-image, helm, chart-smoke]
     permissions:
       contents: write
       attestations: write

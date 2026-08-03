@@ -2,6 +2,32 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.16.0] - 2026-08-03
+
+### Added
+
+- **The chart is now installed into a real k3s cluster in CI.** `helm lint` and
+  `helm template` only prove the manifests render; the smoke test proves the API
+  server accepts them, the pod starts, the probes pass, the chart's own test pod
+  reaches the Service through the NetworkPolicy, an upgrade over an existing
+  release is clean, and uninstall leaves nothing behind. It runs across
+  Kubernetes 1.33 to 1.36, on every change and again as a release gate, so a
+  chart that cannot install is never published. Defined once as a reusable
+  workflow and called from both.
+- A Kubernetes compatibility matrix in the chart README, listing the minors that
+  are actually installed and tested, and the apiVersion of every resource the
+  chart emits.
+
+### Fixed
+
+- The chart's own `helm test` pod targeted `mcp.healthPort` and `/readyz`
+  directly. With minibridge enabled the health port moves and the path becomes
+  `/`, so `helm test` would have failed against a working deployment. It now
+  uses the same helpers as the Service and NetworkPolicy, and is omitted
+  entirely when `service.exposeHealthPort` is false, since it could not reach
+  the endpoint anyway.
+
+
 ## [1.15.0] - 2026-08-03
 
 ### Added

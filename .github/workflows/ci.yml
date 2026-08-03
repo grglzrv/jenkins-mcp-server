@@ -96,6 +96,12 @@ jobs:
       - name: Package chart
         run: helm package charts/jenkins-mcp-server --destination dist
 
+  chart-smoke:
+    # Installs the chart into a real k3s cluster. Kept in a reusable workflow so
+    # the release gate runs exactly the same steps.
+    needs: helm
+    uses: ./.github/workflows/chart-smoke.yml
+
   docker:
     name: Docker build
     runs-on: ubuntu-latest

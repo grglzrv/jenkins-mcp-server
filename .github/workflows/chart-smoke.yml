@@ -1,0 +1,130 @@
+name: Chart smoke test
+
+# Installs the chart into a real k3s cluster. `helm lint` and `helm template`
+# already run in CI and are not repeated here; this covers what only an API
+# server can tell you: whether the manifests are accepted, the pod actually
+# starts, the probes pass, the NetworkPolicy lets legitimate traffic through,
+# and whether an upgrade over an existing release is clean.
+#
+# Reusable so CI runs it on every change and the release gates on it, without
+# the steps existing in two places.
+on:
+  workflow_call:
+    inputs:
+      k3s_versions:
+        description: "JSON array of k3s versions to test"
+        required: false
+        default: '["v1.36.2+k3s1","v1.35.6+k3s1","v1.34.9+k3s1","v1.33.13+k3s1"]'
+        type: string
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: "k3s ${{ matrix.k3s }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        k3s: ${{ fromJSON(inputs.k3s_versions || '["v1.36.2+k3s1","v1.35.6+k3s1","v1.34.9+k3s1","v1.33.13+k3s1"]') }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.2.3
+
+      - name: Start k3s ${{ matrix.k3s }}
+        run: |
+          # --disable traefik: the chart's ingress is off for this test, and an
+          # unused controller only adds startup time.
+          curl -sfL https://get.k3s.io | \
+            INSTALL_K3S_VERSION='${{ matrix.k3s }}' \
+            INSTALL_K3S_EXEC='--disable traefik --disable metrics-server' \
+            sh -
+          sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+          echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> "$GITHUB_ENV"
+
+      - name: Wait for the node
+        run: |
+          kubectl wait --for=condition=Ready node --all --timeout=180s
+          kubectl version
+          echo "server: $(kubectl version -o json | python3 -c 'import json,sys;print(json.load(sys.stdin)["serverVersion"]["gitVersion"])')"
+
+      - name: Create the namespace and credentials
+        run: |
+          kubectl create namespace jenkins-mcp
+          # The server needs credentials to start. It never reaches Jenkins in
+          # this test: readiness reports configuration, not connectivity.
+          kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
+            --from-literal=JENKINS_USERNAME=smoke \
+            --from-literal=JENKINS_TOKEN=smoke-token
+
+      - name: Install the chart
+        run: |
+          helm install jenkins-mcp charts/jenkins-mcp-server \
+            --namespace jenkins-mcp \
+            --values .github/smoke-values.yaml \
+            --wait --timeout 5m
+
+      - name: Show what was created
+        run: kubectl -n jenkins-mcp get all,networkpolicy,pdb
+
+      - name: Rollout completed
+        run: kubectl -n jenkins-mcp rollout status deploy/jenkins-mcp-jenkins-mcp-server --timeout=180s
+
+      - name: Probes are passing
+        run: |
+          kubectl -n jenkins-mcp wait --for=condition=Available \
+            deploy/jenkins-mcp-jenkins-mcp-server --timeout=180s
+          ready=$(kubectl -n jenkins-mcp get deploy jenkins-mcp-jenkins-mcp-server \
+            -o jsonpath='{.status.readyReplicas}')
+          echo "ready replicas: ${ready:-0}"
+          [ "${ready:-0}" -ge 1 ]
+
+      - name: Helm test
+        # Exercises the chart's own test pod, which reaches the health endpoint
+        # through the Service. This is also the check that proves the
+        # NetworkPolicy admits legitimate in-cluster traffic.
+        run: helm test jenkins-mcp --namespace jenkins-mcp --timeout 3m
+
+      - name: The MCP endpoint answers
+        run: |
+          kubectl -n jenkins-mcp port-forward svc/jenkins-mcp-jenkins-mcp-server 8000:8000 &
+          sleep 5
+          # A POST without a session is expected to be rejected by the protocol,
+          # not to 404: that distinguishes "mounted and serving" from "absent".
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8000/mcp || echo 000)
+          echo "POST /mcp -> $code"
+          case "$code" in 400|406|415) echo "endpoint is serving";; *) echo "unexpected"; exit 1;; esac
+
+      - name: Upgrade over the existing release
+        # Catches immutable-field errors and ownership conflicts that a fresh
+        # install never surfaces.
+        run: |
+          helm upgrade jenkins-mcp charts/jenkins-mcp-server \
+            --namespace jenkins-mcp \
+            --values .github/smoke-values.yaml \
+            --set mcp.allowedJobs='AI/*' \
+            --wait --timeout 5m
+          helm history jenkins-mcp --namespace jenkins-mcp
+
+      - name: Uninstall cleanly
+        run: |
+          helm uninstall jenkins-mcp --namespace jenkins-mcp --wait --timeout 3m
+          left=$(kubectl -n jenkins-mcp get all --no-headers 2>/dev/null | wc -l)
+          echo "resources left behind: $left"
+          [ "$left" -eq 0 ]
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "::group::pods"; kubectl -n jenkins-mcp get pods -o wide || true; echo "::endgroup::"
+          echo "::group::describe"; kubectl -n jenkins-mcp describe pods || true; echo "::endgroup::"
+          echo "::group::logs"; kubectl -n jenkins-mcp logs -l app.kubernetes.io/name=jenkins-mcp-server --tail=120 --all-containers || true; echo "::endgroup::"
+          echo "::group::events"; kubectl -n jenkins-mcp get events --sort-by=.lastTimestamp || true; echo "::endgroup::"
+          reason="$(kubectl -n jenkins-mcp get events --sort-by=.lastTimestamp -o json 2>/dev/null | python3 -c 'import json,sys; e=json.load(sys.stdin)["items"]; print(" ~ ".join(f"{i[\"reason\"]}: {i[\"message\"][:120]}" for i in e[-5:] if i.get("type")=="Warning"))' || true)"
+          echo "::error::k3s ${{ matrix.k3s }} smoke failed :: ${reason:-see diagnostics}"
