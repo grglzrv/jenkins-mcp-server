@@ -49,6 +49,34 @@ All generally available, none deprecated in the supported range:
 `policy/v1` requires 1.21+ and `autoscaling/v2` requires 1.23+, both well below
 the chart's declared minimum.
 
+## Quick start
+
+The chart assumes nothing about the cluster: no ingress controller, no
+Tailscale, no service mesh. Two things are required — the Jenkins URL and a
+Secret holding the credentials.
+
+```bash
+kubectl create namespace jenkins-mcp
+
+kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
+  --from-literal=JENKINS_USERNAME=<jenkins-user> \
+  --from-literal=JENKINS_TOKEN='<jenkins-api-token>'
+
+helm upgrade --install jenkins-mcp \
+  oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
+  --version 1.17.0 \
+  --namespace jenkins-mcp \
+  --set jenkins.url=https://jenkins.example.com
+```
+
+That gives a ClusterIP Service reachable in-cluster at
+`http://jenkins-mcp-jenkins-mcp-server.jenkins-mcp.svc.cluster.local:8000/mcp`.
+Installing without `jenkins.url` fails with a message saying so, rather than
+deploying something that cannot reach a Jenkins.
+
+Exposing it outside the cluster, running it behind minibridge, autoscaling and
+the Tailscale integration are all opt-in. See the values reference below.
+
 ## Install from GHCR
 
 ```bash
@@ -76,17 +104,41 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 Prefer `externalSecret.enabled=true` when External Secrets Operator is available.
 
-## Tailscale DNS and TLS
+## Tailscale integration (optional)
 
-Set `jenkins.url` to the exact Jenkins MagicDNS FQDN, not the Kubernetes
-`ExternalName` Service. Tailscale certificates are issued for the MagicDNS
-hostname, so this preserves strict hostname verification.
+Off by default. Enable it only on a cluster running the Tailscale Operator.
 
-The cluster must resolve the tailnet zone through the Tailscale Operator
-`DNSConfig`. Set `tailscale.magicDNS.createDNSConfig=true` only when this Helm
-release should own the cluster-scoped resource. Otherwise, have the platform
-team create it once and configure CoreDNS to forward the parent `ts.net`
-zone to the nameserver IP reported in `DNSConfig.status.nameserver.ip`.
+```yaml
+jenkins:
+  # The Jenkins MagicDNS name, not a Kubernetes Service name. Tailscale issues
+  # the certificate for this hostname, so using anything else fails TLS
+  # verification.
+  url: https://jenkins.your-tailnet.ts.net
+
+tailscale:
+  enabled: true
+  egress:
+    enabled: true
+    # Must name the same host as jenkins.url.
+    tailnetFQDN: jenkins.your-tailnet.ts.net
+
+ingress:
+  enabled: true
+  className: tailscale
+  # Machine name only. The operator appends the tailnet suffix and publishes
+  # the resulting MagicDNS name in the Ingress status.
+  hostname: jenkins-mcp
+  annotations:
+    tailscale.com/proxy-group: jenkins-mcp-ingress
+```
+
+The cluster must resolve the tailnet zone. `tailscale.magicDNS.createDNSConfig`
+creates the Operator `DNSConfig`, but it is cluster-scoped: set it true only if
+this release should own it. Otherwise have the platform team create it once and
+point CoreDNS at the nameserver IP in `DNSConfig.status.nameserver.ip`.
+
+Configuring any `tailscale.*` sub-feature while `tailscale.enabled` is false
+fails the render rather than silently producing nothing.
 
 ## Values reference
 
@@ -194,21 +246,23 @@ on every release alongside the default image; `edge-minibridge` tracks `main`.
 | `examples/values/minibridge.yaml` | Proxy with guardrails, destructive tools excluded |
 | `examples/values/minibridge-hardened.yaml` | Read-only allowlist, shared-secret auth, TLS |
 
-## Hermes endpoint
+## Client endpoint
 
-After Tailscale populates the Ingress address:
-
-```bash
-kubectl get ingress -n jenkins-mcp
-```
-
-Configure Hermes:
+In-cluster, with no ingress:
 
 ```yaml
 mcp_servers:
   jenkins:
     transport: streamable_http
-    url: https://jenkins-mcp.<tailnet>.ts.net/mcp
+    url: http://jenkins-mcp-jenkins-mcp-server.jenkins-mcp.svc.cluster.local:8000/mcp
+```
+
+With an ingress, use the hostname the controller assigns. Tailscale populates it
+asynchronously, so read it back rather than assuming:
+
+```bash
+kubectl -n jenkins-mcp get ingress jenkins-mcp-jenkins-mcp-server \
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 ```
 
 ## Chart and application versions

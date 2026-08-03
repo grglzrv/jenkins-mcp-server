@@ -701,3 +701,23 @@ def test_tailscale_resources_require_the_master_switch() -> None:
                  "tailscale-proxygroups.yaml"]:
         text = (CHART / "templates" / name).read_text()
         assert "and .Values.tailscale.enabled" in text, name
+
+
+def test_chart_readme_reflects_neutral_defaults() -> None:
+    """It described a Tailscale install as though it were the default."""
+    readme = (CHART / "README.md").read_text()
+    # A quick start that works on a plain cluster.
+    assert "## Quick start" in readme
+    assert "jenkins.url=https://jenkins.example.com" in readme
+    # Tailscale must be presented as opt-in, not assumed.
+    assert "Tailscale integration (optional)" in readme
+    assert "tailscale:\n  enabled: true" in readme
+    # The in-cluster endpoint must be documented, not only an ingress hostname.
+    assert "svc.cluster.local:8000/mcp" in readme
+
+
+def test_chart_readme_service_name_matches_the_template() -> None:
+    """The documented in-cluster URL must be the name the chart renders."""
+    readme = (CHART / "README.md").read_text()
+    # helm fullname for release jenkins-mcp and chart jenkins-mcp-server.
+    assert "jenkins-mcp-jenkins-mcp-server" in readme
