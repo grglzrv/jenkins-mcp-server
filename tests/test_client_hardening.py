@@ -261,3 +261,40 @@ async def test_writes_still_succeed_without_a_crumb_issuer() -> None:
     response = await jc.request("POST", "/job/AI/job/x/build", action="test")
     assert response.status_code == 200
     await jc.close()
+
+
+# --- parameterised builds -------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_empty_parameters_still_use_buildWithParameters() -> None:
+    """A parameterised job rejects /build, so an empty dict must not fall back."""
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(
+                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
+            )
+        calls.append(request.url.path)
+        return httpx.Response(201, headers={"Location": "q"})
+
+    jc = client(handler)
+    await jc.build("AI/x", {})
+    assert calls[-1].endswith("/buildWithParameters")
+
+    await jc.build("AI/x", {"BRANCH": "main"})
+    assert calls[-1].endswith("/buildWithParameters")
+
+    await jc.build("AI/x")
+    assert calls[-1].endswith("/build")
+    await jc.close()
+
+
+def test_context_path_is_preserved_in_urls() -> None:
+    """Jenkins behind a prefix such as https://ci.corp/jenkins must still work."""
+    c = httpx.Client(base_url="https://ci.corp/jenkins")
+    assert (
+        str(c.build_request("GET", "/job/AI/job/x/api/json").url)
+        == "https://ci.corp/jenkins/job/AI/job/x/api/json"
+    )

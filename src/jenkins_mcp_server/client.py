@@ -270,7 +270,10 @@ class JenkinsClient:
         parameters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         self.policy.require_write("build", job_name)
-        endpoint = "buildWithParameters" if parameters else "build"
+        # `is not None` rather than truthiness: an explicitly empty dict means
+        # "this job is parameterised, use the defaults". Falling back to /build
+        # there makes Jenkins reject the trigger on a parameterised job.
+        endpoint = "buildWithParameters" if parameters is not None else "build"
         response = await self.request(
             "POST",
             f"/{_job_path(job_name)}/{endpoint}",

@@ -118,6 +118,60 @@ correctly, so `JENKINS_URL` may include one. A controller with CSRF protection
 disabled also works: the crumb issuer is probed once, and writes proceed without
 a crumb header.
 
+## Plugins and configurations that break tools
+
+Grouped by what actually goes wrong. Every entry was derived from what the
+client code does, not from guesswork about Jenkins in general.
+
+### Missing plugins
+
+| Missing | Breaks | Symptom |
+| --- | --- | --- |
+| `cloudbees-folder` | Any nested job path such as `AI/nightly` | 404 on every folder path; only top-level jobs resolve |
+| `workflow-aggregator` (Pipeline) | `create_pipeline_job`; `term` and `kill` modes of `stop_build` | Job type not recognised on create; `stop` still works |
+| `workflow-multibranch` + `branch-api` | `create_multibranch_pipeline`, `scan_multibranch_pipeline` | Job type not recognised |
+| `git` / `git-client` | Multibranch jobs with a Git source | Create succeeds, scanning finds nothing |
+
+Everything else keeps working. A missing plugin fails one tool, not the server.
+
+### Permissions that look like bugs
+
+| Configuration | Breaks | Why |
+| --- | --- | --- |
+| Account has `Job/Read` but not `Job/ExtendedRead` or `Job/Configure` | `get_job_config` | Reading `config.xml` needs extended read; plain read is not enough |
+| Folder-level authorisation without `Job/Create` on the target folder | `create_*`, `copy_job` | Permission is evaluated on the parent folder, not the root |
+| `Job/Build` without `Job/Cancel` | `stop_build`, `cancel_queue_item` | Triggering and cancelling are separate permissions |
+| Agent permissions not granted | `set_node_offline` | Needs `Agent/Disconnect` |
+
+### CSRF and proxies
+
+| Configuration | Effect |
+| --- | --- |
+| CSRF protection disabled | Handled. The client detects the 404 from `/crumbIssuer`, caches that fact, and stops asking |
+| Standard crumb issuer | Works. The crumb is fetched once, reused, and reissued once automatically if Jenkins rotates the session |
+| **Strict Crumb Issuer** with *check client IP* enabled | **Breaks writes.** The crumb is bound to the source IP. Behind SNAT, an egress proxy, or with several replicas, the write can arrive from a different address than the crumb request. Disable the IP check, or exclude the MCP server's identity |
+| Reverse proxy stripping unknown request headers | **Breaks writes.** The crumb travels in a header named by Jenkins, commonly `Jenkins-Crumb`. It must reach Jenkins intact |
+| Jenkins under a path prefix, e.g. `https://ci.corp/jenkins` | Works. Verified: the prefix is preserved when the client builds URLs. Put the full prefix in `JENKINS_URL` |
+
+### Job configuration
+
+| Situation | Effect |
+| --- | --- |
+| Parameterised job | Pass `parameters`, even an empty object, so the trigger uses `buildWithParameters`. Triggering a parameterised job with no parameters at all uses `/build`, which Jenkins may reject |
+| Pipeline script needing script approval | `create_pipeline_job` succeeds, the build then blocks pending admin approval. Sandbox-safe scripts are unaffected |
+| Job names containing `/` | Treated as folder separators, which is the intended behaviour. Names containing `.` are fine; `.` and `..` as whole path segments are rejected as traversal |
+| Jenkins managed by Configuration as Code with jobs read-only | `create_*`, `update_job_config` and `delete_job` are refused by Jenkins |
+| Agents provisioned by a cloud plugin (Kubernetes, EC2) | `set_node_offline` on an ephemeral agent may 404 or have no lasting effect, since the agent disappears |
+
+### Scale considerations for a large controller
+
+| Situation | Effect |
+| --- | --- |
+| Thousands of jobs | `list_jobs` returns what Jenkins returns. Use the folder argument to scope it rather than listing the root |
+| Very large console logs | Capped by `MCP_MAX_LOG_BYTES`, default 1 MB, and paginated. The response reports `truncated` and the offset to resume from |
+| Busy queue | `trigger_build` returns as soon as the item is queued. The build number does not exist until it leaves the queue, so poll `get_build_info` before addressing a build by number |
+| Multiple MCP replicas | Each maintains its own crumb and session. No shared state, so replicas do not interfere |
+
 ## Authentication
 
 Username plus **API token**, sent as HTTP basic auth. Use a token, not the

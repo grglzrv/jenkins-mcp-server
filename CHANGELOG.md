@@ -6,6 +6,28 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 ### Fixed
 
+- Triggering a parameterised job with an explicitly empty parameter object used
+  `/build` instead of `/buildWithParameters`, which Jenkins can reject on a
+  parameterised job. The endpoint is now chosen on `parameters is not None`, so
+  an empty object means "use the defaults".
+
+### Added
+
+- A compatibility matrix in the README naming the concrete cores that were
+  tested, with the result of each, and an explicit statement that unverified
+  rows are not the same as incompatible.
+- Documented plugin, permission, proxy, job-configuration and scale blockers in
+  `docs/JENKINS_COMPATIBILITY.md`, derived from what the client actually does.
+  The two most likely to affect a large installation: Strict Crumb Issuer with
+  client-IP checking breaks every write behind SNAT or an egress proxy, and
+  `Job/Read` without `Job/ExtendedRead` breaks `get_job_config` alone.
+- Verified that a Jenkins served under a path prefix, such as
+  `https://ci.corp/jenkins`, keeps that prefix when the client builds URLs.
+
+## [1.13.0] - 2026-08-03
+
+### Fixed
+
 - On a controller with CSRF protection disabled, the crumb issuer was probed
   before **every** write and 404'd every time. The result is now cached, so the
   probe runs once per client.
