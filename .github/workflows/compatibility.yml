@@ -68,7 +68,10 @@ jobs:
             # Emit the cause as an annotation. Job logs live in blob storage that
             # is awkward to fetch; annotations come back from the check-runs API,
             # so the reason a core failed is readable without downloading logs.
-            reason="$(tail -c 1400 /tmp/out.txt | tr '\n' '~' | tr -s ' ')"
+            # The plugin resolver's own error appears early in the log, while
+            # the docker failure appears at the end. Report both.
+            cause="$(grep -aiE 'requires a greater version|not found|unable to|cannot|exception|no such|failed to download|IOException' /tmp/out.txt | head -8 | cut -c1-180 | tr '\n' '~')"
+            reason="CAUSE: ${cause:-none matched} || TAIL: $(tail -c 700 /tmp/out.txt | tr '\n' '~' | tr -s ' ')"
             echo "::error::${JENKINS_IMAGE} FAILED :: ${reason:-no recognisable error line, see log}"
           fi
           exit "$code"
@@ -101,7 +104,10 @@ jobs:
           set -e
           tail -n 120 /tmp/out.txt
           if [ "$code" -ne 0 ]; then
-            reason="$(tail -c 1400 /tmp/out.txt | tr '\n' '~' | tr -s ' ')"
+            # The plugin resolver's own error appears early in the log, while
+            # the docker failure appears at the end. Report both.
+            cause="$(grep -aiE 'requires a greater version|not found|unable to|cannot|exception|no such|failed to download|IOException' /tmp/out.txt | head -8 | cut -c1-180 | tr '\n' '~')"
+            reason="CAUSE: ${cause:-none matched} || TAIL: $(tail -c 700 /tmp/out.txt | tr '\n' '~' | tr -s ' ')"
             echo "::error::${JENKINS_IMAGE} FAILED :: ${reason:-no recognisable error line}"
           else
             echo "::notice::${JENKINS_IMAGE} PASSED the full integration suite"
@@ -144,7 +150,10 @@ jobs:
           set -e
           tail -n 120 /tmp/out.txt
           if [ "$code" -ne 0 ]; then
-            reason="$(tail -c 1400 /tmp/out.txt | tr '\n' '~' | tr -s ' ')"
+            # The plugin resolver's own error appears early in the log, while
+            # the docker failure appears at the end. Report both.
+            cause="$(grep -aiE 'requires a greater version|not found|unable to|cannot|exception|no such|failed to download|IOException' /tmp/out.txt | head -8 | cut -c1-180 | tr '\n' '~')"
+            reason="CAUSE: ${cause:-none matched} || TAIL: $(tail -c 700 /tmp/out.txt | tr '\n' '~' | tr -s ' ')"
             echo "::error::${JENKINS_IMAGE} FAILED :: ${reason:-see log}"
           else
             echo "::notice::${JENKINS_IMAGE} PASSED with update-centre-pinned plugins"
