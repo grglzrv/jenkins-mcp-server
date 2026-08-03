@@ -1,4 +1,17 @@
 {{- if .Values.ingress.enabled }}
+{{- /*
+Tailscale and general-purpose controllers want different shapes.
+
+The Tailscale Operator takes the machine name from spec.tls[0].hosts[0] and
+expects no host on the rule. A general controller needs rules[].host, otherwise
+the rule matches every hostname arriving at that controller, and needs a TLS
+secretName because it does not provision certificates itself.
+
+hostRule left null picks the right behaviour from the ingress class.
+*/ -}}
+{{- $isTailscale := eq .Values.ingress.className "tailscale" -}}
+{{- $hostRule := .Values.ingress.hostRule -}}
+{{- if kindIs "invalid" $hostRule }}{{- $hostRule = not $isTailscale -}}{{- end -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -14,10 +27,14 @@ spec:
   {{- if .Values.ingress.tls }}
   tls:
     - hosts:
-        - {{ .Values.ingress.hostname | quote }}
+        - {{ required "ingress.hostname is required when ingress.tls is true" .Values.ingress.hostname | quote }}
+      {{- with .Values.ingress.tlsSecretName }}
+      secretName: {{ . }}
+      {{- end }}
   {{- end }}
   rules:
-    - http:
+    - {{ if $hostRule }}host: {{ required "ingress.hostname is required unless ingress.hostRule is false" .Values.ingress.hostname | quote }}
+      {{ end }}http:
         paths:
           - path: {{ .Values.ingress.path }}
             pathType: {{ .Values.ingress.pathType }}
@@ -26,4 +43,7 @@ spec:
                 name: {{ include "jenkins-mcp-server.fullname" . }}
                 port:
                   number: {{ .Values.service.port }}
+  {{- with .Values.ingress.extraRules }}
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}

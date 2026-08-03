@@ -2,6 +2,22 @@
 # Never commit Jenkins usernames, API tokens, or private CA keys to this file.
 
 replicaCount: 2
+# Number of old ReplicaSets kept for rollback.
+revisionHistoryLimit: 5
+
+# Horizontal Pod Autoscaler. When enabled the Deployment stops declaring
+# replicas, so the HPA owns the count and nothing reverts it on sync.
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # Set to enable memory-based scaling as well.
+  targetMemoryUtilizationPercentage: null
+  # Raw autoscaling/v2 metrics appended verbatim, e.g. custom or external.
+  extraMetrics: []
+  # Raw scaling behaviour, e.g. to slow scale-down.
+  behavior: {}
 
 image:
   repository: ghcr.io/grglzrv/jenkins-mcp-server
@@ -47,13 +63,27 @@ service:
 # service name, e.g. jenkins-mcp.<tailnet>.ts.net.
 ingress:
   enabled: true
+  # tailscale, nginx, traefik, alb, ... The template adapts: see hostRule below.
   className: tailscale
   annotations:
     tailscale.com/proxy-group: jenkins-mcp-ingress
+  # For className tailscale this is the MACHINE NAME only; the Operator appends
+  # the tailnet suffix, giving jenkins-mcp.<tailnet>.ts.net. For any other class
+  # this is the full hostname, e.g. mcp.example.com. See docs/TAILSCALE.md.
   hostname: jenkins-mcp
+  # Emit host on the rule. null decides from className: false for tailscale
+  # (the Operator reads the name from tls.hosts and expects no rule host), true
+  # otherwise, since a rule without a host matches every hostname reaching the
+  # controller. Override only if you know why.
+  hostRule: null
   path: /mcp
   pathType: Prefix
   tls: true
+  # Required by general controllers, usually populated by cert-manager. Leave
+  # empty for tailscale, which provisions the certificate itself.
+  tlsSecretName: ""
+  # Additional raw rules appended verbatim, for multi-host setups.
+  extraRules: []
 
 resources:
   requests:

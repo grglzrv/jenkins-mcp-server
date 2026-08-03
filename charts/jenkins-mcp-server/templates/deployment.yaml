@@ -6,8 +6,12 @@ metadata:
   labels:
     {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.autoscaling.enabled }}
+  # Omitted when autoscaling is on: the HPA owns the replica count, and a
+  # declared value here is reverted by Helm or Argo CD on every sync.
   replicas: {{ .Values.replicaCount }}
-  revisionHistoryLimit: 5
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   strategy:
     type: RollingUpdate
     rollingUpdate:

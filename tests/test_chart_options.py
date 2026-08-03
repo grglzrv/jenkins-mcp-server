@@ -63,10 +63,23 @@ def test_chart_env_names_match_the_settings_aliases() -> None:
 # --- ExternalSecret -------------------------------------------------------
 
 
-def test_external_secret_and_helm_created_secret_are_mutually_exclusive() -> None:
-    template = (CHART / "templates/externalsecret.yaml").read_text()
-    assert "fail" in template
-    assert ".Values.jenkins.credentials.create" in template
+def test_credential_sources_are_mutually_exclusive() -> None:
+    """All three pairings must fail the render, not resolve silently."""
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    assert validate.count("fail") >= 3
+    for pair in [
+        "externalSecret.enabled and jenkins.credentials.create",
+        "externalSecret.enabled is true but jenkins.credentials.existingSecret",
+        "jenkins.credentials.create is true but existingSecret",
+    ]:
+        assert pair in validate, f"missing guard: {pair}"
+
+
+def test_validation_runs_before_the_secret_templates() -> None:
+    """Otherwise a `required` inside secret.yaml surfaces the wrong error."""
+    for name in ["secret.yaml", "externalsecret.yaml", "deployment.yaml"]:
+        text = (CHART / "templates" / name).read_text()
+        assert "jenkins-mcp-server.validate" in text, name
 
 
 def test_external_secret_exposes_creation_options() -> None:
@@ -342,3 +355,55 @@ def test_tailscale_guide_exists_and_is_linked() -> None:
     assert "machine name" in text
     assert "docs/TAILSCALE.md" in (ROOT / "README.md").read_text()
     assert "TAILSCALE.md" in (ROOT / "examples/README.md").read_text()
+
+
+
+# --- autoscaling and ingress ---------------------------------------------
+
+
+def test_autoscaling_is_opt_in_and_templated() -> None:
+    v = values()["autoscaling"]
+    assert v["enabled"] is False
+    assert v["minReplicas"] >= 1 and v["maxReplicas"] >= v["minReplicas"]
+    assert (CHART / "templates/hpa.yaml").is_file()
+
+
+def test_deployment_omits_replicas_when_autoscaling_is_enabled() -> None:
+    """A declared replica count fights the HPA on every sync."""
+    dep = (CHART / "templates/deployment.yaml").read_text()
+    idx = dep.index("replicas:")
+    window = dep[max(0, idx - 200) : idx]
+    assert "not .Values.autoscaling.enabled" in window
+
+
+def test_pdb_and_autoscaling_minimums_are_validated() -> None:
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    assert "podDisruptionBudget.minAvailable" in validate
+    assert "autoscaling.minReplicas" in validate
+    # A percentage string cannot be compared numerically and must be skipped.
+    assert 'kindIs "string"' in validate
+
+
+def test_ingress_adapts_to_the_controller() -> None:
+    ing = (CHART / "templates/ingress.yaml").read_text()
+    # Tailscale takes the name from tls.hosts and wants no rule host; every
+    # other controller needs one or the rule matches all hostnames.
+    assert 'eq .Values.ingress.className "tailscale"' in ing
+    assert "hostRule" in ing
+    # General controllers need a TLS secret; Tailscale provisions its own.
+    assert "secretName" in ing
+    v = values()["ingress"]
+    assert v["hostRule"] is None, "null lets the class decide"
+    assert "tlsSecretName" in v
+
+
+def test_rendered_templates_have_no_duplicate_yaml_keys() -> None:
+    """The chart shipped a duplicated revisionHistoryLimit that lint missed."""
+    import re
+
+    dep = (CHART / "templates/deployment.yaml").read_text()
+    top = [
+        m.group(1)
+        for m in re.finditer(r"^  ([a-zA-Z]+):", dep, re.M)
+    ]
+    assert len(top) == len(set(top)), f"duplicate keys in deployment.yaml: {top}"

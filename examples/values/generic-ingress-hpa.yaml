@@ -1,0 +1,69 @@
+# Plain Kubernetes deployment: a standard ingress controller instead of
+# Tailscale, cert-manager for TLS, and the HorizontalPodAutoscaler enabled.
+#
+#   helm install jenkins-mcp charts/jenkins-mcp-server -n jenkins-mcp \
+#     -f examples/values/generic-ingress-hpa.yaml
+#
+# Prerequisites: an ingress controller, cert-manager with the named issuer, a
+# metrics-server for the HPA, and the Secret jenkins-mcp-secrets.
+
+jenkins:
+  url: https://jenkins.internal.example.com
+  credentials:
+    existingSecret: jenkins-mcp-secrets
+    create: false
+
+ingress:
+  enabled: true
+  className: nginx
+  # Full hostname here, unlike Tailscale where this is only the machine name.
+  hostname: mcp.example.com
+  # Left null, so the template emits rules[].host because the class is not
+  # tailscale. Without a host the rule matches every hostname on the controller.
+  hostRule: null
+  path: /mcp
+  pathType: Prefix
+  tls: true
+  # cert-manager writes the certificate here.
+  tlsSecretName: jenkins-mcp-tls
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
+
+# Tailscale integration off: this deployment does not use the tailnet.
+tailscale:
+  egress:
+    enabled: false
+  magicDNS:
+    createDNSConfig: false
+  proxyGroups:
+    create: false
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleDown:
+      # Avoid flapping when a burst of MCP traffic subsides.
+      stabilizationWindowSeconds: 300
+
+# minAvailable must stay below autoscaling.minReplicas, or no pod can ever be
+# evicted at minimum scale. The chart fails the render if it does not.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# The HPA scales on these, so they must be set and realistic.
+resources:
+  requests:
+    cpu: 200m
+    memory: 192Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+mcp:
+  allowedJobs: "AI/*,Platform/*"

@@ -2,6 +2,41 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.9.0] - 2026-08-03
+
+### Added
+
+- `HorizontalPodAutoscaler` via `autoscaling.*`, with CPU and memory targets,
+  raw `extraMetrics`, and `behavior`. The Deployment stops declaring `replicas`
+  while it is enabled, so the HPA owns the count instead of Helm or Argo CD
+  reverting it on every sync.
+- `revisionHistoryLimit` is now a value rather than hardcoded.
+- `ingress.tlsSecretName`, `ingress.hostRule` and `ingress.extraRules`.
+- `examples/values/generic-ingress-hpa.yaml`: a plain Kubernetes deployment with
+  an nginx ingress, cert-manager TLS, Tailscale disabled and the HPA on.
+
+### Fixed
+
+- **The Ingress was unusable outside Tailscale.** It emitted no `rules[].host`
+  and no TLS `secretName`. The Tailscale Operator wants exactly that, but on a
+  general controller a rule without a host matches every hostname reaching it.
+  The template now picks the shape from `ingress.className`, overridable with
+  `ingress.hostRule`.
+- **Duplicate `revisionHistoryLimit` key in the Deployment.** Two keys were
+  emitted and YAML silently kept the last, so the value was 5 regardless.
+  `helm lint` does not detect this. The default stays 5, preserving behaviour.
+- **Two credential combinations resolved silently.** Enabling `externalSecret`
+  while `jenkins.credentials.existingSecret` was still set (the default) made
+  the chart read from the ExternalSecret target and ignore `existingSecret`
+  without a word; `credentials.create` alongside `existingSecret` did the same.
+  All three pairings now fail the render with an explanation of which to clear.
+- The credential guard moved into `_validate.tpl` and is included from the
+  secret templates, so the mutual-exclusion message surfaces instead of an
+  unrelated `required` error from `secret.yaml`.
+- A `PodDisruptionBudget` whose `minAvailable` is at or above
+  `autoscaling.minReplicas` now fails the render. That combination lets no pod
+  be evicted at minimum scale, which blocks node drains.
+
 ## [1.8.0] - 2026-08-02
 
 ### Changed

@@ -16,11 +16,17 @@ always injected with `secretKeyRef` and never written into the pod spec.
 | `values/external-secrets-gcp.yaml` | External Secrets Operator | An existing `SecretStore` is already provisioned. |
 | `values/external-secrets-gcp-workload-identity.yaml` | External Secrets Operator | The chart should create the `ClusterSecretStore` too, via GCP Workload Identity. |
 
-## Networking
+## Networking and scaling
 
 | Example | What it shows |
 | --- | --- |
 | `values/tailscale-production.yaml` | Production values for Tailscale ingress and egress, with the Jenkins MagicDNS hostname. |
+| `values/generic-ingress-hpa.yaml` | Plain Kubernetes: an nginx ingress with cert-manager TLS, Tailscale off, and the HorizontalPodAutoscaler enabled. |
+
+The ingress template adapts to the controller. For `className: tailscale` it
+omits `rules[].host`, because the Operator takes the name from `tls.hosts`. For
+any other class it emits the host, since a rule without one matches every
+hostname arriving at the controller. Override with `ingress.hostRule`.
 
 ## minibridge
 
