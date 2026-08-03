@@ -14,6 +14,37 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+def scan_for_stale_pins(version: str) -> list[str]:
+    """Catch version pins in files nobody remembered to add to set_version.py.
+
+    Several examples froze at the version current when they were written,
+    because they were added after the release script and never wired into it.
+    """
+    import re
+
+    stale: list[str] = []
+    patterns = [
+        ("ghcr.io/grglzrv/jenkins-mcp-server:", re.compile(r"jenkins-mcp-server:(\d+\.\d+\.\d+)")),
+        ("targetRevision:", re.compile(r"^\s*targetRevision:\s*(\d+\.\d+\.\d+)", re.M)),
+        ("newTag:", re.compile(r"^\s*newTag:\s*(\d+\.\d+\.\d+)", re.M)),
+        ("--version", re.compile(r"--version\s+(\d+\.\d+\.\d+)")),
+    ]
+    roots = ["deploy", "examples", "charts"]
+    candidates = [ROOT / "README.md"]
+    for root in roots:
+        candidates.extend(sorted((ROOT / root).rglob("*")))
+    for path in candidates:
+        if True:
+            if path.suffix not in {".yaml", ".yml", ".md"} or not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8")
+            for _label, pattern in patterns:
+                for found in pattern.findall(text):
+                    if found != version:
+                        stale.append(f"{path.relative_to(ROOT)}: pins {found}")
+    return sorted(set(stale))
+
+
 def main() -> None:
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", version):
@@ -73,6 +104,10 @@ def main() -> None:
     mismatches = {name: value for name, value in actual.items() if value != version}
     if mismatches:
         fail(f"expected {version}; mismatches: {mismatches}")
+
+    stale = scan_for_stale_pins(version)
+    if stale:
+        fail("stale version pins found:\n  " + "\n  ".join(stale))
 
     print(f"all versions are synchronized at {version}")
 

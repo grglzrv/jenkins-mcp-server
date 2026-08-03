@@ -549,3 +549,21 @@ def test_plugin_blockers_are_documented() -> None:
     for blocker in ["cloudbees-folder", "Strict Crumb Issuer", "Job/ExtendedRead",
                     "buildWithParameters", "script approval", "path prefix"]:
         assert blocker in doc, f"{blocker} should be covered as a known blocker"
+
+
+def test_chart_readme_documents_every_value() -> None:
+    """The chart README had drifted to covering 7 of 32 top-level values."""
+    readme = (CHART / "README.md").read_text()
+    undocumented = [k for k in sorted(values()) if k not in readme]
+    assert not undocumented, f"chart README omits: {undocumented}"
+
+
+def test_no_stale_version_pins_anywhere() -> None:
+    """Examples added after set_version.py froze at old versions."""
+    import subprocess
+
+    result = subprocess.run(
+        ["python3", str(ROOT / "scripts/check_version.py")],
+        capture_output=True, text=True, cwd=ROOT,
+    )
+    assert result.returncode == 0, result.stderr

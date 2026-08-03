@@ -14,21 +14,21 @@ The repository uses one application version across:
 ```bash
 git checkout main
 git pull --ff-only
-make version VERSION=1.2.1
+make version VERSION=1.14.0
 make install
 make lint test verify-version
 make helm-lint helm-template
 
 git add .
-git commit -m "chore(release): prepare v1.2.1"
+git commit -m "chore(release): prepare v1.14.0"
 git push origin main
 ```
 
 ## Publish
 
 ```bash
-git tag -a v1.2.1 -m "Release v1.2.1"
-git push origin v1.2.1
+git tag -a v1.14.0 -m "Release v1.14.0"
+git push origin v1.14.0
 ```
 
 The `Release` workflow:
@@ -43,9 +43,9 @@ The `Release` workflow:
 ## Published artifacts
 
 ```text
-ghcr.io/grglzrv/jenkins-mcp-server:1.2.1
+ghcr.io/grglzrv/jenkins-mcp-server:1.14.0
 ghcr.io/grglzrv/jenkins-mcp-server:1.2
 ghcr.io/grglzrv/jenkins-mcp-server:1
 ghcr.io/grglzrv/jenkins-mcp-server:latest
-oci://ghcr.io/grglzrv/charts/jenkins-mcp-server --version 1.2.1
+oci://ghcr.io/grglzrv/charts/jenkins-mcp-server --version 1.14.0
 ```

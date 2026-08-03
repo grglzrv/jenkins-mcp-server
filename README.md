@@ -210,7 +210,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.2.0 \
+  --version 1.13.1 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -451,10 +451,10 @@ So `Chart.appVersion` *is* the image tag. Bumping the version moves the chart an
 the image together by construction.
 
 ```bash
-make version VERSION=1.8.0     # rewrites 9 version locations across 8 files
-git commit -am "chore(release): prepare v1.8.0"
-git tag -a v1.8.0 -m "Release v1.8.0"
-git push origin main v1.8.0
+make version VERSION=1.14.0     # rewrites 9 version locations across 8 files
+git commit -am "chore(release): prepare v1.14.0"
+git tag -a v1.14.0 -m "Release v1.14.0"
+git push origin main v1.14.0
 ```
 
 `make version` updates `VERSION`, `pyproject.toml`,
@@ -471,7 +471,7 @@ python scripts/check_version.py        # all 9 locations must agree
 ```
 
 Only after that gate passes does it build the multi-architecture image (tagged
-`1.8.0`, `1.8`, `1`, and `latest`), package the chart at the same version, push
+`1.14.0`, `1.8`, `1`, and `latest`), package the chart at the same version, push
 both to GHCR, and create the GitHub Release with provenance and SBOM metadata.
 
 Two consequences worth knowing:

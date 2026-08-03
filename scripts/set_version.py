@@ -57,6 +57,38 @@ def main() -> None:
         r"^    targetRevision:\s*.*$",
         f"    targetRevision: {version}",
     )
+    # Added later than the originals and previously missed, so they froze at
+    # whatever version was current when they were written.
+    replace(
+        "examples/argocd/application-minibridge.yaml",
+        r"^    targetRevision:\s*.*$",
+        f"    targetRevision: {version}",
+    )
+    replace(
+        "examples/argocd/application-hpa-generic.yaml",
+        r"^    targetRevision:\s*.*$",
+        f"    targetRevision: {version}",
+    )
+    replace(
+        "deploy/kubernetes/minibridge/kustomization.yaml",
+        r"^\s*newTag:\s*.*$",
+        f"    newTag: {version}-minibridge",
+    )
+    replace(
+        "deploy/kubernetes/minibridge/standalone-deployment.yaml",
+        r"ghcr\.io/grglzrv/jenkins-mcp-server:[^\s]+",
+        f"ghcr.io/grglzrv/jenkins-mcp-server:{version}-minibridge",
+    )
+    replace(
+        "charts/jenkins-mcp-server/README.md",
+        r"^  --version [0-9][^\s]*",
+        f"  --version {version}",
+    )
+    replace(
+        "README.md",
+        r"^  --version [0-9][^\s]*",
+        f"  --version {version}",
+    )
     print(f"updated repository version to {version}")
 
 
