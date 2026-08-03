@@ -36,8 +36,10 @@ jobs:
           - jenkins/jenkins:2.401.3
           # Older still, before jenkins-plugin-cli existed.
           - jenkins/jenkins:2.319.3
-          # The oldest 2.x commonly asked about. Java 8, long EOL.
-          - jenkins/jenkins:2.50
+          # Older LTS lines. jenkins/jenkins:2.50 is not a published tag, so the
+          # oldest core commonly asked about cannot be tested at all.
+          - jenkins/jenkins:2.263.4
+          - jenkins/jenkins:2.222.4
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
