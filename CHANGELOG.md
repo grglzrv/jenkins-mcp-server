@@ -2,6 +2,26 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.12.0] - 2026-08-03
+
+### Added
+
+- `docs/JENKINS_COMPATIBILITY.md`: which Jenkins versions are supported, the
+  complete list of REST endpoints the server calls, which plugins each tool
+  needs, and the least Jenkins permissions for each tool. CI verifies against
+  `jenkins/jenkins:lts-jdk21`, currently the 2.555.x LTS line. A test asserts
+  the documented endpoint list does not drift from `client.py`.
+- `service.exposeHealthPort`, default true. `/readyz` reports configuration
+  state, so it can now be kept off a Service that is reachable from outside the
+  cluster.
+- `examples/argocd/application-hpa-generic.yaml`: a plain-Kubernetes Argo CD
+  Application with an nginx ingress, cert-manager, Tailscale off and autoscaling
+  on, including the `ignoreDifferences` for `/spec/replicas` that stops Argo CD
+  fighting the HPA.
+- `examples/argocd/application-oci.yaml` now also covers autoscaling, the
+  PodDisruptionBudget, resources, audit storage and the NetworkPolicy, each with
+  the reasoning inline.
+
 ## [1.11.0] - 2026-08-03
 
 ### Fixed

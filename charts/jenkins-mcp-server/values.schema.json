@@ -88,6 +88,9 @@
         },
         "annotations": {
           "type": "object"
+        },
+        "exposeHealthPort": {
+          "type": "boolean"
         }
       }
     },

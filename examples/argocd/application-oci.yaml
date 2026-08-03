@@ -43,7 +43,7 @@ spec:
     chart: jenkins-mcp-server
     # Pin an exact version. A range or "*" would let a sync move you between
     # releases without review.
-    targetRevision: 1.11.0
+    targetRevision: 1.12.0
     helm:
       releaseName: jenkins-mcp
       # valuesObject is inline and easy to read. For larger setups, keep values
@@ -80,6 +80,40 @@ spec:
           hostname: jenkins-mcp
           annotations:
             tailscale.com/proxy-group: jenkins-mcp-ingress
+
+        # Scaling. Off by default; enable for bursty agent traffic. When on, the
+        # chart stops declaring replicas so the HPA owns the count and Argo CD
+        # does not revert it on every sync.
+        autoscaling:
+          enabled: false
+          minReplicas: 2
+          maxReplicas: 8
+          targetCPUUtilizationPercentage: 70
+
+        # minAvailable must stay below the minimum pod count, or no pod is ever
+        # evictable and node drains block. The chart fails the render otherwise.
+        podDisruptionBudget:
+          enabled: true
+          minAvailable: 1
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: "1"
+            memory: 512Mi
+
+        # Audit records always go to stdout. The file is extra, on an emptyDir
+        # by default; set storage.type to pvc with an existing claim to keep it
+        # across restarts.
+        audit:
+          fileEnabled: true
+          storage:
+            type: emptyDir
+
+        networkPolicy:
+          enabled: true
 
         tailscale:
           magicDNS:

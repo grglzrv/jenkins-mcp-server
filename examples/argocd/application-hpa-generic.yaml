@@ -1,0 +1,119 @@
+# Argo CD Application for a plain Kubernetes cluster: a standard ingress
+# controller with cert-manager, no Tailscale, and autoscaling enabled.
+#
+#   kubectl apply -f examples/argocd/application-hpa-generic.yaml
+#
+# Prerequisites: an ingress controller, cert-manager with the named issuer, a
+# metrics-server for the HPA, and the Secret jenkins-mcp-secrets in the
+# destination namespace.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jenkins-mcp-server-generic
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: ghcr.io/grglzrv/charts
+    chart: jenkins-mcp-server
+    targetRevision: 1.12.0
+    helm:
+      releaseName: jenkins-mcp
+      valuesObject:
+        jenkins:
+          url: https://jenkins.internal.example.com
+          verifyTls: true
+          # No CA bundle: a publicly issued certificate is validated by the
+          # container's default trust store. Add caBundle.existingSecret only
+          # for a private or self-signed issuer.
+          credentials:
+            existingSecret: jenkins-mcp-secrets
+            create: false
+
+        mcp:
+          allowedJobs: "AI/*,Platform/*"
+          allowJobDelete: false
+          allowAdminRequest: false
+
+        ingress:
+          enabled: true
+          className: nginx
+          # Full hostname for a general controller, unlike Tailscale where this
+          # is only the machine name.
+          hostname: mcp.example.com
+          # null lets the template decide from className. Non-Tailscale classes
+          # get rules[].host, without which the rule matches every hostname
+          # arriving at the controller.
+          hostRule: null
+          tls: true
+          tlsSecretName: jenkins-mcp-tls
+          annotations:
+            cert-manager.io/cluster-issuer: letsencrypt-prod
+
+        # Not on a tailnet, so every Tailscale resource stays off.
+        tailscale:
+          egress:
+            enabled: false
+          magicDNS:
+            createDNSConfig: false
+          proxyGroups:
+            create: false
+
+        autoscaling:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 10
+          targetCPUUtilizationPercentage: 70
+          targetMemoryUtilizationPercentage: 80
+          behavior:
+            scaleDown:
+              stabilizationWindowSeconds: 300
+
+        podDisruptionBudget:
+          enabled: true
+          minAvailable: 1
+
+        # The HPA scales on these, so they must be set and realistic.
+        resources:
+          requests:
+            cpu: 200m
+            memory: 192Mi
+          limits:
+            cpu: "1"
+            memory: 512Mi
+
+        service:
+          type: ClusterIP
+          # /readyz reports configuration state; keep it off any Service that is
+          # reachable from outside the cluster.
+          exposeHealthPort: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: jenkins-mcp
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+  ignoreDifferences:
+    # The HPA owns the replica count; without this Argo CD reports OutOfSync
+    # every time the autoscaler moves it.
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: networking.k8s.io
+      kind: Ingress
+      jsonPointers:
+        - /spec/rules/0/host

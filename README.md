@@ -38,6 +38,27 @@ Production-ready Jenkins Model Context Protocol server for Hermes Agent and othe
 See [Security and guardrails](#security-and-guardrails) for how to restrict
 these at either layer.
 
+## Jenkins compatibility
+
+| | |
+| --- | --- |
+| Verified in CI | `jenkins/jenkins:lts-jdk21`, currently the **2.555.x** LTS line |
+| Recommended | The current LTS line, which is the only one receiving security backports |
+| Expected to work | Jenkins **2.x** with the plugins below |
+| Not supported | Jenkins 1.x |
+
+Every endpoint used has been stable in Jenkins core since early 2.x, so older
+2.x releases will most likely work; they are untested and unpatched, so they are
+not recommended.
+
+Plugins: `cloudbees-folder` for folder paths, `workflow-aggregator` for Pipeline
+jobs and `term`/`kill`, `workflow-multibranch` + `branch-api` + `git` for
+multibranch. Core-only Jenkins still covers the freestyle and node tools.
+
+Authenticate with a username and **API token**, never the account password.
+Full endpoint, plugin and permission tables are in
+[docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
+
 ## Capabilities
 
 - Native MCP Streamable HTTP endpoint at `/mcp` and optional stdio transport.
@@ -415,6 +436,7 @@ Two consequences worth knowing:
 ## Documentation
 
 - [Release process](docs/releasing/RELEASE.md)
+- [Jenkins compatibility: versions, plugins, permissions](docs/JENKINS_COMPATIBILITY.md)
 - [Tailscale: finding your domain and wiring it up](docs/TAILSCALE.md)
 - [Kubernetes, Tailscale, and Argo CD](docs/KUBERNETES_TAILSCALE_ARGOCD.md)
 - [Helm chart](charts/jenkins-mcp-server/README.md)

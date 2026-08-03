@@ -17,7 +17,9 @@ spec:
       port: {{ .Values.service.port }}
       targetPort: mcp
       protocol: TCP
+    {{- if .Values.service.exposeHealthPort }}
     - name: health
       port: {{ include "jenkins-mcp-server.healthPort" . }}
       targetPort: health
       protocol: TCP
+    {{- end }}

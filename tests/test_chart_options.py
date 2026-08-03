@@ -488,3 +488,45 @@ def test_notes_describe_the_actual_deployment() -> None:
     assert "policer.enforce" in notes
     assert "minibridge.enabled" in notes
     assert "verifyTls" in notes
+
+
+def test_health_port_exposure_is_configurable() -> None:
+    """/readyz reports config state; it should not be forced onto a LoadBalancer."""
+    assert values()["service"]["exposeHealthPort"] is True
+    svc = (CHART / "templates/service.yaml").read_text()
+    assert ".Values.service.exposeHealthPort" in svc
+
+
+def test_jenkins_compatibility_is_documented() -> None:
+    doc = ROOT / "docs/JENKINS_COMPATIBILITY.md"
+    assert doc.is_file()
+    text = doc.read_text()
+    for topic in ["lts-jdk21", "cloudbees-folder", "workflow-multibranch",
+                  "API token", "Job/Delete"]:
+        assert topic in text, f"compatibility doc should cover {topic}"
+    assert "JENKINS_COMPATIBILITY.md" in (ROOT / "README.md").read_text()
+
+
+def test_documented_endpoints_match_the_client() -> None:
+    """The compatibility table must not drift from the code."""
+
+    client = (ROOT / "src/jenkins_mcp_server/client.py").read_text()
+    doc = (ROOT / "docs/JENKINS_COMPATIBILITY.md").read_text()
+    for endpoint in ["crumbIssuer", "createItem", "doDelete", "toggleOffline",
+                     "progressiveText", "cancelItem", "config.xml"]:
+        assert endpoint in client, f"{endpoint} no longer used by the client"
+        assert endpoint in doc, f"{endpoint} missing from the compatibility doc"
+
+
+def test_autoscaling_argocd_example_ignores_replicas() -> None:
+    """Otherwise Argo CD fights the HPA and reports permanent OutOfSync."""
+    app = yaml.safe_load(
+        (ARGOCD / "application-hpa-generic.yaml").read_text()
+    )
+    v = app["spec"]["source"]["helm"]["valuesObject"]
+    assert v["autoscaling"]["enabled"] is True
+    diffs = app["spec"]["ignoreDifferences"]
+    assert any(
+        d.get("kind") == "Deployment" and "/spec/replicas" in d.get("jsonPointers", [])
+        for d in diffs
+    )
