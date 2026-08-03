@@ -40,28 +40,58 @@ these at either layer.
 
 ## Jenkins compatibility
 
-| | |
-| --- | --- |
-| Verified in CI | `jenkins/jenkins:lts-jdk21`, currently the **2.555.x** LTS line |
-| Recommended | The current LTS line, which is the only one receiving security backports |
-| Also verified | `jenkins/jenkins:2.541.3-jdk21`, the previous LTS line |
-| Unverified | Older Jenkins 2.x — likely to work, but not demonstrated |
-| Not supported | Jenkins 1.x |
+### Verified
 
-A [compatibility matrix workflow](.github/workflows/compatibility.yml) runs the
-integration suite against several cores. The two most recent LTS lines pass.
-Older images could not be tested at all: they cannot be provisioned with current
-plugins and their Debian bases no longer resolve, and `jenkins/jenkins:2.50` is
-not a published tag. Every endpoint used has been stable in core since early
-2.x, so an older core will most likely work — that is reasoning, not a
-measurement.
+Each row was produced by running the full integration suite — create a Pipeline
+job, trigger it, stream the console, stop it, delete it — against that
+controller in CI. The workflow is
+[`compatibility.yml`](.github/workflows/compatibility.yml).
 
-Plugins: `cloudbees-folder` for folder paths, `workflow-aggregator` for Pipeline
-jobs and `term`/`kill`, `workflow-multibranch` + `branch-api` + `git` for
-multibranch. Core-only Jenkins still covers the freestyle and node tools.
+| Jenkins controller | Java | Result | Notes |
+| --- | --- | --- | --- |
+| `jenkins/jenkins:lts-jdk21` (**2.555.x** LTS) | 21 | ✅ pass | Runs on every change to `src/`; the reference version |
+| `jenkins/jenkins:2.541.3-jdk21` (**2.541.x** LTS) | 21 | ✅ pass | Previous LTS line |
+
+### Not verified
+
+| Jenkins controller | Status | Reason |
+| --- | --- | --- |
+| **2.504.x** LTS | ⚠️ untested | The test image cannot be built: current `workflow-multibranch`, `branch-api` and `git-client` require **2.504.3**, so plugins will not install on 2.504.1. A controller that already runs those plugins is unaffected — see below. |
+| 2.492.x, 2.462.x LTS | ⚠️ untested | Same plugin-resolution obstacle |
+| 2.401.x, 2.319.x | ⚠️ untested | No usable plugin installer in those images |
+| 2.263.x, 2.222.x | ⚠️ untested | Their Debian base is archived; `apt-get` fails |
+| `jenkins/jenkins:2.50` | ❌ untestable | No such published Docker tag |
+| Jenkins 1.x | ❌ unsupported | Different URL scheme, no folder support |
+
+**"Untested" means the test harness could not be built, not that the server
+failed.** In every case the MCP server was never started. The obstacle is
+installing current plugins onto an older controller — a problem that does not
+arise on a controller already running them.
+
+Every REST endpoint this server calls has been stable in Jenkins core since
+early 2.x, so an older controller very likely works. That is reasoning from the
+[endpoint list](docs/JENKINS_COMPATIBILITY.md), not a measurement, and it is
+labelled as such deliberately.
+
+**To verify your own controller**, pin
+`integration/jenkins/plugins.txt` to the plugin versions your Jenkins actually
+runs, then:
+
+```bash
+JENKINS_IMAGE=jenkins/jenkins:2.504.1-jdk21 JENKINS_DOCKERFILE=Dockerfile.legacy ./integration/run.sh
+```
+
+### Plugins
+
+`cloudbees-folder` is effectively required: without it no job path containing
+`/` resolves. `workflow-job` + `workflow-cps` are needed for Pipeline creation
+and for `term`/`kill`, and `workflow-multibranch` + `branch-api` + `git` for
+multibranch. Everything else is core-only. A missing plugin fails that tool
+alone.
 
 Authenticate with a username and **API token**, never the account password.
-Full endpoint, plugin and permission tables are in
+Per-tool plugin requirements, the full endpoint list, known blockers and the
+least Jenkins permission for each tool are in
 [docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
 
 ## Capabilities

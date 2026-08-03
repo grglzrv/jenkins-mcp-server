@@ -64,20 +64,59 @@ Nothing exotic. This is the complete surface:
 the other two return an error from Jenkins, which surfaces as a tool error
 rather than a silent no-op.
 
-## Required plugins
+## Plugin requirements per tool
 
-Core-only Jenkins covers the freestyle and node tools. These plugins are needed
-for the rest, and are what the integration suite installs:
+Most of the surface is core-only. Only the Pipeline and multibranch tools depend
+on plugins, and a missing plugin fails **that tool alone** with a Jenkins error;
+the rest keep working and the server stays up.
 
-| Plugin | Needed for |
-| --- | --- |
-| `cloudbees-folder` | Folder paths such as `AI/nightly`. Without it, only top-level jobs resolve. |
-| `workflow-aggregator` (Pipeline) | `create_pipeline_job`, and `term`/`kill` on `stop_build` |
-| `workflow-multibranch` + `branch-api` | `create_multibranch_pipeline`, `scan_multibranch_pipeline` |
-| `git` | Multibranch jobs created against a Git source |
+| Tool | Needs | If missing |
+| --- | --- | --- |
+| `list_jobs`, `get_job`, `get_job_config`, `get_build_info`, `get_build_console`, `list_running_builds`, `get_queue`, `list_nodes`, `get_node` | core | — |
+| `create_job_from_xml`, `copy_job`, `update_job_config`, `delete_job`, `enable_job`, `disable_job`, `trigger_build`, `cancel_queue_item`, `set_node_offline`, `jenkins_admin_request` | core | — |
+| **Any tool given a job path containing `/`** | `cloudbees-folder` | The path does not resolve. Only top-level jobs work. This affects every tool, so treat it as required. |
+| `create_pipeline_job` | `workflow-job`, `workflow-cps` | `createItem` rejects the `CpsFlowDefinition` class |
+| `stop_build` with `term` or `kill` | `workflow-job` | Only `stop` works; `term`/`kill` return an error. Freestyle jobs never support them. |
+| `create_multibranch_pipeline`, `scan_multibranch_pipeline` | `workflow-multibranch`, `branch-api`, `git` | `createItem` rejects the multibranch classes |
 
-A missing plugin produces a Jenkins error on the affected tool only. The rest
-keep working.
+The job XML this server generates references plugins **without version pins**
+(`plugin="workflow-job"`, not `plugin="workflow-job@1571.v..."`), so Jenkins
+accepts whatever version is installed. There is no plugin version floor imposed
+by this server.
+
+## Things that actually break it
+
+Ordered by how often they bite in practice.
+
+**A reverse proxy stripping headers.** The server sends `Authorization` for auth
+and `Jenkins-Crumb` for CSRF. A proxy that drops either produces 401 or 403 on
+every write while reads keep working, which is a confusing signature. Check the
+proxy forwards both before suspecting the server.
+
+**Insufficient Jenkins permissions.** The commonest cause of a tool failing while
+its neighbours succeed. See the permission table below. Jenkins permissions are
+the outer boundary: no MCP setting can grant what Jenkins denies.
+
+**Plugin versions requiring a newer core.** Not a runtime problem, but it blocks
+building a test environment: current `workflow-multibranch`, `branch-api` and
+`git-client` require Jenkins **2.504.3**, so a 2.504.1 controller cannot install
+them. If your controller already runs these plugins, this does not affect you.
+
+**Script Security approval.** `create_pipeline_job` writes `<sandbox>true</sandbox>`.
+On a controller with strict script approval, the created job may need an
+administrator to approve the script before it runs. The job is created either
+way; the build is what stalls.
+
+**Folder-scoped or non-Jenkins job types.** Anything created outside
+`cloudbees-folder` semantics, and job types from plugins this server does not
+model, are still readable but cannot be created through the typed tools. Use
+`create_job_from_xml` with your own `config.xml` for those.
+
+**Not a problem, verified:** a Jenkins served under a context path such as
+`https://ci.example.com/jenkins` works. The client merges the base path
+correctly, so `JENKINS_URL` may include one. A controller with CSRF protection
+disabled also works: the crumb issuer is probed once, and writes proceed without
+a crumb header.
 
 ## Authentication
 

@@ -52,6 +52,8 @@ class JenkinsClient:
             headers={"User-Agent": f"jenkins-mcp-server/{__version__}"},
         )
         self._crumb: tuple[str, str] | None = None
+        # Set when the controller has no crumb issuer, so the probe runs once.
+        self._crumb_disabled = False
 
     async def close(self) -> None:
         await self.http.aclose()
@@ -59,8 +61,13 @@ class JenkinsClient:
     async def _get_crumb(self) -> tuple[str, str] | None:
         if self._crumb is not None:
             return self._crumb
+        if self._crumb_disabled:
+            return None
         response = await self.http.get("/crumbIssuer/api/json")
         if response.status_code == 404:
+            # CSRF protection is off on this controller. Remember it, otherwise
+            # every write pays for a 404 round trip first.
+            self._crumb_disabled = True
             return None
         response.raise_for_status()
         data = response.json()

@@ -226,3 +226,38 @@ def test_ca_bundle_with_verification_disabled_is_rejected() -> None:
     """This combination silently re-enabled verification."""
     with pytest.raises(ValueError, match="JENKINS_VERIFY_TLS is false"):
         settings(JENKINS_VERIFY_TLS=False, JENKINS_CA_BUNDLE="/certs/ca.crt")
+
+
+# --- controllers with CSRF protection disabled ---------------------------
+
+
+@pytest.mark.asyncio
+async def test_missing_crumb_issuer_is_probed_once_not_per_write() -> None:
+    """A controller with CSRF off must not cost a 404 on every write."""
+    probes: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            probes.append(request.url.path)
+            return httpx.Response(404, text="not found")
+        return httpx.Response(200, json={"ok": True})
+
+    jc = client(handler)
+    for _ in range(4):
+        await jc.request("POST", "/job/AI/job/x/build", action="test")
+    assert len(probes) == 1, f"crumb issuer probed {len(probes)} times"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_writes_still_succeed_without_a_crumb_issuer() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(404)
+        assert "Jenkins-Crumb" not in request.headers
+        return httpx.Response(200, json={"ok": True})
+
+    jc = client(handler)
+    response = await jc.request("POST", "/job/AI/job/x/build", action="test")
+    assert response.status_code == 200
+    await jc.close()

@@ -2,6 +2,35 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.13.0] - 2026-08-03
+
+### Fixed
+
+- On a controller with CSRF protection disabled, the crumb issuer was probed
+  before **every** write and 404'd every time. The result is now cached, so the
+  probe runs once per client.
+
+### Added
+
+- Per-tool plugin requirements in `docs/JENKINS_COMPATIBILITY.md`: which plugin
+  each tool needs and what fails without it. Most of the surface is core-only,
+  and a missing plugin fails that tool alone rather than the server.
+- A "things that actually break it" section covering reverse proxies stripping
+  `Authorization` or `Jenkins-Crumb`, insufficient Jenkins permissions, Script
+  Security approval, and plugin versions that require a newer core.
+- `integration/jenkins/Dockerfile.legacy`, which resolves plugins from the
+  controller's own update centre line so an older core can be tested. Selected
+  with `JENKINS_DOCKERFILE`; the default suite is unchanged.
+
+### Verified
+
+- A Jenkins served under a context path (`https://ci.example.com/jenkins`)
+  works; the client merges the base path correctly.
+- A controller with CSRF protection disabled works; writes proceed with no crumb
+  header.
+- The generated job XML references plugins without version pins, so this server
+  imposes no plugin version floor.
+
 ## [1.12.0] - 2026-08-03
 
 ### Added
