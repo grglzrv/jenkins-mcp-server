@@ -74,8 +74,18 @@ jobs:
         run: python scripts/check_version.py
       - name: Lint chart
         run: helm lint --strict charts/jenkins-mcp-server
+      - name: Defaults require jenkins.url
+        # The chart makes no assumption about the target Jenkins, so an install
+        # with no values must fail with a clear message rather than render.
+        run: |
+          if helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp > /tmp/nourl.yaml 2>&1; then
+            echo "expected the render to fail without jenkins.url"; exit 1
+          fi
+          grep -q "jenkins.url is required" /tmp/nourl.yaml
       - name: Render default chart
-        run: helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp > /tmp/default.yaml
+        run: |
+          helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
+            --set jenkins.url=https://jenkins.example.com > /tmp/default.yaml
       - name: Render production example
         run: helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/production.yaml
       - name: Render GCP External Secrets example
