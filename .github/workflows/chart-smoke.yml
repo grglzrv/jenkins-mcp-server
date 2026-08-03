@@ -139,9 +139,23 @@ jobs:
       - name: Uninstall cleanly
         run: |
           helm uninstall jenkins-mcp --namespace jenkins-mcp --wait --timeout 3m
-          left=$(kubectl -n jenkins-mcp get all --no-headers 2>/dev/null | wc -l)
-          echo "resources left behind: $left"
-          [ "$left" -eq 0 ]
+          # Check the resources the chart owns, not `get all`: the rolling
+          # upgrade leaves a terminated pod behind for a moment, and counting
+          # that as a leak fails a perfectly clean uninstall.
+          left=""
+          for kind in deployment service configmap serviceaccount networkpolicy poddisruptionbudget; do
+            found=$(kubectl -n jenkins-mcp get "$kind" \
+              -l app.kubernetes.io/instance=jenkins-mcp \
+              --no-headers 2>/dev/null | wc -l)
+            echo "  $kind remaining: $found"
+            [ "$found" -eq 0 ] || left="$left $kind"
+          done
+          if [ -n "$left" ]; then
+            echo "::error::uninstall left resources behind:$left"
+            kubectl -n jenkins-mcp get all,networkpolicy,pdb || true
+            exit 1
+          fi
+          echo "uninstall removed every chart-owned resource"
 
       - name: Diagnostics on failure
         if: failure()
