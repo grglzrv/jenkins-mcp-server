@@ -12,17 +12,24 @@ accepted by the API server, the pod starts, the probes pass, the chart's own
 test pod reaches the Service through the NetworkPolicy, an upgrade over the
 existing release succeeds, and uninstall leaves nothing behind.
 
-| Kubernetes | Result | Notes |
+| Kubernetes | k3s image tested | Result |
 | --- | --- | --- |
-| 1.36 | ✅ installed and tested | Newest minor |
-| 1.35 | ✅ installed and tested | |
-| 1.34 | ✅ installed and tested | |
-| 1.33 | ✅ installed and tested | |
+| 1.36 | `v1.36.2+k3s1` | ✅ install, upgrade and uninstall verified |
+| 1.35 | `v1.35.6+k3s1` | ✅ install, upgrade and uninstall verified |
+| 1.34 | `v1.34.9+k3s1` | ✅ install, upgrade and uninstall verified |
+| 1.33 | `v1.33.13+k3s1` | ✅ install, upgrade and uninstall verified |
 | 1.27 – 1.32 | ⚙️ rendered only | Above the declared minimum; not installed in CI |
 | < 1.27 | ❌ refused | `kubeVersion` blocks it |
 
-The smoke test runs on every change to the chart and again as a release gate, so
-a chart that cannot install never gets published.
+Each run performs, in order: install with `--wait`, `rollout status`,
+`Deployment` becoming Available, `helm test` (which reaches the Service through
+the NetworkPolicy), a request to the MCP endpoint, `helm upgrade` over the
+existing release, and `helm uninstall` verified to leave no chart-owned resource
+behind. The image is built from the commit under test and imported into the
+cluster, so the chart is exercised against that code rather than a published tag.
+
+It runs on every change and again as a release gate, so a chart that cannot
+install never gets published.
 
 ### API versions used
 

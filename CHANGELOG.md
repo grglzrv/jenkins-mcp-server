@@ -4,6 +4,21 @@ All notable changes are documented here. The project follows Semantic Versioning
 
 ## [1.16.0] - 2026-08-03
 
+### Fixed
+
+- **Every pod crash-looped on default values.** `MCP_MAX_LOG_BYTES` rendered as
+  `"1e+06"`: Helm formats a large number in scientific notation unless it is
+  cast, and the server rejects that at startup. The manifests rendered fine and
+  `helm lint` passed, so nothing caught it until the chart was installed into a
+  real cluster. Numeric values now pass through `int` before quoting, and a test
+  asserts both that the template casts and that the server really does reject
+  scientific notation.
+- The chart's own `helm test` pod targeted `mcp.healthPort` and `/readyz`
+  directly. With minibridge enabled the health port moves and the path becomes
+  `/`, so `helm test` would have failed against a healthy deployment. It now
+  uses the same helpers as the Service and NetworkPolicy, and is omitted when
+  `service.exposeHealthPort` is false.
+
 ### Added
 
 - **The chart is now installed into a real k3s cluster in CI.** `helm lint` and
