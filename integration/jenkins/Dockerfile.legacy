@@ -1,14 +1,12 @@
 # Legacy-core variant of the integration Jenkins image.
 #
-# The default Dockerfile installs the newest plugin versions, which track the
-# newest core. On an older core that fails with "requires a greater version of
-# Jenkins": current workflow-multibranch, branch-api, git-client and friends
-# demand 2.504.3, so a 2.504.1 core cannot install them.
+# The default Dockerfile installs the newest plugins, which track the newest
+# core. On an older core that fails with "requires a greater version of
+# Jenkins": current workflow-multibranch and friends demand 2.504.3, so a
+# 2.504.1 controller cannot install them.
 #
-# This variant resolves plugins from the update centre for the core's own
-# release line, which serves versions compatible with that core.
-#
-#   https://updates.jenkins.io/<line>/update-center.actual.json
+# This variant points the installer at the update centre for the core's own
+# release line, which serves plugin versions built for that core.
 #
 # Kept separate on purpose: the default suite must not change behaviour.
 ARG JENKINS_IMAGE=jenkins/jenkins:2.504.1-jdk21
@@ -17,32 +15,18 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
 
-# Empty means derive the line from the core version, 2.504.1 -> 2.504.
+# Empty derives the line from the core version, 2.504.1 -> 2.504.
 ARG JENKINS_UC_LINE=""
-RUN set -u; \
+RUN set -eu; \
     VER="${JENKINS_VERSION:-}"; \
-    if [ -z "$VER" ] && [ -f /usr/share/jenkins/jenkins.war ]; then \
-      VER="$(unzip -p /usr/share/jenkins/jenkins.war META-INF/MANIFEST.MF 2>/dev/null \
-             | tr -d '\r' | awk -F': ' '/^Jenkins-Version/{print $2}')"; \
-    fi; \
     LINE="${JENKINS_UC_LINE:-}"; \
-    if [ -z "$LINE" ] && [ -n "$VER" ]; then \
-      LINE="$(echo "$VER" | cut -d. -f1,2)"; \
-    fi; \
-    echo "core version: ${VER:-unknown}, update centre line: ${LINE:-default}"; \
+    if [ -z "$LINE" ] && [ -n "$VER" ]; then LINE="$(echo "$VER" | cut -d. -f1,2)"; fi; \
+    echo "core=${VER:-unknown} line=${LINE:-default}"; \
     if [ -n "$LINE" ]; then \
-      UC="https://updates.jenkins.io/${LINE}/update-center.actual.json"; \
-      echo "resolving plugins from $UC"; \
-      jenkins-plugin-cli --jenkins-version "$VER" --jenkins-update-center "$UC" \
-        --plugin-file /usr/share/jenkins/ref/plugins.txt \
-      || { echo "line update centre failed; retrying via JENKINS_UC" >&2; \
-           JENKINS_UC="https://updates.jenkins.io/${LINE}" \
-             jenkins-plugin-cli --jenkins-version "$VER" \
-               --plugin-file /usr/share/jenkins/ref/plugins.txt; }; \
-    else \
-      echo "could not determine the core version; falling back to the default update centre" >&2; \
-      jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt; \
-    fi
+      export JENKINS_UC="https://updates.jenkins.io/${LINE}"; \
+      echo "JENKINS_UC=$JENKINS_UC"; \
+    fi; \
+    jenkins-plugin-cli --verbose --plugin-file /usr/share/jenkins/ref/plugins.txt
 
 COPY casc/jenkins.yaml /usr/share/jenkins/ref/casc/jenkins.yaml
 COPY entrypoint-tls.sh /usr/local/bin/entrypoint-tls.sh
