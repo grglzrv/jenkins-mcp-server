@@ -44,12 +44,17 @@ these at either layer.
 | --- | --- |
 | Verified in CI | `jenkins/jenkins:lts-jdk21`, currently the **2.555.x** LTS line |
 | Recommended | The current LTS line, which is the only one receiving security backports |
-| Expected to work | Jenkins **2.x** with the plugins below |
+| Also verified | `jenkins/jenkins:2.541.3-jdk21`, the previous LTS line |
+| Unverified | Older Jenkins 2.x — likely to work, but not demonstrated |
 | Not supported | Jenkins 1.x |
 
-Every endpoint used has been stable in Jenkins core since early 2.x, so older
-2.x releases will most likely work; they are untested and unpatched, so they are
-not recommended.
+A [compatibility matrix workflow](.github/workflows/compatibility.yml) runs the
+integration suite against several cores. The two most recent LTS lines pass.
+Older images could not be tested at all: they cannot be provisioned with current
+plugins and their Debian bases no longer resolve, and `jenkins/jenkins:2.50` is
+not a published tag. Every endpoint used has been stable in core since early
+2.x, so an older core will most likely work — that is reasoning, not a
+measurement.
 
 Plugins: `cloudbees-folder` for folder paths, `workflow-aggregator` for Pipeline
 jobs and `term`/`kill`, `workflow-multibranch` + `branch-api` + `git` for

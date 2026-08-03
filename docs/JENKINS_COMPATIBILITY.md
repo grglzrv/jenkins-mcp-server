@@ -1,12 +1,38 @@
 # Jenkins compatibility
 
+## Measured results
+
+`.github/workflows/compatibility.yml` runs the full integration suite against
+several Jenkins cores and records the outcome. Run it on demand from the Actions
+tab, optionally with `extra_image` to test a specific tag. It also runs monthly,
+to catch the `lts` tag moving.
+
+| Jenkins core | Result | Notes |
+| --- | --- | --- |
+| `jenkins/jenkins:lts-jdk21` (2.555.x) | **pass** | The version CI uses for the normal suite |
+| `jenkins/jenkins:2.541.3-jdk21` | **pass** | Previous LTS line |
+| `jenkins/jenkins:2.401.3` | not established | The test image cannot be built: no plugin installer on `PATH` |
+| `jenkins/jenkins:2.319.3` | not established | Same |
+| `jenkins/jenkins:2.263.4` | not established | Base image `apt-get` fails; the Debian release it used is archived |
+| `jenkins/jenkins:2.222.4` | not established | Same, `Failed to fetch deb.debian.org` |
+| `jenkins/jenkins:2.50` | **cannot be tested** | No such published tag on Docker Hub |
+
+Read those "not established" rows carefully: they are failures of the *test
+harness*, not evidence that the server is incompatible. Older images cannot be
+provisioned with current plugins, and their Debian bases no longer resolve. The
+server was never reached, so nothing was learned about it either way.
+
+What this does establish: **the two most recent LTS lines are verified working,
+and nothing older has been demonstrated.** If you need an older core, test it
+against your own environment rather than trusting the endpoint list.
+
 ## Supported versions
 
 | | Version | Notes |
 | --- | --- | --- |
 | **Verified in CI** | `jenkins/jenkins:lts-jdk21` | The integration suite builds this image on every change to `src/`, and exercises job creation, triggering, console streaming, stopping and deletion end to end. At the time of writing that tag resolves to the **2.555.x** LTS line. |
 | **Recommended** | Current LTS line | Only the most recent LTS line receives security backports. |
-| **Expected to work** | Jenkins 2.x with the plugins below | Every endpoint this server calls has been part of Jenkins core since the early 2.x releases. |
+| **Unverified** | Older Jenkins 2.x | Every endpoint this server calls has been part of core since early 2.x, so an older core will most likely work, but none has been demonstrated. See the measured results above. |
 | **Not supported** | Jenkins 1.x | Different URL scheme and no folder support. |
 
 The honest position on older releases: the REST endpoints used here are old and
