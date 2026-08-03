@@ -150,5 +150,29 @@ jobs:
           echo "::group::describe"; kubectl -n jenkins-mcp describe pods || true; echo "::endgroup::"
           echo "::group::logs"; kubectl -n jenkins-mcp logs -l app.kubernetes.io/name=jenkins-mcp-server --tail=120 --all-containers || true; echo "::endgroup::"
           echo "::group::events"; kubectl -n jenkins-mcp get events --sort-by=.lastTimestamp || true; echo "::endgroup::"
-          reason="$(kubectl -n jenkins-mcp get events --sort-by=.lastTimestamp -o json 2>/dev/null | python3 -c 'import json,sys; e=json.load(sys.stdin)["items"]; print(" ~ ".join(f"{i[\"reason\"]}: {i[\"message\"][:120]}" for i in e[-5:] if i.get("type")=="Warning"))' || true)"
+          # Container-level state is what identifies the failure: an image that
+          # cannot be resolved, a crash loop, or probes never passing all look
+          # identical from the Deployment's point of view.
+          kubectl -n jenkins-mcp get pods -o json > /tmp/pods.json 2>/dev/null || echo '{}' > /tmp/pods.json
+          reason="$(python3 - <<'EOF'
+import json
+try:
+    pods = json.load(open("/tmp/pods.json")).get("items", [])
+except Exception:
+    pods = []
+parts = []
+for p in pods:
+    st = p.get("status", {})
+    parts.append(f"{p['metadata']['name']} phase={st.get('phase')}")
+    for cs in st.get("containerStatuses", []) or []:
+        state = cs.get("state", {})
+        for kind, body in state.items():
+            detail = body.get("reason") or body.get("message") or kind
+            parts.append(f"  {cs['name']}: {kind} {detail}"[:160])
+    for c in st.get("conditions", []) or []:
+        if c.get("status") != "True":
+            parts.append(f"  cond {c.get('type')}: {c.get('reason')} {str(c.get('message'))[:90]}")
+print(" ~ ".join(parts)[:900] or "no pods found")
+EOF
+)"
           echo "::error::k3s ${{ matrix.k3s }} smoke failed :: ${reason:-see diagnostics}"
