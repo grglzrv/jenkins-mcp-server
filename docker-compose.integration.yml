@@ -2,9 +2,13 @@ services:
   jenkins:
     build:
       context: ./integration/jenkins
+      # Dockerfile.legacy resolves plugins from the core's own update centre
+      # line. The default suite keeps the standard Dockerfile untouched.
+      dockerfile: ${JENKINS_DOCKERFILE:-Dockerfile}
       args:
         # Overridden by the compatibility matrix to test other Jenkins cores.
         JENKINS_IMAGE: ${JENKINS_IMAGE:-jenkins/jenkins:lts-jdk21}
+        JENKINS_UC_LINE: ${JENKINS_UC_LINE:-}
     environment:
       CASC_JENKINS_CONFIG: /usr/share/jenkins/ref/casc/jenkins.yaml
       JAVA_OPTS: -Djenkins.install.runSetupWizard=false

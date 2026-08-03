@@ -1,5 +1,7 @@
 # Jenkins image under test. Overridden by the compatibility matrix workflow to
 # check older cores; defaults to the current LTS used by the normal suite.
+# Accepted but unused here; only Dockerfile.legacy resolves by line.
+ARG JENKINS_UC_LINE=""
 ARG JENKINS_IMAGE=jenkins/jenkins:lts-jdk21
 FROM ${JENKINS_IMAGE}
 USER root

@@ -7,9 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       extra_image:
-        description: "Additional Jenkins image to test, e.g. jenkins/jenkins:2.500"
+        description: "Additional Jenkins image to test, e.g. jenkins/jenkins:2.504.1-jdk21"
         required: false
         type: string
+      legacy:
+        description: "Resolve plugins from the core's own update centre line. Needed for cores older than the newest plugins support."
+        required: false
+        default: true
+        type: boolean
   schedule:
     # Monthly, to catch the current LTS moving underneath us.
     - cron: "0 5 1 * *"
@@ -89,6 +94,7 @@ jobs:
       - name: Run the integration suite against ${{ inputs.extra_image }}
         env:
           JENKINS_IMAGE: ${{ inputs.extra_image }}
+          JENKINS_DOCKERFILE: ${{ inputs.legacy && 'Dockerfile.legacy' || 'Dockerfile' }}
         run: |
           set +e
           ./integration/run.sh > /tmp/out.txt 2>&1
@@ -100,5 +106,48 @@ jobs:
             echo "::error::${JENKINS_IMAGE} FAILED :: ${reason:-no recognisable error line}"
           else
             echo "::notice::${JENKINS_IMAGE} PASSED the full integration suite"
+          fi
+          exit "$code"
+
+  legacy:
+    name: "legacy ${{ matrix.image }}"
+    # Older cores cannot install the newest plugins, which now require a newer
+    # core than they are. This job resolves plugins from each core's own update
+    # centre line instead. Separate from the sweep so the default suite and the
+    # standard Dockerfile stay untouched.
+    if: inputs.extra_image == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          # The version actually in use by the maintainers of this repository.
+          - jenkins/jenkins:2.504.1-jdk21
+          - jenkins/jenkins:2.492.3-jdk21
+          - jenkins/jenkins:2.462.3-jdk21
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install 'mcp>=2.0.0,<3'
+      - name: Run the integration suite against ${{ matrix.image }}
+        env:
+          JENKINS_IMAGE: ${{ matrix.image }}
+          JENKINS_DOCKERFILE: Dockerfile.legacy
+        run: |
+          set +e
+          ./integration/run.sh > /tmp/out.txt 2>&1
+          code=$?
+          set -e
+          tail -n 120 /tmp/out.txt
+          if [ "$code" -ne 0 ]; then
+            reason="$(grep -hoE '(AssertionError|requires a greater version|prerequisites not met|Exception|ERROR:|no plugin installer|manifest unknown|Failed to)[^\r]{0,140}' /tmp/out.txt | tail -3 | tr '\n' ' ~ ')"
+            echo "::error::${JENKINS_IMAGE} FAILED :: ${reason:-see log}"
+          else
+            echo "::notice::${JENKINS_IMAGE} PASSED with update-centre-pinned plugins"
           fi
           exit "$code"
