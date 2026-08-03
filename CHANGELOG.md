@@ -2,6 +2,30 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.14.0] - 2026-08-03
+
+### Fixed
+
+- **Documented install commands pinned an eleven-release-old chart.** Both the
+  root and chart READMEs told people to run `helm upgrade --install --version
+  1.2.0`. Several other files added after `scripts/set_version.py` were never
+  wired into it and had frozen too: the minibridge kustomize overlay and
+  standalone deployment at 1.8.0, and the generic Argo CD application at 1.12.0.
+- `scripts/check_version.py` now scans `README.md`, `deploy/`, `examples/` and
+  `charts/` for any version pin that disagrees with `VERSION`, so a file added
+  without wiring it into the release script fails the build instead of silently
+  going stale.
+
+### Changed
+
+- The chart README documented 7 of 32 top-level values, omitting `minibridge`
+  and `autoscaling` entirely. Replaced with a reference covering all of them,
+  grouped by connection, credentials, server policy, minibridge, workload,
+  networking and audit, plus a table of the example values files. A test fails
+  if any value goes undocumented.
+- Refreshed the illustrative versions in the release documentation, which still
+  referenced 1.2.1.
+
 ## [1.13.1] - 2026-08-03
 
 ### Changed
