@@ -174,7 +174,13 @@ jobs:
       - name: Lint, render, and package
         run: |
           helm lint --strict charts/jenkins-mcp-server
-          helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp > /tmp/default.yaml
+          # jenkins.url is required, so a render with no values must fail.
+          if helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp > /tmp/nourl.yaml 2>&1; then
+            echo "expected the render to fail without jenkins.url"; exit 1
+          fi
+          grep -q "jenkins.url is required" /tmp/nourl.yaml
+          helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
+            --set jenkins.url=https://jenkins.example.com > /tmp/default.yaml
           helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/production.yaml
           helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/external-secrets-gcp-workload-identity.yaml > /tmp/gcp.yaml
           mkdir -p dist
