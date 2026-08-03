@@ -1,0 +1,55 @@
+# Base deployment with the minibridge proxy in front of the MCP server.
+#
+#   kubectl kustomize deploy/kubernetes/minibridge
+#
+# Differences from the plain base:
+#   - the -minibridge image variant, which bundles minibridge and policy.rego
+#   - no args: the entrypoint runs `minibridge aio -- jenkins-mcp-server --transport stdio`
+#   - health moves to 8080, and minibridge serves "/" rather than /healthz and /readyz
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: jenkins-mcp
+resources:
+  - ../base
+images:
+  - name: ghcr.io/grglzrv/jenkins-mcp-server
+    newTag: 1.8.0-minibridge
+configMapGenerator:
+  - name: jenkins-mcp-minibridge
+    envs:
+      - minibridge.env
+generatorOptions:
+  disableNameSuffixHash: true
+patches:
+  - target:
+      kind: Deployment
+      name: jenkins-mcp
+    patch: |-
+      # The entrypoint supplies the transport, so the base args must go.
+      - op: remove
+        path: /spec/template/spec/containers/0/args
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom/-
+        value:
+          configMapRef:
+            name: jenkins-mcp-minibridge
+      # minibridge health listens on 8080 and exposes "/" only.
+      - op: replace
+        path: /spec/template/spec/containers/0/ports/1/containerPort
+        value: 8080
+      - op: replace
+        path: /spec/template/spec/containers/0/startupProbe/httpGet/path
+        value: /
+      - op: replace
+        path: /spec/template/spec/containers/0/readinessProbe/httpGet/path
+        value: /
+      - op: replace
+        path: /spec/template/spec/containers/0/livenessProbe/httpGet/path
+        value: /
+  - target:
+      kind: Service
+      name: jenkins-mcp
+    patch: |-
+      - op: replace
+        path: /spec/ports/1/port
+        value: 8080

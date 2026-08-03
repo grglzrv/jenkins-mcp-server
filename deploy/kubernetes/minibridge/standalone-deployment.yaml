@@ -1,0 +1,151 @@
+# Self-contained minibridge deployment: Secret, ConfigMap, Deployment, Service.
+#
+#   kubectl apply -f deploy/kubernetes/minibridge/standalone-deployment.yaml
+#
+# Everything is in one file so it can be read top to bottom. For anything beyond
+# a demo, prefer the Helm chart or the kustomize overlay in this directory, and
+# supply the Secret from External Secrets rather than committing it.
+#
+# Replace before applying:
+#   - jenkins.example-tailnet.ts.net  -> your Jenkins URL
+#   - the credentials in the Secret
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jenkins-mcp
+---
+# The credentials the server uses to talk to Jenkins. In production create this
+# out of band, or have External Secrets create it, and delete this block: a
+# Secret in Git is a Secret in your history.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jenkins-mcp-secrets
+  namespace: jenkins-mcp
+type: Opaque
+stringData:
+  JENKINS_USERNAME: replace-with-jenkins-user
+  JENKINS_TOKEN: replace-with-jenkins-api-token
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenkins-mcp-minibridge
+  namespace: jenkins-mcp
+data:
+  JENKINS_URL: https://jenkins.example-tailnet.ts.net
+  JENKINS_VERIFY_TLS: "true"
+
+  # Server-side policy. Enforced in-process, independent of minibridge.
+  MCP_ALLOWED_JOBS: "AI/*,Platform/*"
+  MCP_ALLOW_NODE_WRITE: "false"
+  MCP_ALLOW_ADMIN_REQUEST: "false"
+  MCP_ALLOW_JOB_DELETE: "false"
+
+  # minibridge listener. It owns the socket; the MCP server runs on stdio as its
+  # child, so no MCP_TRANSPORT or MCP_PORT is needed here.
+  MINIBRIDGE_LISTEN: ":8000"
+  MINIBRIDGE_HEALTH_LISTEN: ":8080"
+  MINIBRIDGE_POLICER_ENFORCE: "true"
+
+  # Tool policy. Empty means every tool is allowed, which is the default.
+  # Groups: @read @write @destructive @admin @all
+  TOOLS_DENY: "@destructive"
+  TOOLS_ALLOW: ""
+  METHODS_DENY: ""
+
+  # Heuristic content guardrails, space separated. Empty disables them.
+  GUARDRAILS: "covert-instruction-detection sensitive-pattern-detection secrets-redaction"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jenkins-mcp-minibridge
+  namespace: jenkins-mcp
+  labels:
+    app.kubernetes.io/name: jenkins-mcp-minibridge
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jenkins-mcp-minibridge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jenkins-mcp-minibridge
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: server
+          # The -minibridge variant bundles minibridge and the Rego policy. The
+          # plain image does not contain them, so this tag is required.
+          image: ghcr.io/grglzrv/jenkins-mcp-server:1.8.0-minibridge
+          imagePullPolicy: IfNotPresent
+          # No args: the entrypoint runs
+          #   minibridge aio -- jenkins-mcp-server --transport stdio
+          envFrom:
+            - configMapRef:
+                name: jenkins-mcp-minibridge
+            - secretRef:
+                name: jenkins-mcp-secrets
+          ports:
+            - name: mcp
+              containerPort: 8000
+            - name: health
+              containerPort: 8080
+          # minibridge serves "/" on its health listener. It does not expose
+          # /healthz or /readyz, which belong to the server's own health server.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-mcp-minibridge
+  namespace: jenkins-mcp
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: jenkins-mcp-minibridge
+  ports:
+    - name: mcp
+      port: 8000
+      targetPort: mcp
+    - name: health
+      port: 8080
+      targetPort: health

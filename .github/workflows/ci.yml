@@ -80,6 +80,19 @@ jobs:
         run: helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/production.yaml
       - name: Render GCP External Secrets example
         run: helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/external-secrets-gcp-workload-identity.yaml > /tmp/gcp.yaml
+      - name: Render every shipped values example
+        run: |
+          for f in examples/values/*.yaml; do
+            echo "rendering $f"
+            helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
+              -f "$f" --set jenkins.credentials.token=ci-placeholder > /dev/null
+          done
+      - name: Build the kustomize targets
+        run: |
+          for d in base overlays/production minibridge; do
+            echo "building deploy/kubernetes/$d"
+            kubectl kustomize "deploy/kubernetes/$d" > /dev/null
+          done
       - name: Package chart
         run: helm package charts/jenkins-mcp-server --destination dist
 

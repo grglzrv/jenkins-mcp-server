@@ -177,3 +177,104 @@ def test_template_guards_cluster_store_namespace_requirements() -> None:
     assert "workloadIdentity" in template
     assert "secretAccessKeySecretRef" in template
     assert template.count("ClusterSecretStore") >= 1
+
+
+# --- shipped examples must stay valid ------------------------------------
+
+EXAMPLES = ROOT / "examples/values"
+DEPLOY = ROOT / "deploy/kubernetes"
+
+
+def merge(a, b):
+    if isinstance(a, dict) and isinstance(b, dict):
+        out = dict(a)
+        for k, v in b.items():
+            out[k] = merge(out.get(k), v)
+        return out
+    return b
+
+
+def test_every_example_values_file_matches_the_schema() -> None:
+    files = sorted(EXAMPLES.glob("*.yaml"))
+    assert len(files) >= 6, f"expected the documented examples, found {files}"
+    for f in files:
+        jsonschema.validate(merge(values(), yaml.safe_load(f.read_text())), schema())
+
+
+def test_examples_readme_references_every_values_file() -> None:
+    readme = (ROOT / "examples/README.md").read_text()
+    for f in EXAMPLES.glob("*.yaml"):
+        assert f.name in readme, f"{f.name} is not documented in examples/README.md"
+
+
+def test_secret_examples_cover_all_three_credential_paths() -> None:
+    existing = yaml.safe_load((EXAMPLES / "existing-secret.yaml").read_text())
+    assert existing["jenkins"]["credentials"]["create"] is False
+    assert existing["jenkins"]["credentials"]["existingSecret"]
+
+    managed = yaml.safe_load((EXAMPLES / "chart-managed-secret.yaml").read_text())
+    assert managed["jenkins"]["credentials"]["create"] is True
+    # Must be empty or the chart references that Secret instead of creating one.
+    assert managed["jenkins"]["credentials"]["existingSecret"] == ""
+    # A real token must never be committed in an example.
+    assert not managed["jenkins"]["credentials"]["token"]
+
+
+def test_minibridge_examples_demonstrate_both_policy_shapes() -> None:
+    deny = yaml.safe_load((EXAMPLES / "minibridge.yaml").read_text())["minibridge"]
+    assert deny["enabled"] is True
+    assert deny["tools"]["deny"] == ["@destructive"]
+
+    allow = yaml.safe_load((EXAMPLES / "minibridge-hardened.yaml").read_text())["minibridge"]
+    assert allow["tools"]["allow"] == ["@read"]
+    assert allow["basicAuth"]["enabled"] is True
+    assert allow["tls"]["enabled"] is True
+    # Secrets are referenced, never inlined.
+    assert allow["basicAuth"]["existingSecret"]
+    assert allow["tls"]["existingSecret"]
+
+
+def test_config_env_covers_every_supported_setting() -> None:
+    """The raw manifests drifted from the app once; keep them in step."""
+    import re
+
+    cfg = set(
+        re.findall(r"^([A-Z_]+)=", (DEPLOY / "base/config.env").read_text(), re.M)
+    )
+    src = set(
+        re.findall(
+            r'alias="(MCP_[A-Z_]+|JENKINS_[A-Z_]+)"',
+            (ROOT / "src/jenkins_mcp_server/config.py").read_text(),
+        )
+    )
+    # Credentials and the optional CA bundle come from the Secret, not the ConfigMap.
+    from_secret = {"JENKINS_USERNAME", "JENKINS_TOKEN", "JENKINS_CA_BUNDLE"}
+    assert (src - cfg) <= from_secret, f"config.env is missing {src - cfg - from_secret}"
+    assert not (cfg - src), f"config.env sets unknown variables: {cfg - src}"
+
+
+def test_minibridge_overlay_and_standalone_exist_and_parse() -> None:
+    overlay = DEPLOY / "minibridge/kustomization.yaml"
+    standalone = DEPLOY / "minibridge/standalone-deployment.yaml"
+    assert yaml.safe_load(overlay.read_text())["kind"] == "Kustomization"
+    docs = [d for d in yaml.safe_load_all(standalone.read_text()) if d]
+    kinds = {d["kind"] for d in docs}
+    assert {"Secret", "ConfigMap", "Deployment", "Service"} <= kinds
+    dep = next(d for d in docs if d["kind"] == "Deployment")
+    container = dep["spec"]["template"]["spec"]["containers"][0]
+    # The minibridge image is required; the plain image has no minibridge binary.
+    assert container["image"].endswith("-minibridge")
+    # The entrypoint supplies the transport, so args must not override it.
+    assert "args" not in container
+    # minibridge health serves "/", not /healthz.
+    assert container["livenessProbe"]["httpGet"]["path"] == "/"
+
+
+def test_tailscale_directory_is_a_kustomization() -> None:
+    """Overlays reference the directory; referencing files across dirs fails."""
+    assert (DEPLOY / "tailscale/kustomization.yaml").is_file()
+    production = yaml.safe_load(
+        (DEPLOY / "overlays/production/kustomization.yaml").read_text()
+    )
+    assert "../../tailscale" in production["resources"]
+    assert not any(r.endswith(".yaml") for r in production["resources"])

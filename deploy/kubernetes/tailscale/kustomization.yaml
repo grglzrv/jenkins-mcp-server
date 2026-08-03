@@ -1,0 +1,10 @@
+# Grouping the Tailscale resources into their own kustomization lets overlays
+# reference this directory. Referencing the individual files by relative path
+# fails: kustomize refuses to load files from outside the overlay's own
+# directory unless load restrictions are disabled.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - proxy-groups.yaml
+  - jenkins-egress-service.yaml
+  - dnsconfig.yaml

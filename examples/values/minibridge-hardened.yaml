@@ -1,0 +1,51 @@
+# Locked-down minibridge deployment: read-only tools, shared-secret auth, TLS.
+#
+#   helm install jenkins-mcp charts/jenkins-mcp-server -n jenkins-mcp \
+#     -f examples/values/minibridge-hardened.yaml
+#
+# Prerequisites:
+#   - Secret jenkins-mcp-secrets with JENKINS_USERNAME, JENKINS_TOKEN and
+#     BASIC_AUTH_SECRET
+#   - Secret jenkins-mcp-tls with tls.crt and tls.key
+#
+# If jenkins-mcp-secrets is managed by External Secrets, add BASIC_AUTH_SECRET
+# to externalSecret.extraData, otherwise the chart fails the render rather than
+# producing a pod that cannot start.
+
+jenkins:
+  url: https://jenkins.example-tailnet.ts.net
+  credentials:
+    existingSecret: jenkins-mcp-secrets
+    create: false
+
+mcp:
+  readOnly: true
+  allowedJobs: "AI/*"
+
+minibridge:
+  enabled: true
+  tools:
+    # Strict allowlist: nothing outside @read can be called or even listed.
+    allow: ["@read"]
+    deny: []
+  methodsDeny: ["resources/read"]
+  guardrails:
+    - covert-instruction-detection
+    - sensitive-pattern-detection
+    - shadowing-pattern-detection
+    - schema-misuse-prevention
+    - cross-origin-tool-access
+    - secrets-redaction
+  policer:
+    enforce: true
+  basicAuth:
+    enabled: true
+    existingSecret: jenkins-mcp-secrets
+    secretKey: BASIC_AUTH_SECRET
+  tls:
+    enabled: true
+    existingSecret: jenkins-mcp-tls
+    certKey: tls.crt
+    keyKey: tls.key
+    # Set to enable mTLS, with the CA in the same Secret.
+    clientCASecretKey: ""

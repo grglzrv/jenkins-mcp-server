@@ -1,0 +1,52 @@
+# The MCP server behind the minibridge proxy.
+#
+#   helm install jenkins-mcp charts/jenkins-mcp-server -n jenkins-mcp \
+#     -f examples/values/minibridge.yaml
+#
+# Requires the -minibridge image variant, which the chart selects automatically
+# by appending minibridge.image.tagSuffix to the app version.
+#
+# Credential injection is identical with the proxy on or off: JENKINS_TOKEN
+# still arrives via secretKeyRef from the Secret below.
+
+jenkins:
+  url: https://jenkins.example-tailnet.ts.net
+  credentials:
+    existingSecret: jenkins-mcp-secrets
+    create: false
+
+# Server-side policy still applies underneath minibridge and cannot be bypassed.
+mcp:
+  allowedJobs: "AI/*,Platform/*"
+  allowJobDelete: false
+  allowAdminRequest: false
+
+minibridge:
+  enabled: true
+
+  # --- Tool and capability policy -----------------------------------------
+  # DEFAULT is allow-all: with both lists empty every tool is permitted.
+  # Groups: @read @write @destructive @admin @all
+  tools:
+    # Exclude only the irreversible tools, keep everything else usable.
+    deny: ["@destructive"]
+    # A non-empty allow list becomes a strict allowlist instead, e.g.
+    #   allow: ["@read"]                 read-only deployment
+    #   allow: ["@read", "trigger_build"] read plus one specific tool
+    allow: []
+  # Deny whole MCP capabilities by method name.
+  methodsDeny: []
+
+  # --- Content guardrails --------------------------------------------------
+  # Independent of the tool policy above. All off by default.
+  guardrails:
+    - covert-instruction-detection
+    - sensitive-pattern-detection
+    - shadowing-pattern-detection
+    - schema-misuse-prevention
+    - cross-origin-tool-access
+    - secrets-redaction
+
+  policer:
+    # false logs violations and lets traffic through, useful when rolling out.
+    enforce: true
