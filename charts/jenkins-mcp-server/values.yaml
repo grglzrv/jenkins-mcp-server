@@ -132,7 +132,36 @@ jenkins:
   # matches the certificate. The DNSConfig/CoreDNS integration routes this
   # hostname through the Operator-managed egress proxy.
   url: https://jenkins.example-tailnet.ts.net
+  # Verify the certificate Jenkins presents. Keep this true. Setting it false
+  # accepts any certificate, over a connection carrying an API token that can
+  # trigger and delete builds.
   verifyTls: true
+
+  # --- Certificate trust ---------------------------------------------------
+  #
+  # Both settings below are OPTIONAL and usually stay empty. They do not enable
+  # verification; verifyTls does that. They add a trust anchor for an issuer the
+  # container does not already know.
+  #
+  # NOT needed when Jenkins uses a publicly issued certificate. That covers
+  # Let's Encrypt, any commercial CA, and Tailscale, whose certificates chain to
+  # a public root. The container's bundled roots already validate those.
+  #
+  # Needed only when the issuer is private: a company internal CA, or a
+  # self-signed certificate. Symptom is a startup failure mentioning
+  # "certificate verify failed" or "self-signed certificate".
+  #
+  # Quick check from anywhere:  curl -I https://your-jenkins/login
+  #   succeeds -> leave both empty
+  #   certificate error -> set caBundle.existingSecret below
+  #
+  # Do not reach for verifyTls: false when this fails. Add the CA instead: that
+  # keeps verification fully on while trusting exactly one extra issuer.
+  # Setting verifyTls: false together with a bundle fails the render, because it
+  # previously turned verification back on silently.
+
+  # Path to a CA file that already exists in the image or arrives via
+  # extraVolumes. Mutually exclusive with caBundle.existingSecret.
   caBundlePath: ""
   timeoutSeconds: 30
   maxRetries: 3
@@ -145,6 +174,11 @@ jenkins:
     create: false
     username: ""
     token: ""
+  # Mount a CA certificate from a Secret. The chart mounts it read-only and
+  # points the server at it, so no other wiring is needed.
+  #
+  #   kubectl create secret generic jenkins-ca -n jenkins-mcp \
+  #     --from-file=ca.crt=/path/to/internal-ca.crt
   caBundle:
     existingSecret: ""
     key: ca.crt

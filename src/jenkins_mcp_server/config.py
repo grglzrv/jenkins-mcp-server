@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,8 +57,31 @@ class Settings(BaseSettings):
             value = "/" + value
         return value.rstrip("/") or "/mcp"
 
+    @model_validator(mode="after")
+    def _check_tls_settings(self) -> Settings:
+        """Reject a CA bundle combined with verification disabled.
+
+        `verify` returns the bundle path when one is set, which silently turned
+        verification back on for anyone who had asked for it off. Either choice
+        would be a guess about intent, so fail instead of guessing.
+        """
+        if self.jenkins_ca_bundle and not self.jenkins_verify_tls:
+            raise ValueError(
+                "JENKINS_CA_BUNDLE is set but JENKINS_VERIFY_TLS is false. "
+                "A CA bundle only has meaning when TLS verification is enabled. "
+                "Remove the bundle to disable verification, or set "
+                "JENKINS_VERIFY_TLS=true to verify against it."
+            )
+        return self
+
     @property
     def verify(self) -> bool | str:
+        """The httpx `verify` argument.
+
+        A path pins trust to that CA, True uses the system trust store, which is
+        what a publicly issued certificate such as Let's Encrypt or Tailscale
+        needs, and False disables verification entirely.
+        """
         if self.jenkins_ca_bundle:
             return str(self.jenkins_ca_bundle)
         return self.jenkins_verify_tls

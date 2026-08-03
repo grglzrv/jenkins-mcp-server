@@ -15,6 +15,37 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if and $creds.create $creds.existingSecret }}
 {{- fail (printf "jenkins.credentials.create is true but existingSecret is set to %q. The chart would create a Secret and then read from a different one. Clear existingSecret to have the chart create it, or set create: false to use yours." $creds.existingSecret) }}
 {{- end }}
+{{- /* TLS trust settings. A CA bundle is only meaningful when verification is
+       on, and only needed when the issuer is not publicly trusted. A publicly
+       issued certificate (Let's Encrypt, Tailscale) needs no bundle at all. */ -}}
+{{- $ca := .Values.jenkins.caBundle -}}
+{{- if and (not .Values.jenkins.verifyTls) (or $ca.existingSecret .Values.jenkins.caBundlePath) }}
+{{- fail "jenkins.verifyTls is false but a CA bundle is configured. A CA bundle only has meaning when verification is enabled, and setting both previously turned verification back on silently. Remove the bundle to disable verification, or set verifyTls: true to verify against it." }}
+{{- end }}
+{{- if and $ca.existingSecret .Values.jenkins.caBundlePath }}
+{{- fail (printf "jenkins.caBundlePath (%s) and jenkins.caBundle.existingSecret (%s) are both set. caBundlePath wins and the mounted Secret is ignored. Use one." .Values.jenkins.caBundlePath $ca.existingSecret) }}
+{{- end }}
+
+{{- /* minibridge settings do nothing unless the proxy is enabled. Silently
+       ignoring guardrails or a tool policy is a security-relevant surprise. */ -}}
+{{- if not .Values.minibridge.enabled }}
+{{- $ignored := list -}}
+{{- if .Values.minibridge.tools.deny }}{{- $ignored = append $ignored "tools.deny" }}{{- end }}
+{{- if .Values.minibridge.tools.allow }}{{- $ignored = append $ignored "tools.allow" }}{{- end }}
+{{- if .Values.minibridge.methodsDeny }}{{- $ignored = append $ignored "methodsDeny" }}{{- end }}
+{{- if .Values.minibridge.guardrails }}{{- $ignored = append $ignored "guardrails" }}{{- end }}
+{{- if .Values.minibridge.basicAuth.enabled }}{{- $ignored = append $ignored "basicAuth.enabled" }}{{- end }}
+{{- if .Values.minibridge.tls.enabled }}{{- $ignored = append $ignored "tls.enabled" }}{{- end }}
+{{- if $ignored }}
+{{- fail (printf "minibridge.enabled is false, so these settings would be silently ignored: %s. Set minibridge.enabled: true to enforce them, or remove them. Note the server's own mcp.* policy still applies either way." (join ", " $ignored)) }}
+{{- end }}
+{{- end }}
+
+{{- /* An Ingress TLS secret is only read when TLS is on. */ -}}
+{{- if and .Values.ingress.enabled .Values.ingress.tlsSecretName (not .Values.ingress.tls) }}
+{{- fail "ingress.tlsSecretName is set but ingress.tls is false, so the secret would be ignored. Set ingress.tls: true or clear tlsSecretName." }}
+{{- end }}
+
 {{- /* PodDisruptionBudget and autoscaling must agree, or a voluntary
        disruption can never proceed at minimum scale. */ -}}
 {{- if and .Values.autoscaling.enabled .Values.podDisruptionBudget.enabled }}

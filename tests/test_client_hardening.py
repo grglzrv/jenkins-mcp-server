@@ -202,3 +202,27 @@ async def test_unrelated_403_is_not_treated_as_a_crumb_problem() -> None:
         await jc.request("POST", "/job/AI/job/build/build", action="test")
     assert len(attempts) == 1, "permission errors must not trigger a crumb retry"
     await jc.close()
+
+
+# --- TLS trust settings ---------------------------------------------------
+
+
+def test_public_certificate_needs_no_ca_bundle() -> None:
+    """The common case: Let's Encrypt or Tailscale, verified by system roots."""
+    assert settings(JENKINS_VERIFY_TLS=True).verify is True
+
+
+def test_ca_bundle_pins_trust_to_that_issuer() -> None:
+    assert settings(
+        JENKINS_VERIFY_TLS=True, JENKINS_CA_BUNDLE="/certs/ca.crt"
+    ).verify == "/certs/ca.crt"
+
+
+def test_verification_can_be_disabled_without_a_bundle() -> None:
+    assert settings(JENKINS_VERIFY_TLS=False).verify is False
+
+
+def test_ca_bundle_with_verification_disabled_is_rejected() -> None:
+    """This combination silently re-enabled verification."""
+    with pytest.raises(ValueError, match="JENKINS_VERIFY_TLS is false"):
+        settings(JENKINS_VERIFY_TLS=False, JENKINS_CA_BUNDLE="/certs/ca.crt")

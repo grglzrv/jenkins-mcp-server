@@ -2,6 +2,34 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.10.0] - 2026-08-03
+
+### Fixed
+
+Settings that contradicted each other, or were silently ignored, now fail
+loudly instead of resolving in a way nobody asked for.
+
+- **A CA bundle with `verifyTls: false` silently re-enabled verification.**
+  `Settings.verify` returns the bundle path whenever one is set, ignoring
+  `verifyTls` entirely, so anyone who disabled verification and also supplied a
+  bundle got verification back on. Either behaviour would be a guess about
+  intent, so the combination is now rejected at startup and at render time.
+- `jenkins.caBundlePath` and `jenkins.caBundle.existingSecret` set together
+  silently mounted the Secret and then ignored it, because the path wins.
+- **minibridge settings did nothing while `minibridge.enabled` was false.** Tool
+  policy, guardrails, basic auth and TLS could all be configured and silently
+  enforced nothing, which is the worst way for a security control to fail. The
+  render now fails and names every setting that would be ignored.
+- `ingress.tlsSecretName` with `ingress.tls: false` silently dropped the secret.
+
+### Changed
+
+- `jenkins.verifyTls` and the two CA settings are documented in `values.yaml`.
+  The CA bundle is optional and unnecessary for a publicly issued certificate,
+  which includes Let's Encrypt, any commercial CA, and Tailscale. It is needed
+  only for a private CA or a self-signed certificate. The docs also spell out
+  why `verifyTls: false` is the wrong fix for a certificate error.
+
 ## [1.9.0] - 2026-08-03
 
 ### Added

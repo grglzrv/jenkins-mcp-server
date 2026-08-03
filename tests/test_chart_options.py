@@ -407,3 +407,39 @@ def test_rendered_templates_have_no_duplicate_yaml_keys() -> None:
         for m in re.finditer(r"^  ([a-zA-Z]+):", dep, re.M)
     ]
     assert len(top) == len(set(top)), f"duplicate keys in deployment.yaml: {top}"
+
+
+# --- silently-ignored value combinations ---------------------------------
+
+
+def test_tls_trust_dependencies_are_validated() -> None:
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    # verifyTls false + a bundle previously turned verification back on.
+    assert "jenkins.verifyTls is false but a CA bundle is configured" in validate
+    # caBundlePath silently won over the mounted Secret.
+    assert "caBundlePath" in validate and "existingSecret" in validate
+
+
+def test_ca_bundle_is_optional_and_documented_as_such() -> None:
+    v = values()["jenkins"]
+    # The default must be empty: a publicly issued certificate needs nothing.
+    assert v["caBundlePath"] == ""
+    assert v["caBundle"]["existingSecret"] == ""
+    assert v["verifyTls"] is True
+    text = (CHART / "values.yaml").read_text()
+    for phrase in ["OPTIONAL", "Let's Encrypt", "self-signed"]:
+        assert phrase in text, f"values.yaml should explain {phrase!r}"
+
+
+def test_minibridge_settings_are_not_silently_ignored() -> None:
+    """Configuring guardrails while the proxy is off enforces nothing."""
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    assert "minibridge.enabled is false" in validate
+    for key in ["tools.deny", "tools.allow", "methodsDeny", "guardrails",
+                "basicAuth.enabled", "tls.enabled"]:
+        assert key in validate, f"{key} is not covered by the ignored-settings guard"
+
+
+def test_ingress_tls_secret_requires_tls() -> None:
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    assert "ingress.tlsSecretName is set but ingress.tls is false" in validate
