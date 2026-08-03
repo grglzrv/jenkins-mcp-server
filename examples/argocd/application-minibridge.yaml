@@ -1,0 +1,86 @@
+# Argo CD Application running the server behind the minibridge proxy.
+#
+#   kubectl apply -f examples/argocd/application-minibridge.yaml
+#
+# Identical to application-oci.yaml apart from the minibridge block. It needs
+# the -minibridge image variant, which the chart selects automatically by
+# appending minibridge.image.tagSuffix to the app version, so make sure that
+# tag has been published before syncing.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jenkins-mcp-server-minibridge
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: ghcr.io/grglzrv/charts
+    chart: jenkins-mcp-server
+    targetRevision: 1.8.0
+    helm:
+      releaseName: jenkins-mcp
+      valuesObject:
+        jenkins:
+          url: https://jenkins.example-tailnet.ts.net
+          credentials:
+            existingSecret: jenkins-mcp-secrets
+            create: false
+
+        # Server-side policy still applies underneath the proxy and cannot be
+        # bypassed by a client.
+        mcp:
+          allowedJobs: "AI/*,Platform/*"
+          allowJobDelete: false
+          allowAdminRequest: false
+
+        minibridge:
+          enabled: true
+          tools:
+            # Default is allow-all. This excludes only the irreversible tools,
+            # which are then refused on tools/call and hidden from tools/list.
+            # Groups: @read @write @destructive @admin @all
+            deny: ["@destructive"]
+            # A non-empty allow list becomes a strict allowlist instead:
+            #   allow: ["@read"]
+            allow: []
+          methodsDeny: []
+          guardrails:
+            - covert-instruction-detection
+            - sensitive-pattern-detection
+            - shadowing-pattern-detection
+            - schema-misuse-prevention
+            - cross-origin-tool-access
+            - secrets-redaction
+          policer:
+            # Set false during rollout to log violations without blocking.
+            enforce: true
+
+        ingress:
+          enabled: true
+          className: tailscale
+          hostname: jenkins-mcp
+          annotations:
+            tailscale.com/proxy-group: jenkins-mcp-ingress
+        tailscale:
+          egress:
+            enabled: true
+            tailnetFQDN: jenkins.example-tailnet.ts.net
+            proxyGroup: jenkins-egress
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: jenkins-mcp
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+  ignoreDifferences:
+    - group: networking.k8s.io
+      kind: Ingress
+      jsonPointers:
+        - /spec/rules/0/host

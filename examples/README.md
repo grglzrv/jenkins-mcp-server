@@ -1,6 +1,8 @@
 # Deployment examples
 
 Replace every `example-tailnet.ts.net` value before deploying.
+[docs/TAILSCALE.md](../docs/TAILSCALE.md) explains what that value is, where to
+find yours, and which fields take the full FQDN rather than the machine name.
 
 ## Credentials
 
@@ -50,6 +52,12 @@ kubectl kustomize deploy/kubernetes/minibridge
 
 | Example | What it is |
 | --- | --- |
-| `argocd/application-oci.yaml` | Deploys the versioned Helm OCI chart from GHCR. |
-| `argocd/application-git.yaml` | Deploys the chart directly from Git. |
+| `argocd/application-oci.yaml` | Versioned Helm OCI chart from GHCR. The recommended production shape — the chart is immutable at a pinned version. |
+| `argocd/application-git.yaml` | The chart straight from Git, for development or a fork. A Git ref is mutable, so pin it before production. |
+| `argocd/application-minibridge.yaml` | Same as the OCI application, with the minibridge proxy and guardrails enabled. |
 | `argocd/repository-secret-private-ghcr.yaml` | Repository credential template for a private GHCR package. |
+| `../deploy/argocd/appproject.example.yaml` | Restricted AppProject limiting which repos, namespaces and cluster-scoped kinds an Application may use. |
+
+Every Application pins `targetRevision`, sets `ignoreDifferences` for the
+Ingress host that the Tailscale Operator rewrites, and expects
+`jenkins-mcp-secrets` to exist beforehand — Argo CD does not create it.

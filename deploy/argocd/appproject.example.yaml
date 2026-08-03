@@ -1,3 +1,19 @@
+# Restricted AppProject for the Jenkins MCP server.
+#
+# The `default` project that ships with Argo CD permits any repository, any
+# destination and any resource kind. That is fine for a personal cluster and
+# too broad for a shared one: a compromised or mistaken Application under
+# `default` can create cluster-scoped resources anywhere.
+#
+# This project narrows all three. Reference it from an Application with:
+#
+#   spec:
+#     project: ai-platform
+#
+#   kubectl apply -f deploy/argocd/appproject.example.yaml
+#
+# Replace the repository URL, and add the OCI registry if you deploy the
+# published chart rather than the one in Git.
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
@@ -5,11 +21,27 @@ metadata:
   namespace: argocd
 spec:
   description: AI Platform services
+
+  # Only these sources may be deployed from. An Application naming any other
+  # repository is rejected.
   sourceRepos:
     - https://github.com/grglzrv/jenkins-mcp-server.git
+    # Required by examples/argocd/application-oci.yaml. Drop it if you only
+    # ever deploy from Git.
+    - ghcr.io/grglzrv/charts
+
+  # Only this namespace on this cluster.
   destinations:
     - namespace: jenkins-mcp
       server: https://kubernetes.default.svc
+
+  # Cluster-scoped kinds are deny-by-default. Only these may be created.
+  #
+  # ProxyGroup and DNSConfig are listed so a self-contained install can create
+  # them via tailscale.proxyGroups.create and tailscale.magicDNS.createDNSConfig.
+  # If your platform team owns those resources, keep both chart values false and
+  # remove the two tailscale.com entries below: an Application that cannot
+  # create them also cannot delete them by accident.
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
@@ -17,6 +49,20 @@ spec:
       kind: ProxyGroup
     - group: tailscale.com
       kind: DNSConfig
+
+  # Namespaced resources are unrestricted, but only inside the destination
+  # namespace declared above. Tighten this if you want to forbid the chart from
+  # creating, for example, Secrets.
   namespaceResourceWhitelist:
     - group: "*"
       kind: "*"
+
+  # Optional. Uncomment to require a human to approve every sync of a
+  # production Application rather than letting automated sync apply changes.
+  # syncWindows:
+  #   - kind: deny
+  #     schedule: "0 0 * * *"
+  #     duration: 24h
+  #     applications:
+  #       - jenkins-mcp-server
+  #     manualSync: true

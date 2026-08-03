@@ -415,6 +415,7 @@ Two consequences worth knowing:
 ## Documentation
 
 - [Release process](docs/releasing/RELEASE.md)
+- [Tailscale: finding your domain and wiring it up](docs/TAILSCALE.md)
 - [Kubernetes, Tailscale, and Argo CD](docs/KUBERNETES_TAILSCALE_ARGOCD.md)
 - [Helm chart](charts/jenkins-mcp-server/README.md)
 - [Security model](SECURITY.md)

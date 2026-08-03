@@ -1,46 +1,131 @@
+# Argo CD Application deploying the versioned Helm chart from the GHCR OCI
+# registry. This is the recommended production shape: the chart is immutable at
+# a fixed version, so a sync can never pick up an unreviewed change.
+#
+#   kubectl apply -f examples/argocd/application-oci.yaml
+#
+# Before applying, replace:
+#   grglzrv                  -> your GitHub org/user, if you forked
+#   example-tailnet.ts.net   -> your tailnet DNS name (see docs/TAILSCALE.md)
+#   targetRevision           -> the chart version you intend to run
+#
+# Prerequisites, all of which must exist before the first sync:
+#   1. Argo CD 2.9+ with OCI Helm support, and `helm-oci` enabled if your
+#      installation predates it being default.
+#   2. For a private GHCR package, a repository credential Secret. See
+#      repository-secret-private-ghcr.yaml in this directory. Public packages
+#      need no credential.
+#   3. The Secret jenkins-mcp-secrets in the destination namespace, holding
+#      JENKINS_USERNAME and JENKINS_TOKEN. Argo CD does not create it; use
+#      External Secrets or your own tooling. The Deployment stays unready until
+#      it exists, which is the intended failure mode.
+#   4. The Tailscale Operator installed, with the ProxyGroups named below
+#      already present. They are cluster-scoped and normally owned by the
+#      platform team rather than this Application.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: jenkins-mcp-server
   namespace: argocd
   finalizers:
+    # Ensures deleting the Application also removes the workloads it created.
+    # Drop this if you would rather deletions be manual.
     - resources-finalizer.argocd.argoproj.io
 spec:
+  # Point at a restricted AppProject rather than default in a shared cluster.
+  # See deploy/argocd/appproject.example.yaml.
   project: default
+
   source:
-    chart: jenkins-mcp-server
+    # For OCI the repoURL is the registry path WITHOUT the chart name, and
+    # without an oci:// prefix. The chart name goes in `chart`.
     repoURL: ghcr.io/grglzrv/charts
+    chart: jenkins-mcp-server
+    # Pin an exact version. A range or "*" would let a sync move you between
+    # releases without review.
     targetRevision: 1.8.0
     helm:
       releaseName: jenkins-mcp
+      # valuesObject is inline and easy to read. For larger setups, keep values
+      # in Git and use a multi-source Application instead, so the values file
+      # is reviewed like any other change.
       valuesObject:
         image:
           repository: ghcr.io/grglzrv/jenkins-mcp-server
+          # Left unset on purpose: the chart uses Chart.appVersion, which is
+          # pinned by targetRevision above. Setting it here decouples the two.
+          tag: ""
+
+        jenkins:
+          # Exact Tailscale Service FQDN. TLS hostname validation depends on it.
+          url: https://jenkins.example-tailnet.ts.net
+          credentials:
+            # Referenced, never created by this Application.
+            existingSecret: jenkins-mcp-secrets
+            create: false
+
+        mcp:
+          # Restrict the agent to the folders it legitimately needs.
+          allowedJobs: "AI/*,Platform/*"
+          allowNodeWrite: false
+          allowAdminRequest: false
+          # Deletion is irreversible; leave it off unless genuinely required.
+          allowJobDelete: false
+
         ingress:
           enabled: true
           className: tailscale
+          # Machine name only. Tailscale appends the tailnet suffix, giving
+          # https://jenkins-mcp.example-tailnet.ts.net
           hostname: jenkins-mcp
           annotations:
             tailscale.com/proxy-group: jenkins-mcp-ingress
-        jenkins:
-          url: https://jenkins.example-tailnet.ts.net
-          credentials:
-            existingSecret: jenkins-mcp-secrets
+
         tailscale:
           magicDNS:
+            # Cluster-scoped and usually owned elsewhere. Enabling it here means
+            # this Application owns the resource, and deleting the Application
+            # removes DNS for every other workload using it.
             createDNSConfig: false
             name: ts-dns
           egress:
             enabled: true
+            # The same FQDN as jenkins.url above.
             tailnetFQDN: jenkins.example-tailnet.ts.net
             proxyGroup: jenkins-egress
+          proxyGroups:
+            # Cluster-scoped prerequisites. Keep false when the platform team
+            # manages them, which is the usual arrangement.
+            create: false
+
   destination:
     server: https://kubernetes.default.svc
     namespace: jenkins-mcp
+
   syncPolicy:
     automated:
+      # Removes resources dropped from the chart. Safe here because the
+      # Application owns nothing cluster-scoped.
       prune: true
+      # Reverts manual kubectl edits back to the declared state.
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      # Required for large CRD-bearing charts and for correct field ownership
+      # when another controller also writes to these objects.
       - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+
+  # The Tailscale Operator writes back into the Ingress status and rewrites the
+  # hostname it assigns. Without this, Argo CD reports the Application as
+  # permanently OutOfSync.
+  ignoreDifferences:
+    - group: networking.k8s.io
+      kind: Ingress
+      jsonPointers:
+        - /spec/rules/0/host

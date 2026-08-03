@@ -1,3 +1,18 @@
+# Argo CD Application deploying the chart straight from Git.
+#
+#   kubectl apply -f examples/argocd/application-git.yaml
+#
+# Use this for development, or when you maintain a fork and want changes to the
+# chart to roll out without publishing a package first. For production prefer
+# application-oci.yaml: a Git ref is mutable, so `targetRevision: main` means a
+# sync can pick up whatever landed on main since you last looked.
+#
+# If you do track a branch, pin it to a tag or commit SHA once you are happy:
+#   targetRevision: v1.8.0
+#   targetRevision: 392948f1a2b3c4d5e6f7890abcdef1234567890a
+#
+# Prerequisites are identical to application-oci.yaml except that no registry
+# credential is needed for a public Git repository.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -7,36 +22,44 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+
   source:
     repoURL: https://github.com/grglzrv/jenkins-mcp-server.git
+    # Mutable by design. See the note above about pinning.
     targetRevision: main
+    # Path to the chart directory inside the repository.
     path: charts/jenkins-mcp-server
     helm:
       releaseName: jenkins-mcp
+      # Kept inline rather than referencing examples/values/*.yaml: Argo CD
+      # restricts Helm valueFiles to the Application's own path, so a file
+      # elsewhere in the repo may be rejected depending on server settings. To
+      # share a values file, use a multi-source Application with the repo as a
+      # second source of type `ref`.
       valuesObject:
-        image:
-          repository: ghcr.io/grglzrv/jenkins-mcp-server
+        jenkins:
+          url: https://jenkins.example-tailnet.ts.net
+          credentials:
+            existingSecret: jenkins-mcp-secrets
+            create: false
+        mcp:
+          allowedJobs: "AI/*,Platform/*"
         ingress:
           enabled: true
           className: tailscale
           hostname: jenkins-mcp
           annotations:
             tailscale.com/proxy-group: jenkins-mcp-ingress
-        jenkins:
-          url: https://jenkins.example-tailnet.ts.net
-          credentials:
-            existingSecret: jenkins-mcp-secrets
         tailscale:
-          magicDNS:
-            createDNSConfig: false
-            name: ts-dns
           egress:
             enabled: true
             tailnetFQDN: jenkins.example-tailnet.ts.net
             proxyGroup: jenkins-egress
+
   destination:
     server: https://kubernetes.default.svc
     namespace: jenkins-mcp
+
   syncPolicy:
     automated:
       prune: true
@@ -44,3 +67,15 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+
+  ignoreDifferences:
+    - group: networking.k8s.io
+      kind: Ingress
+      jsonPointers:
+        - /spec/rules/0/host

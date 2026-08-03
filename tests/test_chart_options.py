@@ -278,3 +278,67 @@ def test_tailscale_directory_is_a_kustomization() -> None:
     )
     assert "../../tailscale" in production["resources"]
     assert not any(r.endswith(".yaml") for r in production["resources"])
+
+
+# --- Argo CD examples -----------------------------------------------------
+
+ARGOCD = ROOT / "examples/argocd"
+
+
+def applications():
+    for f in sorted(ARGOCD.glob("application-*.yaml")):
+        yield f, yaml.safe_load(f.read_text())
+
+
+def test_argocd_applications_are_valid_and_pinned() -> None:
+    files = list(applications())
+    assert len(files) >= 3
+    for f, app in files:
+        assert app["kind"] == "Application", f
+        rev = str(app["spec"]["source"]["targetRevision"])
+        # A floating range would let a sync change versions without review.
+        assert rev not in {"*", "HEAD", ""}, f"{f.name} has an unpinned revision"
+
+
+def test_argocd_values_render_against_the_chart() -> None:
+    """Catches an Application drifting from the chart's schema."""
+    for f, app in applications():
+        v = app["spec"]["source"]["helm"]["valuesObject"]
+        try:
+            jsonschema.validate(merge(values(), v), schema())
+        except jsonschema.ValidationError as exc:
+            raise AssertionError(f"{f.name}: {exc.message}") from exc
+
+
+def test_argocd_applications_never_create_the_credentials_secret() -> None:
+    for f, app in applications():
+        creds = app["spec"]["source"]["helm"]["valuesObject"]["jenkins"]["credentials"]
+        assert creds.get("create") is False, f"{f.name} would create a Secret from values"
+        assert creds.get("existingSecret"), f"{f.name} does not reference a Secret"
+
+
+def test_argocd_applications_ignore_the_operator_rewritten_ingress_host() -> None:
+    """Without this Argo CD reports permanent OutOfSync against Tailscale."""
+    for f, app in applications():
+        diffs = app["spec"].get("ignoreDifferences", [])
+        assert any(
+            d.get("kind") == "Ingress" for d in diffs
+        ), f"{f.name} is missing the Ingress ignoreDifferences"
+
+
+def test_minibridge_argocd_example_enables_the_proxy() -> None:
+    app = yaml.safe_load((ARGOCD / "application-minibridge.yaml").read_text())
+    mb = app["spec"]["source"]["helm"]["valuesObject"]["minibridge"]
+    assert mb["enabled"] is True
+    assert mb["tools"]["deny"] == ["@destructive"]
+
+
+def test_tailscale_guide_exists_and_is_linked() -> None:
+    guide = ROOT / "docs/TAILSCALE.md"
+    assert guide.is_file()
+    text = guide.read_text()
+    # The two things people get wrong, both must be covered.
+    assert "login.tailscale.com/admin/dns" in text
+    assert "machine name" in text
+    assert "docs/TAILSCALE.md" in (ROOT / "README.md").read_text()
+    assert "TAILSCALE.md" in (ROOT / "examples/README.md").read_text()
