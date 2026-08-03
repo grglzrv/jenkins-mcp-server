@@ -1,50 +1,31 @@
 # Legacy-core variant of the integration Jenkins image.
 #
-# The default Dockerfile installs the newest plugins, which track the newest
-# core. On an older core that fails with "requires a greater version of
-# Jenkins": current workflow-multibranch and friends demand 2.504.3, so a
-# 2.504.1 controller cannot install them.
+# Two problems make an older controller untestable with the default image:
 #
-# This variant points the installer at the update centre for the core's own
-# release line, which serves plugin versions built for that core.
+#   1. Unpinned plugins resolve to the newest release, which now requires a
+#      newer core. workflow-multibranch demands 2.504.3, so a 2.504.1 controller
+#      cannot install it. plugins-legacy.txt pins the versions that controller
+#      actually runs, and --latest false settles dependencies on the minimum
+#      each pinned plugin requires rather than the newest available.
 #
-# Kept separate on purpose: the default suite must not change behaviour.
+#   2. The default image bootstraps with Configuration as Code, which is not
+#      installed everywhere. This variant uses init.groovy.d, which is core
+#      only and needs no plugin at all.
 ARG JENKINS_IMAGE=jenkins/jenkins:2.504.1-jdk21
 FROM ${JENKINS_IMAGE}
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
-COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
 
-# Empty derives the line from the core version, 2.504.1 -> 2.504.
-ARG JENKINS_UC_LINE=""
-# Jenkins publishes per-line update centres, but the path differs by release
-# type: an LTS line lives at stable-<line>, weeklies at <line>. Guessing wrong
-# gives a 404 from the resolver, so try each candidate and keep the first that
-# resolves, falling back to the default update centre.
-RUN set -u; \
-    VER="${JENKINS_VERSION:-}"; \
-    LINE="${JENKINS_UC_LINE:-}"; \
-    if [ -z "$LINE" ] && [ -n "$VER" ]; then LINE="$(echo "$VER" | cut -d. -f1,2)"; fi; \
-    echo "core=${VER:-unknown} line=${LINE:-none}"; \
-    OK=0; \
-    for UC in \
-        "${LINE:+https://updates.jenkins.io/stable-${LINE}}" \
-        "${LINE:+https://updates.jenkins.io/${LINE}}" \
-        "https://updates.jenkins.io/stable" \
-        "https://updates.jenkins.io"; do \
-      [ -z "$UC" ] && continue; \
-      echo "=== trying update centre: $UC ==="; \
-      if JENKINS_UC="$UC" jenkins-plugin-cli \
-           --plugin-file /usr/share/jenkins/ref/plugins.txt; then \
-        echo "=== resolved plugins from $UC ==="; OK=1; break; \
-      fi; \
-      echo "=== $UC did not work, trying the next ===" >&2; \
-      rm -rf /usr/share/jenkins/ref/plugins/*.jpi /usr/share/jenkins/ref/plugins/*.jpi.pinned 2>/dev/null || true; \
-    done; \
-    if [ "$OK" -ne 1 ]; then echo "no update centre could resolve the plugin set" >&2; exit 1; fi
+COPY plugins-legacy.txt /usr/share/jenkins/ref/plugins.txt
+RUN set -eu; \
+    echo "core=${JENKINS_VERSION:-unknown}"; \
+    jenkins-plugin-cli --latest false \
+      --plugin-file /usr/share/jenkins/ref/plugins.txt; \
+    echo "=== installed ==="; ls -1 /usr/share/jenkins/ref/plugins/ | sed 's/\.jpi$//' | sort
 
-COPY casc/jenkins.yaml /usr/share/jenkins/ref/casc/jenkins.yaml
+COPY init.groovy.d/ /usr/share/jenkins/ref/init.groovy.d/
 COPY entrypoint-tls.sh /usr/local/bin/entrypoint-tls.sh
 RUN chmod +x /usr/local/bin/entrypoint-tls.sh
 USER jenkins
+# No CASC_JENKINS_CONFIG here: bootstrapping happens in init.groovy.d.
 ENTRYPOINT ["/usr/local/bin/entrypoint-tls.sh"]

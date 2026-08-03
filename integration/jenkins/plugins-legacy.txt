@@ -1,0 +1,13 @@
+# Plugin set for testing an older controller, pinned to versions that actually
+# run on it. Unpinned entries resolve to the newest release, which now requires
+# a newer core than the one under test.
+#
+# These are the versions reported by a Jenkins 2.504.1 controller. Dependencies
+# are resolved with --latest false so they settle on the minimum each pinned
+# plugin requires, rather than the newest available.
+#
+# configuration-as-code is deliberately absent: it is not installed on that
+# controller, and the legacy image bootstraps through init.groovy.d instead.
+git:5.7.0
+branch-api:2.1259.v45c101731c76
+workflow-multibranch:811.vcd33d074c2a_0

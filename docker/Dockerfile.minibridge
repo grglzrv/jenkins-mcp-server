@@ -11,7 +11,10 @@
 # published separately (tag suffix -minibridge) for deployments that want the
 # proxy in the path.
 ARG PYTHON_IMAGE=python:3.12-slim-bookworm
-ARG MINIBRIDGE_VERSION=latest
+# Pinned rather than latest: an unpinned proxy in the request path can change
+# enforcement behaviour on an unrelated rebuild. This is the commit Acuvity's
+# own MCP server registry ships.
+ARG MINIBRIDGE_VERSION=5a873664a85bb4ba447c4edf89a48614689c1549
 
 FROM golang:1.24-alpine AS minibridge
 ENV GO111MODULE=on

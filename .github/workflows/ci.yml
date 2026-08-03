@@ -115,3 +115,15 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Inspect image
         run: docker image inspect jenkins-mcp-server:test
+
+      - name: Build the minibridge variant
+        # Catches a broken Dockerfile.minibridge on the PR rather than at
+        # release time, when the tag is already expected to exist.
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile.minibridge
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

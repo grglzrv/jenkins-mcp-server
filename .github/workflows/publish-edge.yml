@@ -74,6 +74,20 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: mode=max
           sbom: true
+      - name: Build and publish the minibridge variant
+        # amd64 only: edge is for quick verification, and the Go build stage
+        # under emulation roughly triples the job time.
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile.minibridge
+          push: true
+          platforms: linux/amd64
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge-minibridge
+          build-args: |
+            APP_VERSION=edge-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Attest image provenance
         uses: actions/attest@v4
         with:
