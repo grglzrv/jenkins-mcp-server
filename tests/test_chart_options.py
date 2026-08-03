@@ -647,7 +647,8 @@ def test_settings_reject_scientific_notation_so_the_cast_matters() -> None:
         JENKINS_URL="https://j.test", JENKINS_USERNAME="u", JENKINS_TOKEN="t"
     )
     assert Settings(**base, MCP_MAX_LOG_BYTES="1000000").max_log_bytes == 1000000
+    import pydantic
     import pytest
 
-    with pytest.raises(Exception):
+    with pytest.raises(pydantic.ValidationError):
         Settings(**base, MCP_MAX_LOG_BYTES="1e+06")
