@@ -54,6 +54,16 @@ jobs:
           kubectl version
           echo "server: $(kubectl version -o json | python3 -c 'import json,sys;print(json.load(sys.stdin)["serverVersion"]["gitVersion"])')"
 
+      - name: Build the image from this commit and import it into k3s
+        # Not the published tag: the chart's appVersion is bumped before the
+        # image for that version exists, so a fresh main would always pull a
+        # missing tag. Building here also means the chart is tested against the
+        # code in the commit rather than whatever was last released.
+        run: |
+          docker build -t jenkins-mcp-server:smoke .
+          docker save jenkins-mcp-server:smoke | sudo k3s ctr images import -
+          sudo k3s ctr images ls | grep jenkins-mcp-server
+
       - name: Create the namespace and credentials
         run: |
           kubectl create namespace jenkins-mcp
@@ -65,10 +75,21 @@ jobs:
 
       - name: Install the chart
         run: |
+          set +e
           helm install jenkins-mcp charts/jenkins-mcp-server \
             --namespace jenkins-mcp \
             --values .github/smoke-values.yaml \
-            --wait --timeout 5m
+            --set image.repository=jenkins-mcp-server \
+            --set image.tag=smoke \
+            --set image.pullPolicy=Never \
+            --wait --timeout 5m > /tmp/install.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/install.log
+          if [ "$code" -ne 0 ]; then
+            echo "::error::helm install failed :: $(tail -c 600 /tmp/install.log | tr '\n' '~')"
+          fi
+          exit "$code"
 
       - name: Show what was created
         run: kubectl -n jenkins-mcp get all,networkpolicy,pdb
@@ -108,6 +129,9 @@ jobs:
           helm upgrade jenkins-mcp charts/jenkins-mcp-server \
             --namespace jenkins-mcp \
             --values .github/smoke-values.yaml \
+            --set image.repository=jenkins-mcp-server \
+            --set image.tag=smoke \
+            --set image.pullPolicy=Never \
             --set mcp.allowedJobs='AI/*' \
             --wait --timeout 5m
           helm history jenkins-mcp --namespace jenkins-mcp
