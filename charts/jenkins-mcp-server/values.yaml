@@ -67,27 +67,34 @@ service:
 # Tailscale Operator L7 ingress. The value in hostname becomes the MagicDNS
 # service name, e.g. jenkins-mcp.<tailnet>.ts.net.
 ingress:
-  enabled: true
-  # tailscale, nginx, traefik, alb, ... The template adapts: see hostRule below.
-  className: tailscale
-  annotations:
-    tailscale.com/proxy-group: jenkins-mcp-ingress
-  # For className tailscale this is the MACHINE NAME only; the Operator appends
-  # the tailnet suffix, giving jenkins-mcp.<tailnet>.ts.net. For any other class
-  # this is the full hostname, e.g. mcp.example.com. See docs/TAILSCALE.md.
-  hostname: jenkins-mcp
-  # Emit host on the rule. null decides from className: false for tailscale
-  # (the Operator reads the name from tls.hosts and expects no rule host), true
-  # otherwise, since a rule without a host matches every hostname reaching the
-  # controller. Override only if you know why.
+  # Off by default: whether and how to expose the server is a deployment
+  # decision, and the chart assumes no ingress controller is present.
+  enabled: false
+  # Empty uses the cluster's default IngressClass. Set explicitly for a
+  # particular controller: nginx, traefik, alb, tailscale, and so on.
+  className: ""
+  # Controller-specific. Examples:
+  #   nginx with cert-manager:
+  #     cert-manager.io/cluster-issuer: letsencrypt-prod
+  #     nginx.ingress.kubernetes.io/backend-protocol: HTTP
+  #   Tailscale operator:
+  #     tailscale.com/proxy-group: jenkins-mcp-ingress
+  annotations: {}
+  # For most controllers this is the full hostname, e.g. mcp.example.com.
+  # For className tailscale it is the machine name only: the operator reads it
+  # from spec.tls[0].hosts[0], appends the tailnet suffix, and publishes the
+  # resulting MagicDNS name in the Ingress status.
+  hostname: ""
+  # Emit host on the rule. null decides from className: omitted for tailscale,
+  # which expects no rule host, and set for any other class, where a rule
+  # without a host matches every hostname reaching the controller.
   hostRule: null
   path: /mcp
   pathType: Prefix
   tls: true
-  # Required by general controllers, usually populated by cert-manager. Leave
-  # empty for tailscale, which provisions the certificate itself.
+  # Required by controllers that read the certificate from a Secret, usually
+  # written by cert-manager. Tailscale provisions its own certificate.
   tlsSecretName: ""
-  # Additional raw rules appended verbatim, for multi-host setups.
   extraRules: []
 
 resources:
@@ -133,10 +140,10 @@ networkPolicy:
   additionalEgress: []
 
 jenkins:
-  # Use the exact Jenkins Tailscale MagicDNS FQDN so TLS hostname validation
-  # matches the certificate. The DNSConfig/CoreDNS integration routes this
-  # hostname through the Operator-managed egress proxy.
-  url: https://jenkins.example-tailnet.ts.net
+  # REQUIRED. Jenkins base URL, including any path prefix such as
+  # https://ci.example.com/jenkins. Must be the exact hostname the certificate
+  # is issued for, or TLS verification fails.
+  url: ""
   # Verify the certificate Jenkins presents. Keep this true. Setting it false
   # accepts any certificate, over a connection carrying an API token that can
   # trigger and delete builds.
@@ -232,22 +239,27 @@ audit:
     #   claimName: jenkins-mcp-audit
 
 tailscale:
-  # Optional cluster-scoped DNSConfig. Platform teams commonly manage this
-  # once per cluster; enable only when this release owns the resource.
-  magicDNS:
-    createDNSConfig: false
-    name: ts-dns
-  # Registers the Jenkins MagicDNS target with the Tailscale Operator. MCP
-  # pods still connect using jenkins.url so the TLS hostname is preserved.
+  # The whole Tailscale integration is optional and off by default. Nothing
+  # under this key renders unless enabled is true, and configuring a
+  # sub-feature while this is false fails the render rather than being ignored.
+  enabled: false
+  # Route the server's outbound Jenkins traffic through a tailnet egress proxy.
   egress:
-    enabled: true
+    enabled: false
+    # Jenkins MagicDNS name. Must match jenkins.url, or TLS hostname
+    # verification fails.
+    tailnetFQDN: ""
     serviceName: jenkins-tailnet
-    tailnetFQDN: jenkins.example-tailnet.ts.net
     proxyGroup: jenkins-egress
     port: 443
-  # ProxyGroups are cluster-scoped prerequisites. Keep create=false when your
-  # platform team manages them separately.
+  magicDNS:
+    # Cluster-scoped and normally owned by the platform team. Creating it here
+    # makes this release its owner, so uninstalling removes DNS for every other
+    # workload relying on it.
+    createDNSConfig: false
+    name: ts-dns
   proxyGroups:
+    # Cluster-scoped prerequisites, usually provisioned separately.
     create: false
     ingress:
       name: jenkins-mcp-ingress

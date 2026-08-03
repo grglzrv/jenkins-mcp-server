@@ -51,6 +51,8 @@ spec:
           annotations:
             tailscale.com/proxy-group: jenkins-mcp-ingress
         tailscale:
+          # Off by default in the chart; this deployment uses the tailnet.
+          enabled: true
           egress:
             enabled: true
             tailnetFQDN: jenkins.example-tailnet.ts.net

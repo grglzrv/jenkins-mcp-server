@@ -112,8 +112,7 @@
           "type": "string"
         },
         "hostname": {
-          "type": "string",
-          "minLength": 1
+          "type": "string"
         },
         "path": {
           "type": "string",
@@ -160,7 +159,7 @@
       "properties": {
         "url": {
           "type": "string",
-          "pattern": "^https?://"
+          "pattern": "^(https?://.+)?$"
         },
         "verifyTls": {
           "type": "boolean"
@@ -380,7 +379,8 @@
       "required": [
         "magicDNS",
         "egress",
-        "proxyGroups"
+        "proxyGroups",
+        "enabled"
       ],
       "properties": {
         "magicDNS": {
@@ -418,7 +418,7 @@
             },
             "tailnetFQDN": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9.-]+\\.ts\\.net$"
+              "pattern": "^([A-Za-z0-9.-]+\\.ts\\.net)?$"
             },
             "proxyGroup": {
               "type": "string"
@@ -486,6 +486,9 @@
               }
             }
           }
+        },
+        "enabled": {
+          "type": "boolean"
         }
       }
     },

@@ -654,3 +654,50 @@ def test_settings_reject_scientific_notation_so_the_cast_matters() -> None:
 
     with pytest.raises(pydantic.ValidationError):
         Settings(**base, MCP_MAX_LOG_BYTES="1e+06")
+
+
+# --- neutral defaults -----------------------------------------------------
+
+
+def test_chart_defaults_assume_nothing_about_the_cluster() -> None:
+    """No ingress controller, no Tailscale, no hardcoded hostnames."""
+    v = values()
+    assert v["ingress"]["enabled"] is False
+    assert v["ingress"]["className"] == "", "must not hardcode an IngressClass"
+    assert v["ingress"]["annotations"] == {}, "annotations are controller-specific"
+    assert v["ingress"]["hostname"] == ""
+    assert v["tailscale"]["enabled"] is False, "Tailscale must be opt-in"
+    assert v["tailscale"]["egress"]["enabled"] is False
+    assert v["jenkins"]["url"] == "", "no default Jenkins URL"
+    assert v["tailscale"]["egress"]["tailnetFQDN"] == ""
+
+
+def test_no_tailnet_hostnames_leak_into_chart_defaults() -> None:
+    text = (CHART / "values.yaml").read_text()
+    defaults = [
+        ln for ln in text.splitlines()
+        if "ts.net" in ln and not ln.strip().startswith("#")
+    ]
+    assert not defaults, f"tailnet hostnames in non-comment defaults: {defaults}"
+
+
+def test_required_values_are_enforced() -> None:
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    assert "jenkins.url is required" in validate
+    # A Tailscale sub-feature configured while the integration is off would
+    # render nothing at all.
+    assert "tailscale.enabled is false" in validate
+    assert "tailscale.egress.tailnetFQDN is required" in validate
+
+
+def test_ingress_class_is_optional() -> None:
+    """An empty class lets the cluster's default IngressClass apply."""
+    ing = (CHART / "templates/ingress.yaml").read_text()
+    assert "with .Values.ingress.className" in ing
+
+
+def test_tailscale_resources_require_the_master_switch() -> None:
+    for name in ["tailscale-egress-service.yaml", "tailscale-dnsconfig.yaml",
+                 "tailscale-proxygroups.yaml"]:
+        text = (CHART / "templates" / name).read_text()
+        assert "and .Values.tailscale.enabled" in text, name

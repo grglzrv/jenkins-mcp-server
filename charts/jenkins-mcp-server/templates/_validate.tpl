@@ -2,6 +2,30 @@
 Cross-field validation that would otherwise only surface at runtime.
 */}}
 {{- define "jenkins-mcp-server.validate" -}}
+{{- if not .Values.jenkins.url }}
+{{- fail "jenkins.url is required. Set it to the Jenkins base URL, including any path prefix, for example https://ci.example.com/jenkins." }}
+{{- end }}
+
+{{- /* Tailscale is optional. Configuring a sub-feature while the integration
+       is off would silently render nothing. */ -}}
+{{- if not .Values.tailscale.enabled }}
+{{- $ts := list -}}
+{{- if .Values.tailscale.egress.enabled }}{{- $ts = append $ts "egress.enabled" }}{{- end }}
+{{- if .Values.tailscale.magicDNS.createDNSConfig }}{{- $ts = append $ts "magicDNS.createDNSConfig" }}{{- end }}
+{{- if .Values.tailscale.proxyGroups.create }}{{- $ts = append $ts "proxyGroups.create" }}{{- end }}
+{{- if $ts }}
+{{- fail (printf "tailscale.enabled is false, so these would render nothing: %s. Set tailscale.enabled: true, or remove them." (join ", " $ts)) }}
+{{- end }}
+{{- end }}
+
+{{- /* An egress proxy must point at the same host jenkins.url names, or TLS
+       hostname verification fails against the certificate. */ -}}
+{{- if and .Values.tailscale.enabled .Values.tailscale.egress.enabled }}
+{{- if not .Values.tailscale.egress.tailnetFQDN }}
+{{- fail "tailscale.egress.tailnetFQDN is required when the egress proxy is enabled. It must match the host in jenkins.url." }}
+{{- end }}
+{{- end }}
+
 {{- /* Credential sources are mutually exclusive: configuring more than one
        would leave the chart reading from a Secret the operator did not
        intend. */ -}}

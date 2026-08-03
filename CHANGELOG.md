@@ -2,6 +2,52 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.17.0] - 2026-08-03
+
+### Changed
+
+The chart no longer assumes a Tailscale deployment. Defaults now describe a
+plain Kubernetes cluster, and every environment-specific value is opt-in.
+
+- `ingress.enabled` defaults to `false`. `ingress.className` and
+  `ingress.annotations` are empty rather than hardcoded to `tailscale`; an empty
+  class uses the cluster's default IngressClass. Annotation examples for nginx,
+  cert-manager and the Tailscale operator are in `values.yaml`.
+- `tailscale.enabled` is a new master switch, default `false`. No Tailscale
+  resource renders unless it is true, and enabling a sub-feature while it is
+  false fails the render rather than producing nothing.
+- `jenkins.url` has no default and is now required, with a clear message when
+  it is missing. `tailscale.egress.tailnetFQDN` likewise has no default and is
+  required when the egress proxy is enabled.
+
+`jenkins.verifyTls` remains `true`. Defaulting certificate verification off
+would silently accept any certificate on a connection carrying a Jenkins API
+token. Where the issuer is private, set `jenkins.caBundle.existingSecret`, which
+stays optional and empty by default.
+
+### Migration
+
+A release relying on the previous Tailscale defaults must now set them
+explicitly:
+
+```yaml
+jenkins:
+  url: https://jenkins.your-tailnet.ts.net
+ingress:
+  enabled: true
+  className: tailscale
+  hostname: jenkins-mcp
+  annotations:
+    tailscale.com/proxy-group: jenkins-mcp-ingress
+tailscale:
+  enabled: true
+  egress:
+    enabled: true
+    tailnetFQDN: jenkins.your-tailnet.ts.net
+```
+
+`examples/values/tailscale-production.yaml` shows the full configuration.
+
 ## [1.16.0] - 2026-08-03
 
 ### Fixed

@@ -40,13 +40,23 @@ def test_deployment_is_hardened_and_has_health_probes():
     assert container["readinessProbe"]["httpGet"]["path"] == "/readyz"
 
 
-def test_chart_uses_magicdns_hostname_for_strict_jenkins_tls():
+def test_chart_verifies_tls_by_default():
     values = load("charts/jenkins-mcp-server/values.yaml")[0]
     assert values["jenkins"]["verifyTls"] is True
-    assert values["jenkins"]["url"] == "https://jenkins.example-tailnet.ts.net"
-    assert values["tailscale"]["egress"]["tailnetFQDN"] == "jenkins.example-tailnet.ts.net"
+
+
+def test_tailscale_example_targets_the_magicdns_name_not_the_service():
+    """The egress proxy must be addressed by the name on the certificate.
+
+    Using the Kubernetes Service name instead fails TLS hostname verification,
+    so jenkins.url and tailnetFQDN have to name the same host.
+    """
+    values = load("examples/values/tailscale-production.yaml")[0]
+    fqdn = values["tailscale"]["egress"]["tailnetFQDN"]
+    assert fqdn.endswith(".ts.net")
+    assert values["jenkins"]["url"] == f"https://{fqdn}"
     assert values["jenkins"]["url"] != (
-        "https://" + values["tailscale"]["egress"]["serviceName"]
+        "https://" + values["tailscale"]["egress"].get("serviceName", "")
     )
 
 

@@ -55,7 +55,7 @@ the chart's declared minimum.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.16.0 \
+  --version 1.17.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -98,7 +98,7 @@ than being silently ignored.
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `jenkins.url` | `https://jenkins.example-tailnet.ts.net` | Exact FQDN; TLS hostname validation depends on it |
+| `jenkins.url` | `""` | **Required.** Exact host the certificate is issued for, including any path prefix |
 | `jenkins.verifyTls` | `true` | Keep it true |
 | `jenkins.caBundle.existingSecret` | `""` | Only for a private or self-signed CA. Not needed for Let's Encrypt or Tailscale |
 | `jenkins.timeoutSeconds` / `maxRetries` | `30` / `3` | |
@@ -165,12 +165,15 @@ on every release alongside the default image; `edge-minibridge` tracks `main`.
 | --- | --- | --- |
 | `service.type` / `port` | `ClusterIP` / `8000` | |
 | `service.exposeHealthPort` | `true` | `/readyz` reports config state; set false on an externally reachable Service |
-| `ingress.className` | `tailscale` | The template adapts to the class |
-| `ingress.hostname` | `jenkins-mcp` | Machine name for Tailscale, full hostname otherwise |
+| `ingress.enabled` | `false` | No ingress controller is assumed |
+| `ingress.className` | `""` | Empty uses the cluster default. The template adapts to the class |
+| `ingress.hostname` | `""` | Machine name for Tailscale, full hostname otherwise |
+| `ingress.annotations` | `{}` | Controller-specific; see `values.yaml` for examples |
 | `ingress.hostRule` | `null` | `null` decides from the class: Tailscale omits `rules[].host`, others need it |
 | `ingress.tls` / `tlsSecretName` | `true` / `""` | Tailscale issues its own certificate |
 | `networkPolicy.enabled` | `true` | |
-| `tailscale.egress`, `magicDNS`, `proxyGroups` | see `values.yaml` | Disable all three off a tailnet |
+| `tailscale.enabled` | `false` | The whole integration is opt-in. Configuring a sub-feature while it is false fails the render |
+| `tailscale.egress`, `magicDNS`, `proxyGroups` | disabled | See `values.yaml` |
 
 ### Audit
 

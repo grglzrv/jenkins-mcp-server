@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 1.16.0
+    targetRevision: 1.17.0
     helm:
       releaseName: jenkins-mcp
       valuesObject:
@@ -64,6 +64,8 @@ spec:
           annotations:
             tailscale.com/proxy-group: jenkins-mcp-ingress
         tailscale:
+          # Off by default in the chart; this deployment uses the tailnet.
+          enabled: true
           egress:
             enabled: true
             tailnetFQDN: jenkins.example-tailnet.ts.net

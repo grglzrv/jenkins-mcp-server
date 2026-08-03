@@ -1,4 +1,4 @@
-{{- if .Values.tailscale.proxyGroups.create }}
+{{- if and .Values.tailscale.enabled .Values.tailscale.proxyGroups.create }}
 apiVersion: tailscale.com/v1alpha1
 kind: ProxyGroup
 metadata:

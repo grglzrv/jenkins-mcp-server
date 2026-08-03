@@ -1,4 +1,4 @@
-{{- if .Values.tailscale.magicDNS.createDNSConfig }}
+{{- if and .Values.tailscale.enabled .Values.tailscale.magicDNS.createDNSConfig }}
 apiVersion: tailscale.com/v1alpha1
 kind: DNSConfig
 metadata:

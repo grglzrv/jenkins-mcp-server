@@ -1,4 +1,4 @@
-{{- if .Values.tailscale.egress.enabled }}
+{{- if and .Values.tailscale.enabled .Values.tailscale.egress.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
