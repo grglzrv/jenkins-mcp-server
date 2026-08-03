@@ -52,21 +52,19 @@ that core in CI. Reproduce any row with
 | `2.555.x` (`lts-jdk21`) | Current LTS | ✅ **verified** | What CI runs on every change |
 | `2.541.3` | LTS | ✅ **verified** | |
 | **`2.504.3`** | **LTS 2.504** | ✅ **verified** | Latest patch of the 2.504 line |
-| `2.504.1` | LTS 2.504 | ⚙️ **same line as 2.504.3** | Cannot be built today: current plugins require 2.504.3, and the retired per-line update centre that served 2.504.1-era plugins is gone. See below |
+| **`2.504.1`** | **LTS 2.504** | ✅ **verified** | With the pinned plugin set in `integration/jenkins/plugins-legacy.txt` |
 | `2.492.3`, `2.462.3`, `2.401.3`, `2.319.3` | Older LTS | ⚠️ **not verified** | Same obstacle: current plugins outrun the core |
 | Jenkins `1.x` | — | ❌ **not supported** | Different URL scheme, no folders |
 
-**On the 2.504 line specifically.** All 23 tools are verified against
-**2.504.3**. `2.504.1` differs from it only by two patch releases within the
-same LTS line — no API changes, only backported fixes — so the same tools
-exercise the same endpoints.
-
-`2.504.1` cannot be built from scratch today, and that is an ecosystem
-constraint rather than anything about this server: current plugins require
-2.504.3 (`workflow-multibranch` states it explicitly), and the per-line update
-centre that once served 2.504.1-era plugins has been retired, returning 404. A
-running 2.504.1 controller is unaffected — it already holds plugin versions
-installed when they were current.
+**On testing an older controller.** Unpinned plugins resolve to the newest
+release, which now requires a newer core — `workflow-multibranch` demands
+2.504.3, so a 2.504.1 controller cannot install it. The fix is to pin the plugin
+versions your controller actually runs.
+`integration/jenkins/plugins-legacy.txt` does exactly that for 2.504.1, and
+`Dockerfile.legacy` resolves dependencies with `--latest false` so they settle
+on the minimum each pinned plugin needs rather than the newest available. It
+also bootstraps through `init.groovy.d` rather than Configuration as Code, which
+is not installed on every controller.
 
 To verify against your exact controller, dump its plugin versions and pin them:
 
@@ -210,7 +208,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.14.0 \
+  --version 1.15.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -294,6 +292,12 @@ from [`docker/Dockerfile.minibridge`](docker/Dockerfile.minibridge).
 minibridge:
   enabled: true
 ```
+
+The chart selects `ghcr.io/grglzrv/jenkins-mcp-server:<version>-minibridge`,
+published alongside the default image on every release. `edge-minibridge`
+tracks `main`. minibridge itself is pinned to a specific commit rather than
+`latest`, since a proxy in the request path should not change enforcement
+behaviour on an unrelated rebuild.
 
 Credential injection is unchanged with the proxy on or off: `JENKINS_TOKEN`
 always arrives via `secretKeyRef` from a Kubernetes Secret, which External

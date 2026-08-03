@@ -2,6 +2,29 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.15.0] - 2026-08-03
+
+### Added
+
+- **The `-minibridge` image is now built and published.** The chart selected a
+  tag nothing produced, so any minibridge deployment would have failed with
+  ImagePullBackOff. Release publishes it multi-arch alongside the default image,
+  publish-edge builds `edge-minibridge`, and CI builds it on every pull request
+  so a broken `Dockerfile.minibridge` fails review rather than release.
+- `integration/jenkins/plugins-legacy.txt` and an `init.groovy.d` bootstrap,
+  which make an older controller testable: pinned plugin versions with
+  `--latest false` for dependencies, and no dependency on Configuration as Code,
+  which is not installed everywhere.
+
+### Changed
+
+- **Jenkins 2.504.1 is now verified.** All 23 tools pass the full integration
+  suite against it, using the pinned plugin set. Four LTS lines are now verified:
+  2.555.x, 2.541.3, 2.504.3 and 2.504.1.
+- minibridge is pinned to a specific commit rather than `latest`. A proxy in the
+  request path should not change enforcement behaviour on an unrelated rebuild.
+
+
 ## [1.14.0] - 2026-08-03
 
 ### Fixed

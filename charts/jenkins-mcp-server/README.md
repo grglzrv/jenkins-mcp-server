@@ -8,7 +8,7 @@ Deploys the Jenkins MCP server with secure defaults and optional Tailscale Opera
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.14.0 \
+  --version 1.15.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -80,7 +80,9 @@ Enabling more than one fails the render, naming which value to clear.
 
 ### minibridge proxy, optional
 
-Requires the `-minibridge` image, which the chart selects automatically.
+Requires the `-minibridge` image, which the chart selects automatically by
+appending `minibridge.image.tagSuffix` to the app version. That tag is published
+on every release alongside the default image; `edge-minibridge` tracks `main`.
 
 | Key | Default | Notes |
 | --- | --- | --- |

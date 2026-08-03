@@ -12,7 +12,7 @@ to catch the `lts` tag moving.
 | `jenkins/jenkins:lts-jdk21` (2.555.x) | **pass** | The version CI uses for the normal suite |
 | `jenkins/jenkins:2.541.3-jdk21` | **pass** | |
 | `jenkins/jenkins:2.504.3-jdk21` | **pass** | Latest patch of the 2.504 LTS line |
-| `jenkins/jenkins:2.504.1-jdk21` | not buildable | Current plugins require 2.504.3; the retired 2.504 update centre 404s |
+| `jenkins/jenkins:2.504.1-jdk21` | **pass** | With `plugins-legacy.txt` pinned to the versions that controller runs |
 | `jenkins/jenkins:2.492.3-jdk21`, `2.462.3-jdk21` | not buildable | Same |
 | `jenkins/jenkins:2.401.3`, `2.319.3` | not buildable | Same |
 
