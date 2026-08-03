@@ -40,73 +40,37 @@ these at either layer.
 
 ## Jenkins compatibility
 
-### Verified by the integration suite
-
-Each row was produced by running the full end-to-end suite — create a Pipeline
-job, trigger it, stream the console, stop the build, delete the job — against
-that core in CI. Reproduce any row with
-[`compatibility.yml`](.github/workflows/compatibility.yml).
-
-| Jenkins core | Line | Result | Notes |
-| --- | --- | --- | --- |
-| `2.555.x` (`lts-jdk21`) | Current LTS | ✅ **verified** | What CI runs on every change |
-| `2.541.3` | LTS | ✅ **verified** | |
-| **`2.504.3`** | **LTS 2.504** | ✅ **verified** | Latest patch of the 2.504 line |
-| **`2.504.1`** | **LTS 2.504** | ✅ **verified** | With the pinned plugin set in `integration/jenkins/plugins-legacy.txt` |
-| `2.492.3`, `2.462.3`, `2.401.3`, `2.319.3` | Older LTS | ⚠️ **not verified** | Same obstacle: current plugins outrun the core |
-| Jenkins `1.x` | — | ❌ **not supported** | Different URL scheme, no folders |
-
-**On testing an older controller.** Unpinned plugins resolve to the newest
-release, which now requires a newer core — `workflow-multibranch` demands
-2.504.3, so a 2.504.1 controller cannot install it. The fix is to pin the plugin
-versions your controller actually runs.
-`integration/jenkins/plugins-legacy.txt` does exactly that for 2.504.1, and
-`Dockerfile.legacy` resolves dependencies with `--latest false` so they settle
-on the minimum each pinned plugin needs rather than the newest available. It
-also bootstraps through `init.groovy.d` rather than Configuration as Code, which
-is not installed on every controller.
-
-To verify against your exact controller, dump its plugin versions and pin them:
-
-```bash
-JENKINS_URL=... JENKINS_USERNAME=... JENKINS_TOKEN=... \
-  ./scripts/dump_jenkins_plugins.sh > integration/jenkins/plugins.txt
-```
-
-then run the suite against your core:
-
-```bash
-JENKINS_IMAGE=jenkins/jenkins:2.504.1-jdk21 \
-JENKINS_DOCKERFILE=Dockerfile.legacy \
-./integration/run.sh
-```
-
-### What the server needs
-
-Every endpoint it calls has been stable in Jenkins core since early 2.x, so a
-2.x controller is expected to work. That is reasoning from the endpoint list,
-not a measurement — the table above is the measurement.
-
-| Requirement | Detail |
+| Jenkins | Status |
 | --- | --- |
-| Authentication | Username plus **API token**, never the account password |
-| Required for folder paths | `cloudbees-folder` |
-| Required for Pipeline tools | `workflow-aggregator` |
-| Required for multibranch tools | `workflow-multibranch`, `branch-api`, `git` |
-| Core-only Jenkins | Freestyle and node tools still work |
+| 2.555.x (current LTS), 2.541.3, 2.504.3, 2.504.1 | Verified end to end in CI |
+| Other 2.x releases | Supported; not covered by CI |
+| 1.x | Not supported |
 
-### Known blockers
+Run the current LTS line where possible: it is the only line receiving security
+backports.
 
-The two that most often bite a large installation:
+### Requirements
 
-- **Strict Crumb Issuer with *check client IP*** breaks every write. The crumb
-  is bound to the source address, which changes behind SNAT or an egress proxy.
-- **`Job/Read` without `Job/ExtendedRead`** breaks `get_job_config` only.
-  Reading `config.xml` needs extended read.
+| | |
+| --- | --- |
+| Authentication | Username and **API token**. Do not use the account password |
+| Folder paths such as `AI/nightly` | `cloudbees-folder` |
+| Pipeline tools, and `term`/`kill` on `stop_build` | `workflow-aggregator` |
+| Multibranch tools | `workflow-multibranch`, `branch-api`, `git` |
 
-Full tables of plugin, permission, proxy, job-configuration and scale
-considerations are in
-[docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
+A missing plugin disables the tools that depend on it. The rest, including all
+freestyle and node tools, continue to work on a core-only controller.
+
+### Known issues
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Reads succeed, every write returns 403 | Strict Crumb Issuer with *check client IP*; the crumb is bound to a source address that changes behind SNAT or an egress proxy | Disable the IP check, or exclude the MCP server |
+| `get_job_config` fails, everything else works | The account has `Job/Read` but not `Job/ExtendedRead` | Grant `Job/ExtendedRead` |
+| `trigger_build` rejected on a parameterised job | Triggered without parameters | Pass `parameters`, an empty object is enough |
+
+Plugin, permission, proxy and scale details, and how to verify against your own
+controller, are in [docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
 
 ## Capabilities
 

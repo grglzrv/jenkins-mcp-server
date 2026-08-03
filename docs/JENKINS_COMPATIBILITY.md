@@ -1,48 +1,51 @@
 # Jenkins compatibility
 
-## Measured results
-
-`.github/workflows/compatibility.yml` runs the full integration suite against
-several Jenkins cores and records the outcome. Run it on demand from the Actions
-tab, optionally with `extra_image` to test a specific tag. It also runs monthly,
-to catch the `lts` tag moving.
-
-| Jenkins core | Result | Notes |
-| --- | --- | --- |
-| `jenkins/jenkins:lts-jdk21` (2.555.x) | **pass** | The version CI uses for the normal suite |
-| `jenkins/jenkins:2.541.3-jdk21` | **pass** | |
-| `jenkins/jenkins:2.504.3-jdk21` | **pass** | Latest patch of the 2.504 LTS line |
-| `jenkins/jenkins:2.504.1-jdk21` | **pass** | With `plugins-legacy.txt` pinned to the versions that controller runs |
-| `jenkins/jenkins:2.492.3-jdk21`, `2.462.3-jdk21` | not buildable | Same |
-| `jenkins/jenkins:2.401.3`, `2.319.3` | not buildable | Same |
-
-"Not buildable" is a statement about assembling a test image in August 2026,
-not about this server. Those runs fail before the MCP server starts: current
-plugins declare a minimum core newer than the one under test, and the per-line
-update centres that once served matching plugin versions have been retired and
-return 404. A controller already running one of those versions is unaffected,
-because it holds plugin versions installed when they were current.
-
-What this establishes: **all 23 tools are verified against three LTS lines,
-2.555.x, 2.541.3 and 2.504.3.** For a core on the same line as one of those,
-the difference is backported fixes rather than API changes. For an older line,
-pin the plugin versions your controller actually runs and run the suite against
-it — that tests the combination you operate, which is worth more than any
-generic matrix.
-
 ## Supported versions
 
-| | Version | Notes |
-| --- | --- | --- |
-| **Verified in CI** | `jenkins/jenkins:lts-jdk21` | The integration suite builds this image on every change to `src/`, and exercises job creation, triggering, console streaming, stopping and deletion end to end. At the time of writing that tag resolves to the **2.555.x** LTS line. |
-| **Recommended** | Current LTS line | Only the most recent LTS line receives security backports. |
-| **Unverified** | Older Jenkins 2.x | Every endpoint this server calls has been part of core since early 2.x, so an older core will most likely work, but none has been demonstrated. See the measured results above. |
-| **Not supported** | Jenkins 1.x | Different URL scheme and no folder support. |
+| Jenkins core | Status |
+| --- | --- |
+| `2.555.x` (`lts-jdk21`) | Verified. Runs on every change to `src/` |
+| `2.541.3` | Verified |
+| `2.504.3` | Verified |
+| `2.504.1` | Verified, using `integration/jenkins/plugins-legacy.txt` |
+| Other 2.x | Supported. Every endpoint used has been stable in core since early 2.x, but these are not covered by CI |
+| 1.x | Not supported. Different URL scheme, no folders |
 
-The honest position on older releases: the REST endpoints used here are old and
-stable, so a much older 2.x will probably work. It is not tested, and anything
-outside the current LTS line is unpatched, so it is not recommended. If you are
-on something older and it works, that is fortunate rather than guaranteed.
+Prefer the current LTS line: it is the only one receiving security backports.
+
+`.github/workflows/compatibility.yml` produces these results. Run it from the
+Actions tab, optionally with `extra_image` to test a specific tag; it also runs
+monthly to catch the `lts` tag moving.
+
+### Testing a core older than the current plugin set
+
+Plugins declare a minimum core version, and current releases of
+`workflow-multibranch`, `branch-api` and the `workflow-*` set require a newer
+core than several supported Jenkins versions, so installing them on an older
+controller fails.
+
+Pin the plugin versions your controller runs instead.
+`integration/jenkins/Dockerfile.legacy` resolves dependencies with
+`--latest false` so they settle on the minimum each pinned plugin requires, and
+bootstraps through `init.groovy.d` rather than Configuration as Code, which is
+not installed on every controller.
+
+## Verifying against your own controller
+
+```bash
+JENKINS_URL=https://jenkins.example.com \
+JENKINS_USERNAME=me \
+JENKINS_TOKEN=<api-token> \
+  ./scripts/dump_jenkins_plugins.sh > integration/jenkins/plugins-legacy.txt
+
+JENKINS_IMAGE=jenkins/jenkins:<your-version>-jdk21 \
+JENKINS_DOCKERFILE=Dockerfile.legacy \
+  ./integration/run.sh
+```
+
+`dump_jenkins_plugins.sh` reads `/pluginManager/api/json`, writes `name:version`
+lines, skips disabled plugins, and reports on stderr any plugin the suite needs
+that is not installed. Pass `--all` for every plugin.
 
 ## What the server actually calls
 
@@ -88,70 +91,19 @@ The job XML this server generates references plugins **without version pins**
 accepts whatever version is installed. There is no plugin version floor imposed
 by this server.
 
-## Things that actually break it
+## Verified as non-issues
 
-Ordered by how often they bite in practice.
+| Configuration | Behaviour |
+| --- | --- |
+| Jenkins under a context path, e.g. `https://ci.example.com/jenkins` | Works. Put the full prefix in `JENKINS_URL` |
+| CSRF protection disabled | Works. The crumb issuer is probed once and writes proceed without a crumb |
 
-**A reverse proxy stripping headers.** The server sends `Authorization` for auth
-and `Jenkins-Crumb` for CSRF. A proxy that drops either produces 401 or 403 on
-every write while reads keep working, which is a confusing signature. Check the
-proxy forwards both before suspecting the server.
-
-**Insufficient Jenkins permissions.** The commonest cause of a tool failing while
-its neighbours succeed. See the permission table below. Jenkins permissions are
-the outer boundary: no MCP setting can grant what Jenkins denies.
-
-**Plugin versions requiring a newer core.** Not a runtime problem, but it blocks
-building a test environment: current `workflow-multibranch`, `branch-api` and
-`git-client` require Jenkins **2.504.3**, so a 2.504.1 controller cannot install
-them. If your controller already runs these plugins, this does not affect you.
-
-**Script Security approval.** `create_pipeline_job` writes `<sandbox>true</sandbox>`.
-On a controller with strict script approval, the created job may need an
-administrator to approve the script before it runs. The job is created either
-way; the build is what stalls.
-
-**Folder-scoped or non-Jenkins job types.** Anything created outside
-`cloudbees-folder` semantics, and job types from plugins this server does not
-model, are still readable but cannot be created through the typed tools. Use
-`create_job_from_xml` with your own `config.xml` for those.
-
-**Not a problem, verified:** a Jenkins served under a context path such as
-`https://ci.example.com/jenkins` works. The client merges the base path
-correctly, so `JENKINS_URL` may include one. A controller with CSRF protection
-disabled also works: the crumb issuer is probed once, and writes proceed without
-a crumb header.
-
-## Plugins and configurations that break tools
-
-Grouped by what actually goes wrong. Every entry was derived from what the
-client code does, not from guesswork about Jenkins in general.
-
-### Missing plugins
-
-| Missing | Breaks | Symptom |
-| --- | --- | --- |
-| `cloudbees-folder` | Any nested job path such as `AI/nightly` | 404 on every folder path; only top-level jobs resolve |
-| `workflow-aggregator` (Pipeline) | `create_pipeline_job`; `term` and `kill` modes of `stop_build` | Job type not recognised on create; `stop` still works |
-| `workflow-multibranch` + `branch-api` | `create_multibranch_pipeline`, `scan_multibranch_pipeline` | Job type not recognised |
-| `git` / `git-client` | Multibranch jobs with a Git source | Create succeeds, scanning finds nothing |
-
-Everything else keeps working. A missing plugin fails one tool, not the server.
-
-### Permissions that look like bugs
-
-| Configuration | Breaks | Why |
-| --- | --- | --- |
-| Account has `Job/Read` but not `Job/ExtendedRead` or `Job/Configure` | `get_job_config` | Reading `config.xml` needs extended read; plain read is not enough |
-| Folder-level authorisation without `Job/Create` on the target folder | `create_*`, `copy_job` | Permission is evaluated on the parent folder, not the root |
-| `Job/Build` without `Job/Cancel` | `stop_build`, `cancel_queue_item` | Triggering and cancelling are separate permissions |
-| Agent permissions not granted | `set_node_offline` | Needs `Agent/Disconnect` |
+## Configurations that break tools
 
 ### CSRF and proxies
 
 | Configuration | Effect |
 | --- | --- |
-| CSRF protection disabled | Handled. The client detects the 404 from `/crumbIssuer`, caches that fact, and stops asking |
 | Standard crumb issuer | Works. The crumb is fetched once, reused, and reissued once automatically if Jenkins rotates the session |
 | **Strict Crumb Issuer** with *check client IP* enabled | **Breaks writes.** The crumb is bound to the source IP. Behind SNAT, an egress proxy, or with several replicas, the write can arrive from a different address than the crumb request. Disable the IP check, or exclude the MCP server's identity |
 | Reverse proxy stripping unknown request headers | **Breaks writes.** The crumb travels in a header named by Jenkins, commonly `Jenkins-Crumb`. It must reach Jenkins intact |
@@ -207,6 +159,15 @@ Jenkins permissions are the outer boundary. The server's `MCP_ALLOW_*` settings
 and the optional minibridge tool policy narrow things further, but they cannot
 grant anything Jenkins itself denies. Restricting the Jenkins account is the
 control that still holds if the server is misconfigured.
+
+Common mistakes, where one tool fails while its neighbours succeed:
+
+| Granted | Missing | Result |
+| --- | --- | --- |
+| `Job/Read` | `Job/ExtendedRead` | `get_job_config` fails; reading `config.xml` needs extended read |
+| `Job/Create` at the root | `Job/Create` on the target folder | `create_*` and `copy_job` fail; permission is evaluated on the parent folder |
+| `Job/Build` | `Job/Cancel` | `stop_build` and `cancel_queue_item` fail |
+| Job permissions | `Agent/Disconnect` | `set_node_offline` fails |
 
 ## Java
 

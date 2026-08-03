@@ -61,9 +61,8 @@ class Settings(BaseSettings):
     def _check_tls_settings(self) -> Settings:
         """Reject a CA bundle combined with verification disabled.
 
-        `verify` returns the bundle path when one is set, which silently turned
-        verification back on for anyone who had asked for it off. Either choice
-        would be a guess about intent, so fail instead of guessing.
+        The two settings contradict each other, and honouring either one would
+        be a guess about intent, so fail instead of guessing.
         """
         if self.jenkins_ca_bundle and not self.jenkins_verify_tls:
             raise ValueError(

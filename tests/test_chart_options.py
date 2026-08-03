@@ -535,12 +535,14 @@ def test_autoscaling_argocd_example_ignores_replicas() -> None:
 def test_compatibility_matrix_lists_concrete_versions() -> None:
     """The README must state which cores were actually tested, not just 'LTS'."""
     readme = (ROOT / "README.md").read_text()
+    section = readme.split("## Jenkins compatibility")[1].split("## Capabilities")[0]
+    # The versions actually exercised end to end must be named.
     for version in ["2.555", "2.541.3", "2.504.3", "2.504.1"]:
-        assert version in readme, f"{version} missing from the compatibility matrix"
-    # Unverified rows must be labelled as such rather than implied compatible.
-    assert "not verified" in readme
-    assert "not verified" not in readme.split("## Jenkins compatibility")[0]
-    # 2.50 is not a published tag and must not appear as a testable version.
+        assert version in section, f"{version} missing from the compatibility matrix"
+    # Untested and unsupported releases must be distinguished from verified ones.
+    assert "not covered by CI" in section
+    assert "Not supported" in section
+    # 2.50 is not a published Docker tag and must not appear as a version.
     assert "| `2.50` |" not in readme
 
 

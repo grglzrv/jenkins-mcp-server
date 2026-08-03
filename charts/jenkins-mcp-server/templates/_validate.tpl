@@ -2,9 +2,9 @@
 Cross-field validation that would otherwise only surface at runtime.
 */}}
 {{- define "jenkins-mcp-server.validate" -}}
-{{- /* Credential sources are mutually exclusive. Two of the three combinations
-       previously resolved silently, so an operator could set existingSecret and
-       have the chart quietly read from somewhere else. */ -}}
+{{- /* Credential sources are mutually exclusive: configuring more than one
+       would leave the chart reading from a Secret the operator did not
+       intend. */ -}}
 {{- $creds := .Values.jenkins.credentials -}}
 {{- if and .Values.externalSecret.enabled $creds.create }}
 {{- fail "externalSecret.enabled and jenkins.credentials.create are mutually exclusive: both produce a Secret named <fullname>-credentials and External Secrets would fight Helm for ownership. Pick one." }}
@@ -20,7 +20,7 @@ Cross-field validation that would otherwise only surface at runtime.
        issued certificate (Let's Encrypt, Tailscale) needs no bundle at all. */ -}}
 {{- $ca := .Values.jenkins.caBundle -}}
 {{- if and (not .Values.jenkins.verifyTls) (or $ca.existingSecret .Values.jenkins.caBundlePath) }}
-{{- fail "jenkins.verifyTls is false but a CA bundle is configured. A CA bundle only has meaning when verification is enabled, and setting both previously turned verification back on silently. Remove the bundle to disable verification, or set verifyTls: true to verify against it." }}
+{{- fail "jenkins.verifyTls is false but a CA bundle is configured. A CA bundle only has meaning when verification is enabled. Remove the bundle to disable verification, or set verifyTls: true to verify against it." }}
 {{- end }}
 {{- if and $ca.existingSecret .Values.jenkins.caBundlePath }}
 {{- fail (printf "jenkins.caBundlePath (%s) and jenkins.caBundle.existingSecret (%s) are both set. caBundlePath wins and the mounted Secret is ignored. Use one." .Values.jenkins.caBundlePath $ca.existingSecret) }}

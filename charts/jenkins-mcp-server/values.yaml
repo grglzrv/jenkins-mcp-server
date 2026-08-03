@@ -162,8 +162,8 @@ jenkins:
   #
   # Do not reach for verifyTls: false when this fails. Add the CA instead: that
   # keeps verification fully on while trusting exactly one extra issuer.
-  # Setting verifyTls: false together with a bundle fails the render, because it
-  # previously turned verification back on silently.
+  # Setting verifyTls: false together with a bundle fails the render: the two
+  # settings contradict each other.
 
   # Path to a CA file that already exists in the image or arrives via
   # extraVolumes. Mutually exclusive with caBundle.existingSecret.
