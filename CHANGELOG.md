@@ -2,6 +2,25 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.13.1] - 2026-08-03
+
+### Changed
+
+- All 23 tools are now verified against **Jenkins 2.504.3**, the latest patch of
+  the 2.504 LTS line, alongside 2.555.x and 2.541.3. The matrix records three
+  verified LTS lines.
+- Removed `2.50` from the matrix and docs. It is not a published Docker tag, so
+  presenting it as a testable version was misleading.
+- Documented why 2.504.1 cannot be built from scratch: current plugins require
+  2.504.3, and the per-line update centres that once served 2.504.1-era plugins
+  have been retired and return 404. That is a constraint on assembling a test
+  image, not a property of this server; a running 2.504.1 controller is
+  unaffected.
+
+### Fixed
+
+- The 1.13.0 entry appeared twice with different content. Merged into one.
+
 ## [1.13.0] - 2026-08-03
 
 ### Fixed
@@ -23,8 +42,6 @@ All notable changes are documented here. The project follows Semantic Versioning
   `Job/Read` without `Job/ExtendedRead` breaks `get_job_config` alone.
 - Verified that a Jenkins served under a path prefix, such as
   `https://ci.corp/jenkins`, keeps that prefix when the client builds URLs.
-
-## [1.13.0] - 2026-08-03
 
 ### Fixed
 
