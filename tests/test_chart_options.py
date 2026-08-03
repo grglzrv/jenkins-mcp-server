@@ -625,3 +625,29 @@ def test_helm_test_pod_uses_the_effective_port_and_path() -> None:
     assert 'jenkins-mcp-server.readyPath' in text
     # No test pod when the health port is not published on the Service.
     assert ".Values.service.exposeHealthPort" in text
+
+
+def test_numeric_env_values_are_not_rendered_in_scientific_notation() -> None:
+    """Helm renders 1000000 as "1e+06" without an int cast.
+
+    The server rejects that at startup, so every pod crash-looped on default
+    values. Only a real install surfaced it; rendering looked fine.
+    """
+    cm = (CHART / "templates/configmap.yaml").read_text()
+    for key in ["maxLogBytes", "mcp.port", "healthPort", "maxRetries"]:
+        line = next(ln for ln in cm.splitlines() if key in ln)
+        assert "| int |" in line or "printf" in line, f"{key} needs an int cast: {line}"
+
+
+def test_settings_reject_scientific_notation_so_the_cast_matters() -> None:
+    """Guards the assumption behind the fix above."""
+    from jenkins_mcp_server.config import Settings
+
+    base = dict(
+        JENKINS_URL="https://j.test", JENKINS_USERNAME="u", JENKINS_TOKEN="t"
+    )
+    assert Settings(**base, MCP_MAX_LOG_BYTES="1000000").max_log_bytes == 1000000
+    import pytest
+
+    with pytest.raises(Exception):
+        Settings(**base, MCP_MAX_LOG_BYTES="1e+06")

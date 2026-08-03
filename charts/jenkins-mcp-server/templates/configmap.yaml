@@ -1,14 +1,17 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  # Numeric values pass through `int` before quoting. Helm renders a large
+  # number such as 1000000 as "1e+06" otherwise, which the server rejects at
+  # startup, and every pod crash-loops.
   name: {{ include "jenkins-mcp-server.fullname" . }}
   labels:
     {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
 data:
   JENKINS_URL: {{ .Values.jenkins.url | quote }}
   JENKINS_VERIFY_TLS: {{ .Values.jenkins.verifyTls | quote }}
-  JENKINS_TIMEOUT_SECONDS: {{ .Values.jenkins.timeoutSeconds | quote }}
-  JENKINS_MAX_RETRIES: {{ .Values.jenkins.maxRetries | quote }}
+  JENKINS_TIMEOUT_SECONDS: {{ printf "%v" .Values.jenkins.timeoutSeconds | quote }}
+  JENKINS_MAX_RETRIES: {{ .Values.jenkins.maxRetries | int | quote }}
   {{- if .Values.jenkins.caBundlePath }}
   JENKINS_CA_BUNDLE: {{ .Values.jenkins.caBundlePath | quote }}
   {{- else if .Values.jenkins.caBundle.existingSecret }}
@@ -16,10 +19,10 @@ data:
   {{- end }}
   MCP_TRANSPORT: {{ .Values.mcp.transport | quote }}
   MCP_HOST: {{ .Values.mcp.host | quote }}
-  MCP_PORT: {{ .Values.mcp.port | quote }}
+  MCP_PORT: {{ .Values.mcp.port | int | quote }}
   MCP_PATH: {{ .Values.mcp.path | quote }}
   MCP_HEALTH_HOST: {{ .Values.mcp.healthHost | quote }}
-  MCP_HEALTH_PORT: {{ .Values.mcp.healthPort | quote }}
+  MCP_HEALTH_PORT: {{ .Values.mcp.healthPort | int | quote }}
   MCP_READ_ONLY: {{ .Values.mcp.readOnly | quote }}
   MCP_ALLOW_JOB_WRITE: {{ .Values.mcp.allowJobWrite | quote }}
   MCP_ALLOW_BUILD_WRITE: {{ .Values.mcp.allowBuildWrite | quote }}
@@ -30,7 +33,7 @@ data:
   MCP_ALLOW_JOB_UPDATE: {{ .Values.mcp.allowJobUpdate | quote }}
   MCP_ALLOW_BUILD_STOP: {{ .Values.mcp.allowBuildStop | quote }}
   MCP_ALLOWED_JOBS: {{ .Values.mcp.allowedJobs | quote }}
-  MCP_MAX_LOG_BYTES: {{ .Values.mcp.maxLogBytes | quote }}
+  MCP_MAX_LOG_BYTES: {{ .Values.mcp.maxLogBytes | int | quote }}
   {{- if .Values.audit.fileEnabled }}
   MCP_AUDIT_LOG_PATH: {{ .Values.audit.path | quote }}
   {{- end }}
