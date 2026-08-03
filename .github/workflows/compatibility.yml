@@ -20,6 +20,9 @@ permissions:
 jobs:
   matrix:
     name: ${{ matrix.image }}
+    # A targeted run against extra_image skips the full sweep, so testing one
+    # specific core does not take twenty minutes of unrelated jobs with it.
+    if: inputs.extra_image == ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Old cores are expected to fail; record the result instead of stopping.
@@ -83,6 +86,19 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install 'mcp>=2.0.0,<3'
-      - env:
+      - name: Run the integration suite against ${{ inputs.extra_image }}
+        env:
           JENKINS_IMAGE: ${{ inputs.extra_image }}
-        run: ./integration/run.sh
+        run: |
+          set +e
+          ./integration/run.sh > /tmp/out.txt 2>&1
+          code=$?
+          set -e
+          tail -n 120 /tmp/out.txt
+          if [ "$code" -ne 0 ]; then
+            reason="$(grep -hoE '(AssertionError|Exception|ERROR:|error:|no plugin installer|Unsupported|requires Jenkins|manifest unknown|not found|Cannot|Failed to|did not|denied)[^\r]{0,150}' /tmp/out.txt | tail -4 | tr '\n' ' ~ ')"
+            echo "::error::${JENKINS_IMAGE} FAILED :: ${reason:-no recognisable error line}"
+          else
+            echo "::notice::${JENKINS_IMAGE} PASSED the full integration suite"
+          fi
+          exit "$code"
