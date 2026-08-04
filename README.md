@@ -200,7 +200,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.20.0 \
+  --version 1.21.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -465,7 +465,7 @@ So `Chart.appVersion` *is* the image tag. Bumping the version moves the chart an
 the image together by construction.
 
 ```bash
-NEW_VERSION=1.20.0
+NEW_VERSION=1.21.0
 make version VERSION="$NEW_VERSION"     # prepares notes and rewrites every pin
 git commit -am "chore(release): prepare v$NEW_VERSION"
 git push origin "release/v$NEW_VERSION"
@@ -502,7 +502,14 @@ agree:
 test "${version}" = "$(cat VERSION)"   # requested release must match VERSION
 python scripts/check_version.py        # every versioned artifact must agree
 python scripts/changelog.py validate   # release notes must be complete
+python scripts/check_release_bump.py "$(git merge-base HEAD origin/main)"
 ```
+
+The release-bump check covers application/package inputs, both runtime images,
+functional chart files, Compose, production manifests, Argo CD applications,
+and shipped values. It requires a strictly newer SemVer and reports every path
+that needs the release. Documentation, tests, integration fixtures, and
+workflow-only changes do not force a version bump.
 
 Only after that gate passes does it build the multi-architecture image (tagged
 with the full version, major/minor, major, and `latest`), package the chart at the same version, push
@@ -511,7 +518,8 @@ with provenance and SBOM metadata.
 
 A matching annotated tag can still trigger the same idempotent workflow as a
 manual recovery path. If the GitHub Release already exists, the run validates
-the version and safely skips republication.
+the version and source tag before safely skipping republication. Release runs
+are serialized so a recovery tag cannot race automatic publication.
 
 Two consequences worth knowing:
 

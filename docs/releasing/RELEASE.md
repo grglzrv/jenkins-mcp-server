@@ -54,7 +54,7 @@ reviewed changelog entry is the text published on GitHub.
 ## Prepare a release
 
 ```bash
-NEW_VERSION=1.20.0
+NEW_VERSION=1.21.0
 git checkout -b "release/v$NEW_VERSION"
 # Complete every [Unreleased] category in CHANGELOG.md first.
 make version VERSION="$NEW_VERSION"
@@ -68,6 +68,11 @@ git push origin "release/v$NEW_VERSION"
 ```
 
 Open a pull request to `main` and merge only after every required check passes.
+CI compares the complete pull request against its base. Any change to the
+server package, runtime images, functional chart files, Compose deployment,
+production manifests, Argo CD applications, or shipped values requires a
+strictly newer `VERSION`; documentation, tests, integration fixtures, and
+workflow-only changes are exempt.
 
 ## Publish
 
@@ -92,9 +97,16 @@ The `Release` workflow:
 6. creates a GitHub Release from the curated changelog entry, containing the
    Python distribution and packaged chart.
 
+Every cluster smoke test completes before steps 3 and 4 publish externally.
+The workflow also serializes release runs, verifies an existing tag resolves to
+the requested source commit, and refuses a new version that is not newer than
+the current latest GitHub Release.
+
 ## Release review checklist
 
 - `Chart.yaml` `version` and `appVersion` equal `VERSION` and the image tag.
+- The `Shipped changes bump VERSION` check reports no unversioned deployable
+  paths and confirms the proposed SemVer is greater than the base version.
 - All Helm, Kubernetes, Kustomize, Argo CD, Docker, Compose, examples, and
   README pins were changed by `make version`, never by hand in isolation.
 - Every `[Unreleased]` category was reviewed and contains user-facing text or

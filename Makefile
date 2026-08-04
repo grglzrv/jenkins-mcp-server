@@ -22,7 +22,7 @@ coverage:
 
 build:
 	python -m build
-	twine check dist/*
+	twine check dist/*.whl dist/*.tar.gz
 
 verify-version:
 	python scripts/check_version.py
