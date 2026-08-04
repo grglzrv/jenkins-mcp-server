@@ -44,6 +44,29 @@ jobs:
       - name: Validate Python package metadata
         run: twine check dist/*
 
+  version-bump:
+    # The chart's image tag follows appVersion, which follows VERSION, and the
+    # release workflow triggers on a VERSION change. A change under src/,
+    # charts/ or docker/ that does not bump VERSION is therefore never
+    # published, and nothing else in CI notices.
+    name: Shipped changes bump VERSION
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Compare against the base
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base="${{ github.event.before }}"
+          fi
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "no usable base commit; skipping"
+            exit 0
+          fi
+          ./scripts/check_release_bump.sh "$base"
+
   policy:
     name: Guardrail policy
     runs-on: ubuntu-latest

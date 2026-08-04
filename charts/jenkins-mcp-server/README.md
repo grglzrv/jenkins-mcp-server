@@ -286,19 +286,31 @@ kubectl -n jenkins-mcp get ingress jenkins-mcp-jenkins-mcp-server \
 
 ## Chart and application versions
 
-The chart `version` and `appVersion` are intentionally released together, and
-`appVersion` is the default container image tag. Complete every professional
-category under `[Unreleased]` in the repository changelog, then run:
+`version` and `appVersion` are deliberately kept equal, and `image.tag` is left
+empty so the chart uses `appVersion` as its image tag. A chart can therefore
+only ever deploy the application it was released with.
 
 ```bash
-NEW_VERSION=1.20.0
-make version VERSION="$NEW_VERSION"
-make verify-version
+make version VERSION=1.21.0   # rewrites every version pin in the repository
+make verify-version           # asserts they all agree
 ```
 
-This promotes the curated release notes and updates every pinned Helm install,
-image, Kustomize, Argo CD, Compose, example, and README reference in the
-repository. CI scans for unmanaged stale pins and rejects an incomplete release
-entry, so a chart or application version cannot be published in isolation. See
-the [release process](../../docs/releasing/RELEASE.md) for category guidance and
-the full review checklist.
+Merging that to `main` triggers the release: the workflow watches the `VERSION`
+path, then publishes the image, the `-minibridge` variant and the chart, all at
+that version.
+
+**Why not decouple them.** Helm allows the two to move independently, and for a
+chart that packages third-party software they should. Here the chart and the
+application live in one repository, are tested together, and ship together: the
+k3s smoke test installs the chart with the image built from the same commit, so
+"chart 1.20.1 with appVersion 1.20.0" is a combination nothing has ever
+exercised. Coupling means the version you deploy is the version that was tested.
+
+The cost is a version increment for a chart-only fix. That is cheap: rebuilding
+an identical image under a new tag takes a few minutes of CI and changes
+nothing for anyone who pins a version.
+
+**What catches a forgotten bump.** A change under `src/`, `charts/` or `docker/`
+that leaves `VERSION` alone would never be published, because the release only
+triggers on a `VERSION` change. CI fails such a pull request and names the files
+involved. Documentation, examples and workflow changes are exempt.

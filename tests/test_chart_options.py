@@ -867,3 +867,28 @@ def test_chart_readme_service_name_matches_the_template() -> None:
     readme = (CHART / "README.md").read_text()
     # helm fullname for release jenkins-mcp and chart jenkins-mcp-server.
     assert "jenkins-mcp-jenkins-mcp-server" in readme
+
+
+def test_shipped_changes_require_a_version_bump() -> None:
+    """A chart or source change without a bump is never published.
+
+    The release workflow triggers on a VERSION change, and the chart's image
+    tag follows appVersion, so an unbumped change silently ships nothing.
+    """
+    script = ROOT / "scripts/check_release_bump.sh"
+    assert script.is_file() and script.stat().st_mode & 0o111
+    body = script.read_text()
+    for path in ["src/", "charts/jenkins-mcp-server/", "docker/"]:
+        assert path in body, f"{path} should require a bump"
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    assert "version-bump" in ci["jobs"]
+
+
+def test_chart_version_and_app_version_move_together() -> None:
+    """Deliberate coupling: the chart is only ever tested against its own image."""
+    chart = yaml.safe_load((CHART / "Chart.yaml").read_text())
+    version = (ROOT / "VERSION").read_text().strip()
+    assert chart["version"] == version
+    assert str(chart["appVersion"]).strip('"') == version
+    # image.tag empty means the chart uses appVersion, so the pair cannot drift.
+    assert values()["image"]["tag"] == ""
