@@ -34,7 +34,7 @@ jobs:
       - name: Validate source
         run: |
           pip install -e '.[dev]'
-          python scripts/check_version.py
+          make verify-version
           ruff check .
           pytest -q
 

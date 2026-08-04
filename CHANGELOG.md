@@ -1,21 +1,68 @@
 # Changelog
 
-All notable changes are documented here. The project follows Semantic Versioning.
+All notable changes are documented here. The project follows Semantic Versioning
+and uses the categories below for every release. Empty categories are retained
+with an explicit `None` so compatibility, security, upgrade impact, and known
+limitations are never left ambiguous. GitHub Release notes are rendered directly
+from the matching version entry after CI validates it.
 
 ## [Unreleased]
 
-### Changed
+### Highlights
 
-- Release versioning now has one canonical inventory covering all 22
+- Release preparation now treats deployable version pins and professional
+  release notes as one validated contract.
+
+### New Features
+
+- A changelog tool can prepare a release entry, validate every required
+  category, and render the exact curated notes used by GitHub Releases.
+
+### Improvements
+
+- Release versioning has one canonical inventory covering all 22
   application-version pins across 17 files, including image tags, Helm,
   Kustomize, Argo CD, Compose, README install commands, and release examples.
 - CI now scans every repository text file for stale deployable version pins, so
   a newly added manifest or document cannot silently remain on an old image or
   chart version.
+- Release documentation and the pull request checklist now explain how to write
+  highlights, compatibility impact, security notes, known issues, and upgrade
+  instructions before changing the application/chart version.
+
+### Bug Fixes
+
+- GitHub Releases no longer derive their primary notes from an uncurated commit
+  list; they publish the validated entry from this changelog.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- None.
+
+### Upgrade Notes
+
+- No runtime migration is required. Release maintainers must complete every
+  changelog category before `make version` can prepare a new release.
 
 ## [1.19.0] - 2026-08-04
 
-### Added
+### Highlights
+
+- Jenkins MCP Server can now run behind a hardened, single-container
+  Minibridge policy boundary with destructive tools blocked and the remaining
+  tool surface smoke-tested through the proxy.
+- Helm, Argo CD, Kubernetes, Docker, Compose, and operator documentation were
+  audited together so the published `1.19.0` image and chart remain aligned.
+
+### New Features
 
 - Per-field Jenkins credential Secret references, allowing the username and API
   token to come from independently managed Secrets without supporting unsafe
@@ -25,7 +72,15 @@ All notable changes are documented here. The project follows Semantic Versioning
 - A hardened `compose.yaml` for either the plain server or the single-container
   Minibridge variant with destructive tools blocked.
 
-### Fixed
+### Improvements
+
+- Documentation, Argo CD guidance, release instructions, raw manifest paths,
+  Docker examples, and version synchronization were audited and refreshed.
+- Secret-backed configuration follows the chart convention consistently across
+  Jenkins credentials, Minibridge authentication, HTTP policer credentials,
+  CA bundles, and encrypted TLS private-key passphrases.
+
+### Bug Fixes
 
 - Remote HTTP policer settings now use the Minibridge v0.8.0 environment names:
   `MINIBRIDGE_POLICER_HTTP_URL`, `MINIBRIDGE_POLICER_HTTP_BEARER_TOKEN`, and
@@ -33,8 +88,29 @@ All notable changes are documented here. The project follows Semantic Versioning
 - Raw Minibridge deployments now mount a writable XDG config directory and use
   `/tmp` for transient MCP configuration, so they work with a read-only root
   filesystem like the Helm deployment.
-- Documentation, Argo CD guidance, release instructions, raw manifest paths,
-  Docker examples, and version synchronization were audited and refreshed.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Production Jenkins credentials remain Secret-only; unsafe inline username and
+  token values are not supported by the chart.
+- The Compose and Minibridge deployments use a read-only root filesystem,
+  dropped Linux capabilities, explicit writable temporary paths, and an
+  opt-in policy that refuses destructive tools.
+
+### Upgrade Notes
+
+- Update the application image and Helm chart together to `1.19.0`; the chart's
+  `appVersion` is the default image tag.
+- Existing single-Secret Jenkins credentials and Minibridge TLS passphrase
+  settings remain compatible. Per-field Secret references are optional.
 
 ## [1.18.0] - 2026-08-04
 

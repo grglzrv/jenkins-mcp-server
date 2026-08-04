@@ -631,12 +631,14 @@ def test_version_bump_updates_every_pin_and_detects_future_unmanaged_files(
         ),
     )
     bump = subprocess.run(
-        [sys.executable, "scripts/set_version.py", "9.8.7"],
+        ["make", "version", "VERSION=9.8.7"],
         cwd=copied,
         capture_output=True,
         text=True,
     )
     assert bump.returncode == 0, bump.stderr
+    changelog = (copied / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## [9.8.7] - " in changelog
     check = subprocess.run(
         [sys.executable, "scripts/check_version.py"],
         cwd=copied,

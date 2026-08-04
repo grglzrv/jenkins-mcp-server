@@ -466,7 +466,7 @@ the image together by construction.
 
 ```bash
 NEW_VERSION=1.19.0
-make version VERSION="$NEW_VERSION"     # rewrites every version pin in the repo
+make version VERSION="$NEW_VERSION"     # prepares notes and rewrites every pin
 git commit -am "chore(release): prepare v$NEW_VERSION"
 git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
 git push origin main "v$NEW_VERSION"
@@ -485,16 +485,27 @@ Helm install versions, Argo CD revisions, Kustomize tags, Compose defaults, and
 release examples. A newly added manifest or README with a stale version fails
 CI until it is added to the canonical pin inventory.
 
+Before it rewrites a pin, `make version` promotes the completed `[Unreleased]`
+section in `CHANGELOG.md` to a dated version entry and recreates the empty
+template. Every release must explicitly cover highlights, new features,
+improvements, bug fixes, breaking changes, known issues, security, and upgrade
+notes. Use `None` or `None known` where appropriate; placeholders such as
+`None yet`, `TBD`, and `TODO` are rejected in a release entry. The GitHub
+Release publishes this validated entry verbatim instead of generating primary
+notes from commit titles.
+
 The release workflow refuses to publish anything if they do not:
 
 ```bash
 test "${version}" = "$(cat VERSION)"   # git tag must match VERSION
 python scripts/check_version.py        # every versioned artifact must agree
+python scripts/changelog.py validate   # release notes must be complete
 ```
 
 Only after that gate passes does it build the multi-architecture image (tagged
 with the full version, major/minor, major, and `latest`), package the chart at the same version, push
-both to GHCR, and create the GitHub Release with provenance and SBOM metadata.
+both to GHCR, and create the GitHub Release from the curated changelog entry
+with provenance and SBOM metadata.
 
 Two consequences worth knowing:
 
