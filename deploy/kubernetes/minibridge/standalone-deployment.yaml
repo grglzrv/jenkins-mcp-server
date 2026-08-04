@@ -7,7 +7,7 @@
 # supply the Secret from External Secrets rather than committing it.
 #
 # Replace before applying:
-#   - jenkins.example-tailnet.ts.net  -> your Jenkins URL
+#   - jenkins.example.com  -> your Jenkins URL
 #   - the credentials in the Secret
 ---
 apiVersion: v1
@@ -34,7 +34,9 @@ metadata:
   name: jenkins-mcp-minibridge
   namespace: jenkins-mcp
 data:
-  JENKINS_URL: https://jenkins.example-tailnet.ts.net
+  JENKINS_URL: https://jenkins.example.com
+  # Leave enabled. Only set JENKINS_CA_BUNDLE as well if Jenkins uses a private
+  # or self-signed CA; a publicly issued certificate needs nothing.
   JENKINS_VERIFY_TLS: "true"
 
   # Server-side policy. Enforced in-process, independent of minibridge.
@@ -87,7 +89,7 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:1.17.0-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:1.18.0-minibridge
           imagePullPolicy: IfNotPresent
           # No args: the entrypoint runs
           #   minibridge aio -- jenkins-mcp-server --transport stdio

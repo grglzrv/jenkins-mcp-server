@@ -1,7 +1,19 @@
-# Use the full ADDRESS reported by:
-# kubectl get ingress jenkins-mcp -n jenkins-mcp
+# Client configuration for the Jenkins MCP server.
+#
+# Pick the URL that matches how the server is exposed.
+#
+# In-cluster, the default with no ingress. Replace the release name if you
+# installed under a different one:
+#   http://jenkins-mcp-jenkins-mcp-server.jenkins-mcp.svc.cluster.local:8000/mcp
+#
+# Behind an ingress, use the address the controller assigned:
+#   kubectl -n jenkins-mcp get ingress jenkins-mcp-jenkins-mcp-server \
+#     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+#
+# The Tailscale operator populates that field asynchronously, so read it back
+# rather than assuming the name.
 mcp_servers:
   jenkins:
     transport: streamable_http
-    url: https://jenkins-mcp.example-tailnet.ts.net/mcp
+    url: http://jenkins-mcp-jenkins-mcp-server.jenkins-mcp.svc.cluster.local:8000/mcp
     timeout_seconds: 60

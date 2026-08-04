@@ -12,7 +12,7 @@ def load(path: str):
 
 
 def test_tailscale_ingress_is_private_and_points_to_mcp():
-    ingress = load("deploy/kubernetes/base/ingress.yaml")[0]
+    ingress = load("deploy/kubernetes/tailscale/ingress.yaml")[0]
     assert ingress["spec"]["ingressClassName"] == "tailscale"
     assert "tailscale.com/funnel" not in ingress["metadata"].get("annotations", {})
     path = ingress["spec"]["rules"][0]["http"]["paths"][0]
@@ -130,3 +130,14 @@ def test_credential_secret_uses_configurable_key_names():
     template = (ROOT / "charts/jenkins-mcp-server/templates/secret.yaml").read_text()
     assert ".Values.jenkins.credentials.usernameKey" in template
     assert ".Values.jenkins.credentials.tokenKey" in template
+
+
+def test_base_manifests_are_environment_neutral():
+    """The base must not carry an ingress tied to one controller."""
+    base = ROOT / "deploy/kubernetes/base"
+    assert not (base / "ingress.yaml").exists(), "ingress belongs in an overlay"
+    kustomization = (base / "kustomization.yaml").read_text()
+    assert "ingress.yaml" not in kustomization.replace("# No Ingress here", "")
+    # No tailnet hostnames outside the Tailscale-specific pieces.
+    config = (base / "config.env").read_text()
+    assert "ts.net" not in config

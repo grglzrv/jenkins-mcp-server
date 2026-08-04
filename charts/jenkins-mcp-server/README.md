@@ -148,17 +148,30 @@ than being silently ignored.
 
 ### Connection
 
-| Key | Default | Notes |
-| --- | --- | --- |
-| `jenkins.url` | `""` | **Required.** Exact host the certificate is issued for, including any path prefix |
-| `jenkins.verifyTls` | `true` | Keep it true |
-| `jenkins.caBundle.existingSecret` | `""` | Only for a private or self-signed CA. Not needed for Let's Encrypt or Tailscale |
-| `jenkins.timeoutSeconds` / `maxRetries` | `30` / `3` | |
+| Key | Default | Required | Notes |
+| :--- | :--- | :---: | :--- |
+| `jenkins.url` | `""` | ✅ Yes | Jenkins base URL, including any path prefix. Must be the exact host the certificate is issued for |
+| `jenkins.verifyTls` | `true` | — | Verifies the certificate Jenkins presents. Leave enabled |
+| `jenkins.caBundle.existingSecret` | `""` | ⚪ Optional | Mount a CA from a Secret. Only for a private or self-signed issuer |
+| `jenkins.caBundle.key` | `ca.crt` | ⚪ Optional | Key within that Secret |
+| `jenkins.caBundlePath` | `""` | ⚪ Optional | Path to a CA already present in the image or mounted by `extraVolumes`. Mutually exclusive with `caBundle.existingSecret` |
+| `jenkins.timeoutSeconds` / `maxRetries` | `30` / `3` | — | |
+
+Neither CA setting is needed for a publicly issued certificate, which covers
+Let's Encrypt, any commercial CA, and Tailscale: the container's trust store
+already validates those. Reach for one only when a startup error mentions
+`certificate verify failed` or `self-signed certificate`, and add the CA rather
+than setting `verifyTls: false` — the latter accepts any certificate on a
+connection carrying a Jenkins API token. Setting `verifyTls: false` together
+with a CA bundle fails the render, since the two contradict each other.
 
 ### Credentials — pick exactly one
 
+Credentials are **required**: the server cannot start without a username and API
+token. Choose one source.
+
 | Key | Default | Use when |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | `jenkins.credentials.existingSecret` | `jenkins-mcp-secrets` | You create the Secret. The default path |
 | `jenkins.credentials.create` | `false` | Disposable environments only; the token lands in the Helm release |
 | `externalSecret.enabled` | `false` | External Secrets Operator manages it |

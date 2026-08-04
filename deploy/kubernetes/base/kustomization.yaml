@@ -6,7 +6,9 @@ resources:
   - serviceaccount.yaml
   - deployment.yaml
   - service.yaml
-  - ingress.yaml
+  # No Ingress here: how the server is exposed is environment-specific. The
+  # production overlay adds a Tailscale Ingress; add your own for another
+  # controller.
   - pdb.yaml
   - networkpolicy.yaml
 configMapGenerator:

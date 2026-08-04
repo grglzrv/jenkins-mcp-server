@@ -540,8 +540,10 @@ def test_compatibility_matrix_lists_concrete_versions() -> None:
     for version in ["2.555", "2.541.3", "2.504.3", "2.504.1"]:
         assert version in section, f"{version} missing from the compatibility matrix"
     # Untested and unsupported releases must be distinguished from verified ones.
-    assert "not covered by CI" in section
-    assert "Not supported" in section
+    assert "not covered by ci" in section.lower()
+    assert "unsupported" in section.lower()
+    # Status must be scannable at a glance.
+    assert section.count("✅") >= 4
     # 2.50 is not a published Docker tag and must not appear as a version.
     assert "| `2.50` |" not in readme
 

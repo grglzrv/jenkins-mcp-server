@@ -40,11 +40,19 @@ these at either layer.
 
 ## Jenkins compatibility
 
-| Jenkins | Status |
-| --- | --- |
-| 2.555.x (current LTS), 2.541.3, 2.504.3, 2.504.1 | Verified end to end in CI |
-| Other 2.x releases | Supported; not covered by CI |
-| 1.x | Not supported |
+| Jenkins | Line | Status | Coverage |
+| :--- | :--- | :---: | :--- |
+| **2.555.x** | Current LTS | ✅ Verified | Full tool suite, every change |
+| **2.541.3** | LTS | ✅ Verified | Full tool suite |
+| **2.504.3** | LTS 2.504 | ✅ Verified | Full tool suite |
+| **2.504.1** | LTS 2.504 | ✅ Verified | Full tool suite, pinned plugin set |
+| Other 2.x | — | ⚪ Supported | Not covered by CI |
+| 1.x | — | ❌ Unsupported | Different URL scheme, no folders |
+
+"Verified" means the full end-to-end suite ran against that core in CI: create a
+Pipeline job, trigger it, stream the console, stop the build, delete the job,
+with all 23 tools reachable. Reproduce any row with
+[`compatibility.yml`](.github/workflows/compatibility.yml).
 
 Run the current LTS line where possible: it is the only line receiving security
 backports.
