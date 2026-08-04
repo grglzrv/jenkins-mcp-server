@@ -49,7 +49,12 @@ LABEL org.opencontainers.image.title="Jenkins MCP Server (minibridge)" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${APP_VERSION}"
 
-ENV PYTHONUNBUFFERED=1 \
+# minibridge resolves an XDG config directory at startup and exits if it
+# cannot create one. The pod runs with a read-only root filesystem, so the
+# directory is created at build time and pointed at explicitly.
+ENV XDG_CONFIG_HOME=/home/app/.config \
+    HOME=/home/app \
+    PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
@@ -58,8 +63,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid "${APP_GID}" app \
     && useradd --uid "${APP_UID}" --gid "${APP_GID}" --create-home --shell /usr/sbin/nologin app \
-    && mkdir -p /data /certs \
-    && chown -R app:app /data /certs
+    && mkdir -p /data /certs /home/app/.config/minibridge \
+    && chown -R app:app /data /certs /home/app/.config
 
 COPY --from=builder /wheels /wheels
 RUN python -m pip install /wheels/*.whl && rm -rf /wheels

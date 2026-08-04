@@ -113,6 +113,13 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
+            {{- if .Values.minibridge.enabled }}
+            # minibridge resolves an XDG config directory at startup and exits
+            # if it cannot create one. The root filesystem is read-only, so give
+            # it a writable directory of its own.
+            - name: minibridge-config
+              mountPath: /home/app/.config
+            {{- end }}
             {{- if and .Values.minibridge.enabled .Values.minibridge.tls.enabled }}
             - name: minibridge-tls
               mountPath: /tls
@@ -133,6 +140,11 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
       volumes:
+        {{- if .Values.minibridge.enabled }}
+        - name: minibridge-config
+          emptyDir:
+            sizeLimit: 16Mi
+        {{- end }}
         {{- if and .Values.minibridge.enabled .Values.minibridge.tls.enabled }}
         - name: minibridge-tls
           secret:
