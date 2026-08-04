@@ -630,6 +630,15 @@ def test_version_bump_updates_every_pin_and_detects_future_unmanaged_files(
             "__pycache__", "build", "dist",
         ),
     )
+    # Model a maintainer completing the fresh Unreleased template before the
+    # next release. Production deliberately rejects untouched placeholders.
+    changelog_path = copied / "CHANGELOG.md"
+    changelog_path.write_text(
+        changelog_path.read_text(encoding="utf-8").replace(
+            "- None yet.", "- Reviewed release detail.", 8
+        ),
+        encoding="utf-8",
+    )
     bump = subprocess.run(
         ["make", "version", "VERSION=9.8.7"],
         cwd=copied,
@@ -714,13 +723,20 @@ def test_chart_readme_documents_kubernetes_support() -> None:
 
 
 def test_helm_test_pod_uses_the_effective_port_and_path() -> None:
-    """It targeted mcp.healthPort and /readyz, both wrong under minibridge."""
+    """Use the effective endpoint and tolerate Service propagation latency."""
     text = (CHART / "templates/tests/test-connection.yaml").read_text()
     assert ".Values.mcp.healthPort" not in text
     assert 'jenkins-mcp-server.healthPort' in text
     assert 'jenkins-mcp-server.readyPath' in text
     # No test pod when the health port is not published on the Service.
     assert ".Values.service.exposeHealthPort" in text
+    # A single request races endpoint propagation after the Deployment becomes
+    # Available. The hook must retry, but still fail within Helm's test timeout.
+    assert 'command: ["sh", "-ec"]' in text
+    assert 'while [ "$attempt" -le 30 ]' in text
+    assert "sleep 2" in text
+    assert "--timeout=3" in text
+    assert "--tries=1" in text
 
 
 def test_numeric_env_values_are_not_rendered_in_scientific_notation() -> None:

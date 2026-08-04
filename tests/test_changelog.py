@@ -51,6 +51,7 @@ def test_prepare_promotes_curated_notes_and_recreates_template(tmp_path: Path) -
     assert "## [2.0.0] - 2026-08-04" in text
     assert text.index("## [Unreleased]") < text.index("## [2.0.0]")
     assert text.index("## [2.0.0]") < text.index("## [1.0.0]")
+    assert "Reviewed release detail.\n\n## [1.0.0]" in text
     validate_document(text, "2.0.0")
     assert text.split("## [2.0.0]", maxsplit=1)[0].count("- None yet.") == len(HEADINGS)
 

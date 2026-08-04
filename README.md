@@ -200,7 +200,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.19.0 \
+  --version 1.20.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -465,7 +465,7 @@ So `Chart.appVersion` *is* the image tag. Bumping the version moves the chart an
 the image together by construction.
 
 ```bash
-NEW_VERSION=1.19.0
+NEW_VERSION=1.20.0
 make version VERSION="$NEW_VERSION"     # prepares notes and rewrites every pin
 git commit -am "chore(release): prepare v$NEW_VERSION"
 git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"

@@ -10,6 +10,40 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
+- None yet.
+
+### New Features
+
+- None yet.
+
+### Improvements
+
+- None yet.
+
+### Bug Fixes
+
+- None yet.
+
+### Breaking Changes
+
+- None yet.
+
+### Known Issues
+
+- None yet.
+
+### Security
+
+- None yet.
+
+### Upgrade Notes
+
+- None yet.
+
+## [1.20.0] - 2026-08-04
+
+### Highlights
+
 - Release preparation now treats deployable version pins and professional
   release notes as one validated contract.
 
@@ -34,6 +68,9 @@ from the matching version entry after CI validates it.
 
 - GitHub Releases no longer derive their primary notes from an uncurated commit
   list; they publish the validated entry from this changelog.
+- The Helm test hook now retries transient Service endpoint propagation instead
+  of failing a healthy installation after one immediate connection attempt.
+  The retry window remains bounded by both the hook and Helm test timeouts.
 
 ### Breaking Changes
 
@@ -49,7 +86,8 @@ from the matching version entry after CI validates it.
 
 ### Upgrade Notes
 
-- No runtime migration is required. Release maintainers must complete every
+- Update the application image and Helm chart together to `1.20.0`. No runtime
+  configuration migration is required. Release maintainers must complete every
   changelog category before `make version` can prepare a new release.
 
 ## [1.19.0] - 2026-08-04

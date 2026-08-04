@@ -54,7 +54,7 @@ reviewed changelog entry is the text published on GitHub.
 ## Prepare a release
 
 ```bash
-NEW_VERSION=1.19.0
+NEW_VERSION=1.20.0
 git checkout -b "release/v$NEW_VERSION"
 # Complete every [Unreleased] category in CHANGELOG.md first.
 make version VERSION="$NEW_VERSION"

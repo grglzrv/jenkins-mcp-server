@@ -25,12 +25,26 @@ spec:
         capabilities:
           drop: ["ALL"]
         readOnlyRootFilesystem: true
-      command: ["wget"]
+      # A Deployment can report Available just before the Service endpoints are
+      # visible to a newly scheduled pod. Retry that short propagation window
+      # rather than turning one early connection refusal into a flaky release.
+      command: ["sh", "-ec"]
       args:
-        - "--spider"
-        - "--timeout=5"
-        - "--tries=1"
-        # Helpers, not the raw values: minibridge moves the health port and
-        # serves "/" rather than /readyz.
-        - "http://{{ include "jenkins-mcp-server.fullname" . }}:{{ include "jenkins-mcp-server.healthPort" . }}{{ include "jenkins-mcp-server.readyPath" . }}"
+        - |
+          # Helpers, not the raw values: minibridge moves the health port and
+          # serves "/" rather than /readyz.
+          url="http://{{ include "jenkins-mcp-server.fullname" . }}:{{ include "jenkins-mcp-server.healthPort" . }}{{ include "jenkins-mcp-server.readyPath" . }}"
+          attempt=1
+          while [ "$attempt" -le 30 ]; do
+            if wget --spider --timeout=3 --tries=1 "$url"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "health endpoint did not become reachable after $attempt attempts" >&2
+              exit 1
+            fi
+            echo "health endpoint not ready (attempt $attempt/30); retrying in 2s" >&2
+            attempt=$((attempt + 1))
+            sleep 2
+          done
 {{- end }}
