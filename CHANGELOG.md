@@ -2,6 +2,17 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [Unreleased]
+
+### Changed
+
+- Release versioning now has one canonical inventory covering all 22
+  application-version pins across 17 files, including image tags, Helm,
+  Kustomize, Argo CD, Compose, README install commands, and release examples.
+- CI now scans every repository text file for stale deployable version pins, so
+  a newly added manifest or document cannot silently remain on an old image or
+  chart version.
+
 ## [1.19.0] - 2026-08-04
 
 ### Added

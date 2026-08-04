@@ -18,3 +18,7 @@ make version VERSION="$NEW_VERSION"
 ```
 
 Do not edit only `Chart.yaml`, `pyproject.toml`, or `VERSION` independently.
+The version command updates the image tags, chart/app versions, Kustomize and
+Argo CD manifests, Compose defaults, install commands, and release examples.
+`make verify-version` also scans the whole repository, so a newly added pinned
+manifest or document must be included in `scripts/version_pins.py`.

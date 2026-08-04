@@ -5,22 +5,22 @@ import re
 import sys
 from pathlib import Path
 
+from version_pins import PINS, replace_match_version
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def replace(path: str, pattern: str, replacement: str, expected: int = 1) -> None:
-    """Rewrite version pins in one file.
-
-    `expected` is the number of matches required. A file may legitimately pin
-    the version more than once, for example a README showing both a quick start
-    and a full install command, and every occurrence must move together.
-    """
-    file_path = ROOT / path
+def replace_pin(pin, version: str) -> None:
+    """Rewrite one declared application-version pin."""
+    file_path = ROOT / pin.path
     original = file_path.read_text(encoding="utf-8")
-    updated, count = re.subn(pattern, replacement, original, flags=re.MULTILINE)
-    if count != expected:
+    updated, count = pin.pattern.subn(
+        lambda match: replace_match_version(match, version), original
+    )
+    if count != pin.expected:
         raise RuntimeError(
-            f"expected {expected} version match(es) in {path}, found {count}"
+            f"expected {pin.expected} version match(es) for {pin.pattern.pattern!r} "
+            f"in {pin.path}, found {count}"
         )
     file_path.write_text(updated, encoding="utf-8")
 
@@ -32,78 +32,8 @@ def main() -> None:
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", version):
         raise SystemExit(f"invalid semantic version: {version}")
 
-    (ROOT / "VERSION").write_text(version + "\n", encoding="utf-8")
-    replace("pyproject.toml", r'^version = "[^"]+"', f'version = "{version}"')
-    replace(
-        "src/jenkins_mcp_server/__init__.py",
-        r'^__version__ = "[^"]+"',
-        f'__version__ = "{version}"',
-    )
-    replace("charts/jenkins-mcp-server/Chart.yaml", r"^version:\s*.*$", f"version: {version}")
-    replace(
-        "charts/jenkins-mcp-server/Chart.yaml",
-        r"^appVersion:\s*.*$",
-        f'appVersion: "{version}"',
-    )
-    replace(
-        "deploy/kubernetes/overlays/production/kustomization.yaml",
-        r"^\s*newTag:\s*.*$",
-        f"    newTag: {version}",
-    )
-    replace(
-        "deploy/kubernetes/base/deployment.yaml",
-        r"ghcr\.io/grglzrv/jenkins-mcp-server:[^\s]+",
-        f"ghcr.io/grglzrv/jenkins-mcp-server:{version}",
-    )
-    replace(
-        "examples/values/tailscale-production.yaml",
-        r'^  tag:\s*"[^"]+"',
-        f'  tag: "{version}"',
-    )
-    replace(
-        "examples/argocd/application-oci.yaml",
-        r"^    targetRevision:\s*.*$",
-        f"    targetRevision: {version}",
-    )
-    # Added later than the originals and previously missed, so they froze at
-    # whatever version was current when they were written.
-    replace(
-        "examples/argocd/application-minibridge.yaml",
-        r"^    targetRevision:\s*.*$",
-        f"    targetRevision: {version}",
-    )
-    replace(
-        "examples/argocd/application-hpa-generic.yaml",
-        r"^    targetRevision:\s*.*$",
-        f"    targetRevision: {version}",
-    )
-    replace(
-        "deploy/kubernetes/minibridge/kustomization.yaml",
-        r"^\s*newTag:\s*.*$",
-        f"    newTag: {version}-minibridge",
-    )
-    replace(
-        "deploy/kubernetes/minibridge/standalone-deployment.yaml",
-        r"ghcr\.io/grglzrv/jenkins-mcp-server:[^\s]+",
-        f"ghcr.io/grglzrv/jenkins-mcp-server:{version}-minibridge",
-    )
-    replace(
-        "compose.yaml",
-        r"\$\{JENKINS_MCP_VERSION:-[^}]+\}",
-        f"${{JENKINS_MCP_VERSION:-{version}}}",
-        expected=2,
-    )
-    replace(
-        "charts/jenkins-mcp-server/README.md",
-        r"^  --version [0-9][^\s]*",
-        f"  --version {version}",
-        expected=2,
-    )
-    replace(
-        "README.md",
-        r"^  --version [0-9][^\s]*",
-        f"  --version {version}",
-    )
+    for pin in PINS:
+        replace_pin(pin, version)
     print(f"updated repository version to {version}")
 
 
