@@ -26,11 +26,13 @@ build:
 
 verify-version:
 	python scripts/check_version.py
+	python scripts/changelog.py validate
 
 version:
 	@test -n "$(VERSION)" || (echo "Usage: make version VERSION=X.Y.Z" && exit 1)
+	python scripts/changelog.py prepare "$(VERSION)"
 	python scripts/set_version.py "$(VERSION)"
-	python scripts/check_version.py
+	$(MAKE) verify-version
 
 helm-lint:
 	helm lint --strict $(CHART) --set jenkins.url=https://jenkins.example.com

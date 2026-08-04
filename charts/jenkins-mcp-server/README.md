@@ -286,10 +286,19 @@ kubectl -n jenkins-mcp get ingress jenkins-mcp-jenkins-mcp-server \
 
 ## Chart and application versions
 
-The chart `version` and `appVersion` are intentionally released together. Run:
+The chart `version` and `appVersion` are intentionally released together, and
+`appVersion` is the default container image tag. Complete every professional
+category under `[Unreleased]` in the repository changelog, then run:
 
 ```bash
 NEW_VERSION=1.19.0
 make version VERSION="$NEW_VERSION"
 make verify-version
 ```
+
+This promotes the curated release notes and updates every pinned Helm install,
+image, Kustomize, Argo CD, Compose, example, and README reference in the
+repository. CI scans for unmanaged stale pins and rejects an incomplete release
+entry, so a chart or application version cannot be published in isolation. See
+the [release process](../../docs/releasing/RELEASE.md) for category guidance and
+the full review checklist.

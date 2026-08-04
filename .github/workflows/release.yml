@@ -34,7 +34,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           test "${version}" = "$(cat VERSION)"
-          python scripts/check_version.py
+          make verify-version
       - name: Test and build package
         run: |
           pip install -e '.[dev]'
@@ -235,7 +235,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          python scripts/changelog.py render "${GITHUB_REF_NAME#v}" \
+            --output release-notes.md
           gh release create "${GITHUB_REF_NAME}" release-assets/* \
             --title "Jenkins MCP Server ${GITHUB_REF_NAME}" \
-            --generate-notes \
+            --notes-file release-notes.md \
             $([[ "${GITHUB_REF_NAME}" == *-* ]] && echo --prerelease || true)

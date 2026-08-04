@@ -15,13 +15,48 @@ The repository uses one application version across:
 The canonical inventory is `scripts/version_pins.py`. `make version` updates
 all declared pins, and `make verify-version` scans the whole repository for a
 stale application image, chart, Kustomize, Argo CD, Compose, or documentation
-version that was not added to that inventory.
+version that was not added to that inventory. The same verification also
+requires a complete changelog entry for the version in `VERSION`.
+
+## Write professional release notes
+
+Complete every category under `[Unreleased]` before running `make version`.
+Write for users and operators: summarize behavior and impact rather than
+copying commit titles. Link issues or pull requests when they add useful
+context. Keep a category even when it has no changes, using `None` or `None
+known` so reviewers can distinguish "reviewed and not applicable" from
+"forgotten".
+
+| Category | Content |
+| --- | --- |
+| Highlights | Two to five high-value outcomes and their operator impact |
+| New Features | New tools, chart values, deployment modes, or capabilities |
+| Improvements | Non-breaking usability, performance, operability, and documentation changes |
+| Bug Fixes | Corrected defects, including the symptoms and affected users |
+| Breaking Changes | Incompatible behavior, removed options, and required migration; otherwise `None` |
+| Known Issues | Unresolved limitations and workarounds; otherwise `None known` |
+| Security | Policy, credential, dependency, or hardening impact; otherwise `None` |
+| Upgrade Notes | Exact actions needed to adopt the release, or state that no special action is required |
+
+`scripts/changelog.py` provides the release-note lifecycle:
+
+```bash
+python scripts/changelog.py validate
+python scripts/changelog.py prepare "$NEW_VERSION"
+python scripts/changelog.py render "$NEW_VERSION" --output release-notes.md
+```
+
+`prepare` rejects `None yet`, `TBD`, `TODO`, and other incomplete placeholders,
+promotes `[Unreleased]` to `[$NEW_VERSION] - YYYY-MM-DD`, and creates a fresh
+template. `render` is the same operation used by the release workflow, so the
+reviewed changelog entry is the text published on GitHub.
 
 ## Prepare a release
 
 ```bash
 NEW_VERSION=1.19.0
 git checkout -b "release/v$NEW_VERSION"
+# Complete every [Unreleased] category in CHANGELOG.md first.
 make version VERSION="$NEW_VERSION"
 make install
 make lint test verify-version
@@ -43,12 +78,28 @@ git push origin "v$NEW_VERSION"
 
 The `Release` workflow:
 
-1. verifies that the Git tag equals the canonical repository version;
+1. verifies that the Git tag equals the canonical repository version and that
+   all deploy manifests, examples, documentation pins, and release-note
+   categories are synchronized;
 2. runs tests and builds the Python distribution;
 3. publishes `linux/amd64` and `linux/arm64` images to GHCR;
 4. publishes the Helm chart as an OCI artifact to GHCR;
 5. emits SBOM/provenance attestations for the image and release assets;
-6. creates a GitHub Release containing the Python distribution and packaged chart.
+6. creates a GitHub Release from the curated changelog entry, containing the
+   Python distribution and packaged chart.
+
+## Release review checklist
+
+- `Chart.yaml` `version` and `appVersion` equal `VERSION` and the image tag.
+- All Helm, Kubernetes, Kustomize, Argo CD, Docker, Compose, examples, and
+  README pins were changed by `make version`, never by hand in isolation.
+- Every `[Unreleased]` category was reviewed and contains user-facing text or
+  an explicit `None` statement.
+- Breaking changes name the affected configuration and include migration steps.
+- Known issues describe impact and a workaround where one exists.
+- Security notes do not disclose secrets or unsafe exploitation detail.
+- `make lint test verify-version helm-lint helm-template validate-manifests`
+  passes and all required GitHub checks are green before merge or tagging.
 
 ## Published artifacts
 

@@ -14,4 +14,5 @@ Describe the change and its operational impact.
 
 - [ ] No credentials, tokens, certificates, or private endpoints were committed
 - [ ] Backward compatibility and upgrade impact were reviewed
-- [ ] Documentation and `CHANGELOG.md` were updated when required
+- [ ] Documentation, deploy manifests, examples, and README files were updated when required
+- [ ] `CHANGELOG.md` has professional notes under every required category
