@@ -208,7 +208,15 @@ jobs:
 
       - name: Build the minibridge image and import it
         run: |
-          docker build -f docker/Dockerfile.minibridge -t jenkins-mcp-server:smoke-mb .
+          set +e
+          docker build -f docker/Dockerfile.minibridge -t jenkins-mcp-server:smoke-mb . > /tmp/build.log 2>&1
+          code=$?
+          set -e
+          tail -n 60 /tmp/build.log
+          if [ "$code" -ne 0 ]; then
+            echo "::error::minibridge image build failed :: $(tail -c 900 /tmp/build.log | tr '\n' '~' | tr -s ' ')"
+            exit 1
+          fi
           docker save jenkins-mcp-server:smoke-mb | sudo k3s ctr images import -
 
       - name: Namespace and credentials

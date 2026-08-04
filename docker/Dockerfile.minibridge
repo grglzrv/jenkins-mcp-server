@@ -16,18 +16,20 @@ ARG PYTHON_IMAGE=python:3.12-slim-bookworm
 # release archives. Downloading the pinned release beats compiling from source:
 # the build needs no Go toolchain, the artifact is the one upstream tested, and
 # the checksum is verified. Bump MINIBRIDGE_VERSION to update.
+# The archive keeps its published name because sha256sum -c looks the file up
+# by the name recorded in the checksums file.
 FROM alpine:3.21 AS minibridge
 ARG MINIBRIDGE_VERSION=0.8.0
 ARG TARGETARCH
 RUN apk add --no-cache curl unzip \
  && arch="${TARGETARCH:-amd64}" \
  && base="https://github.com/acuvity/minibridge/releases/download/v${MINIBRIDGE_VERSION}" \
- && curl -fsSL -o /tmp/minibridge.zip "${base}/minibridge_${MINIBRIDGE_VERSION}_linux_${arch}.zip" \
+ && archive="minibridge_${MINIBRIDGE_VERSION}_linux_${arch}.zip" \
+ && curl -fsSL -o "/tmp/${archive}" "${base}/${archive}" \
  && curl -fsSL -o /tmp/checksums.txt "${base}/minibridge_${MINIBRIDGE_VERSION}_checksums.txt" \
- && ( cd /tmp && grep "minibridge_${MINIBRIDGE_VERSION}_linux_${arch}.zip" checksums.txt | sha256sum -c - ) \
- && unzip -o /tmp/minibridge.zip -d /out \
- && chmod 0755 /out/minibridge \
- && /out/minibridge --version || /out/minibridge version || true
+ && ( cd /tmp && grep "${archive}" checksums.txt | sha256sum -c - ) \
+ && unzip -o "/tmp/${archive}" minibridge -d /out \
+ && chmod 0755 /out/minibridge
 
 FROM ${PYTHON_IMAGE} AS builder
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
