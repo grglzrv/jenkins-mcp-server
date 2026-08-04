@@ -1,0 +1,48 @@
+# k3s smoke values for the minibridge proxy. Mirrors
+# examples/values/minibridge.yaml so the test exercises the documented
+# configuration rather than a special case.
+jenkins:
+  url: https://jenkins.smoke.invalid
+  credentials:
+    existingSecret: jenkins-mcp-secrets
+    create: false
+
+replicaCount: 2
+
+ingress:
+  enabled: false
+
+minibridge:
+  enabled: true
+  tools:
+    # integration/minibridge_probe.py asserts these are hidden and refused.
+    deny: ["@destructive"]
+    allow: []
+  methodsDeny: []
+  guardrails:
+    - covert-instruction-detection
+    - sensitive-pattern-detection
+    - shadowing-pattern-detection
+    - schema-misuse-prevention
+    - cross-origin-tool-access
+    - secrets-redaction
+  policer:
+    enforce: true
+
+networkPolicy:
+  enabled: true
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi
+  limits:
+    cpu: 500m
+    memory: 384Mi
+
+mcp:
+  allowedJobs: "*"

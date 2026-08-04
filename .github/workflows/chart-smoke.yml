@@ -170,3 +170,85 @@ jobs:
           # line; a heredoc here would break the YAML block scalar.
           states=$(kubectl -n jenkins-mcp get pods -o jsonpath='{range .items[*]}{.metadata.name}{" phase="}{.status.phase}{range .status.containerStatuses[*]}{" | "}{.name}{"="}{.state}{end}{"\n"}{end}' 2>/dev/null | tr '\n' '~' | cut -c1-700)
           echo "::error::k3s ${{ matrix.k3s }} smoke failed :: ${states:-no pods}"
+
+  minibridge:
+    # A running proxy proves nothing about the policy in front of it. This
+    # installs the minibridge variant and speaks MCP through it, asserting that
+    # denied tools are hidden and refused, allowed tools are not, and a
+    # guardrail pattern in arguments is blocked.
+    name: "minibridge on k3s ${{ matrix.k3s }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        k3s: ${{ fromJSON(inputs.k3s_versions || '["v1.36.2+k3s1"]') }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.2.3
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install 'mcp>=2.0.0,<3'
+
+      - name: Start k3s ${{ matrix.k3s }}
+        run: |
+          curl -sfL https://get.k3s.io | \
+            INSTALL_K3S_VERSION='${{ matrix.k3s }}' \
+            INSTALL_K3S_EXEC='--disable traefik --disable metrics-server' \
+            sh -
+          sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+          echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> "$GITHUB_ENV"
+
+      - name: Wait for the node
+        run: kubectl wait --for=condition=Ready node --all --timeout=180s
+
+      - name: Build the minibridge image and import it
+        run: |
+          docker build -f docker/Dockerfile.minibridge -t jenkins-mcp-server:smoke-mb .
+          docker save jenkins-mcp-server:smoke-mb | sudo k3s ctr images import -
+
+      - name: Namespace and credentials
+        run: |
+          kubectl create namespace jenkins-mcp
+          kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
+            --from-literal=JENKINS_USERNAME=smoke \
+            --from-literal=JENKINS_TOKEN=smoke-token
+
+      - name: Install with minibridge enforcing
+        run: |
+          set +e
+          helm install jenkins-mcp charts/jenkins-mcp-server \
+            --namespace jenkins-mcp \
+            --values .github/smoke-values-minibridge.yaml \
+            --set image.repository=jenkins-mcp-server \
+            --set minibridge.image.repository=jenkins-mcp-server \
+            --set minibridge.image.tag=smoke-mb \
+            --set image.pullPolicy=Never \
+            --wait --timeout 5m > /tmp/install.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/install.log
+          [ "$code" -eq 0 ] || { echo "::error::minibridge install failed :: $(tail -c 500 /tmp/install.log | tr '\n' '~')"; exit 1; }
+
+      - name: Prove the policy is enforced
+        run: |
+          kubectl -n jenkins-mcp port-forward svc/jenkins-mcp-jenkins-mcp-server 8000:8000 &
+          sleep 6
+          set +e
+          python integration/minibridge_probe.py http://127.0.0.1:8000/mcp > /tmp/probe.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/probe.log
+          [ "$code" -eq 0 ] || { echo "::error::minibridge policy not enforced :: $(tail -c 600 /tmp/probe.log | tr '\n' '~')"; exit 1; }
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "::group::pods"; kubectl -n jenkins-mcp get pods -o wide || true; echo "::endgroup::"
+          echo "::group::logs"; kubectl -n jenkins-mcp logs -l app.kubernetes.io/name=jenkins-mcp-server --tail=150 --all-containers || true; echo "::endgroup::"
+          states=$(kubectl -n jenkins-mcp get pods -o jsonpath='{range .items[*]}{.metadata.name}{" phase="}{.status.phase}{range .status.containerStatuses[*]}{" | "}{.name}{"="}{.state}{end}{"\n"}{end}' 2>/dev/null | tr '\n' '~' | cut -c1-600)
+          echo "::error::minibridge smoke failed on ${{ matrix.k3s }} :: ${states:-no pods}"

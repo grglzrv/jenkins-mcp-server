@@ -1,5 +1,7 @@
 # Alternative when Hermes runs in the same Kubernetes cluster and you prefer
 # direct ClusterIP traffic instead of hairpinning through the tailnet.
+# For the raw manifests in deploy/kubernetes, whose Service is named
+# jenkins-mcp. The Helm chart names it <release>-jenkins-mcp-server.
 mcp_servers:
   jenkins:
     transport: streamable_http

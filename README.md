@@ -208,6 +208,9 @@ Directly inside the same Kubernetes cluster:
 mcp_servers:
   jenkins:
     transport: streamable_http
+    # Raw manifests (deploy/kubernetes) create a Service named jenkins-mcp.
+    # The Helm chart names it <release>-jenkins-mcp-server, so with release
+    # jenkins-mcp the host is jenkins-mcp-jenkins-mcp-server instead.
     url: http://jenkins-mcp.jenkins-mcp.svc.cluster.local:8000/mcp
 ```
 
