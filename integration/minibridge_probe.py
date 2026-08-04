@@ -77,6 +77,20 @@ def allowed(result) -> bool:
     return not result.is_error or reached_jenkins(result)
 
 
+async def call(session, name: str, arguments: dict):
+    """Return (refused, detail).
+
+    A refusal can arrive two ways: minibridge rejects the request at the
+    protocol level and the client raises, while the server's own policy returns
+    a result carrying is_error. Both count as refused.
+    """
+    try:
+        result = await session.call_tool(name, arguments)
+    except Exception as exc:  # noqa: BLE001 - any protocol error is a refusal
+        return True, str(exc)[:120]
+    return refused(result), error_text(result)[:120]
+
+
 async def main(url: str) -> int:
     async with streamable_http_client(url) as streams:
         read_stream, write_stream = streams
@@ -96,23 +110,23 @@ async def main(url: str) -> int:
             )
 
             print("tools/call on a denied tool")
-            result = await session.call_tool(
-                "delete_job", {"job_name": "smoke/should-not-run"}
+            was_refused, detail = await call(
+                session, "delete_job", {"job_name": "smoke/should-not-run"}
             )
-            check(refused(result), f"delete_job refused (got: {error_text(result)[:90]})")
+            check(was_refused, f"delete_job refused (got: {detail})")
 
             print("tools/call on an allowed tool")
-            result = await session.call_tool("list_jobs", {})
+            was_refused, detail = await call(session, "list_jobs", {})
             check(
-                allowed(result),
-                f"list_jobs not refused by policy (got: {error_text(result)[:90]})",
+                not was_refused,
+                f"list_jobs not refused by policy (got: {detail})",
             )
 
             print("guardrail: sensitive pattern in arguments")
-            result = await session.call_tool(
-                "get_job", {"job_name": "../../secrets/master.key"}
+            was_refused, detail = await call(
+                session, "get_job", {"job_name": "../../secrets/master.key"}
             )
-            check(refused(result), f"path traversal blocked (got: {error_text(result)[:90]})")
+            check(was_refused, f"path traversal blocked (got: {detail})")
 
     print()
     if failures:
