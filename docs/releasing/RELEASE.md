@@ -71,16 +71,20 @@ Open a pull request to `main` and merge only after every required check passes.
 
 ## Publish
 
-```bash
-git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
-git push origin "v$NEW_VERSION"
-```
+Merging the prepared version pull request to `main` starts publication
+automatically because `VERSION` changed. No separate tag command is required.
+The workflow creates the matching tag and GitHub Release only after every build
+and smoke-test gate succeeds.
+
+For recovery, pushing a matching annotated tag triggers the same workflow. The
+workflow is idempotent: if the GitHub Release already exists, it validates the
+version and skips republishing artifacts.
 
 The `Release` workflow:
 
-1. verifies that the Git tag equals the canonical repository version and that
-   all deploy manifests, examples, documentation pins, and release-note
-   categories are synchronized;
+1. verifies that the requested release equals the canonical repository version
+   and that all deploy manifests, examples, documentation pins, and
+   release-note categories are synchronized;
 2. runs tests and builds the Python distribution;
 3. publishes `linux/amd64` and `linux/arm64` images to GHCR;
 4. publishes the Helm chart as an OCI artifact to GHCR;
@@ -99,7 +103,8 @@ The `Release` workflow:
 - Known issues describe impact and a workaround where one exists.
 - Security notes do not disclose secrets or unsafe exploitation detail.
 - `make lint test verify-version helm-lint helm-template validate-manifests`
-  passes and all required GitHub checks are green before merge or tagging.
+  passes and all required GitHub checks are green before merge. Use a manual
+  tag only when recovering a release that did not start automatically.
 
 ## Published artifacts
 

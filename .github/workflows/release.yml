@@ -2,9 +2,27 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
       - "v[0-9]+.[0-9]+.[0-9]+-*"
+    paths:
+      - VERSION
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to publish; defaults to VERSION at source_ref"
+        required: false
+        type: string
+      source_ref:
+        description: "Commit or ref containing the application and chart to publish"
+        required: false
+        type: string
+      notes_ref:
+        description: "Commit or ref containing the curated changelog entry"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -21,8 +39,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      source_sha: ${{ steps.version.outputs.source_sha }}
+      publish: ${{ steps.release_state.outputs.publish }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -30,12 +53,38 @@ jobs:
       - name: Resolve and validate version
         id: version
         shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${REQUESTED_VERSION:-$(cat VERSION)}"
+          tag="v${version}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            test "${GITHUB_REF_NAME}" = "${tag}"
+          fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           test "${version}" = "$(cat VERSION)"
           make verify-version
+      - name: Check whether the release already exists
+        id: release_state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
+          case "$status" in
+            200) echo "publish=false" >> "$GITHUB_OUTPUT" ;;
+            404) echo "publish=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "unexpected GitHub Releases API status: $status" >&2; exit 1 ;;
+          esac
       - name: Test and build package
+        if: steps.release_state.outputs.publish == 'true'
         run: |
           pip install -e '.[dev]'
           ruff check .
@@ -43,12 +92,14 @@ jobs:
           python -m build
           twine check dist/*
       - uses: actions/upload-artifact@v7
+        if: steps.release_state.outputs.publish == 'true'
         with:
           name: python-dist
           path: dist/*
 
   image:
     needs: validate
+    if: needs.validate.outputs.publish == 'true'
     permissions:
       contents: read
       packages: write
@@ -58,6 +109,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
@@ -72,9 +125,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}},value=${{ needs.validate.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate.outputs.version }}
+            type=semver,pattern={{major}},value=${{ needs.validate.outputs.version }}
             type=raw,value=latest,enable=${{ !contains(needs.validate.outputs.version, '-') }}
       - name: Build and publish amd64/arm64
         id: build
@@ -105,6 +158,7 @@ jobs:
     # selects it by appending minibridge.image.tagSuffix to the app version, so
     # this tag must exist or minibridge deployments ImagePullBackOff.
     needs: validate
+    if: needs.validate.outputs.publish == 'true'
     permissions:
       contents: read
       packages: write
@@ -114,6 +168,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
@@ -132,9 +188,9 @@ jobs:
           flavor: |
             suffix=-minibridge,onlatest=true
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}},value=${{ needs.validate.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.validate.outputs.version }}
+            type=semver,pattern={{major}},value=${{ needs.validate.outputs.version }}
             type=raw,value=latest,enable=${{ !contains(needs.validate.outputs.version, '-') }}
       - name: Build and publish amd64/arm64
         id: build
@@ -162,12 +218,15 @@ jobs:
 
   helm:
     needs: validate
+    if: needs.validate.outputs.publish == 'true'
     permissions:
       contents: read
       packages: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
       - uses: azure/setup-helm@v5
         with:
           version: v4.2.3
@@ -200,13 +259,21 @@ jobs:
     # The release must not publish a chart that cannot install. Same reusable
     # workflow CI runs, so the steps are defined once.
     needs: validate
+    if: needs.validate.outputs.publish == 'true'
     uses: ./.github/workflows/chart-smoke.yml
     with:
       # The two newest supported minors; CI covers the full range on every push.
       k3s_versions: '["v1.36.2+k3s1","v1.35.6+k3s1"]'
+      source_ref: ${{ needs.validate.outputs.source_sha }}
 
   github-release:
     needs: [validate, image, minibridge-image, helm, chart-smoke]
+    if: >-
+      ${{ always() && needs.validate.outputs.publish == 'true' &&
+          needs.image.result == 'success' &&
+          needs.minibridge-image.result == 'success' &&
+          needs.helm.result == 'success' &&
+          needs.chart-smoke.result == 'success' }}
     permissions:
       contents: write
       attestations: write
@@ -218,6 +285,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.notes_ref || needs.validate.outputs.source_sha }}
       - uses: actions/download-artifact@v8
         with:
           path: release-assets
@@ -234,10 +303,14 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_TARGET: ${{ needs.validate.outputs.source_sha }}
         run: |
-          python scripts/changelog.py render "${GITHUB_REF_NAME#v}" \
+          python scripts/changelog.py render "${RELEASE_VERSION}" \
             --output release-notes.md
-          gh release create "${GITHUB_REF_NAME}" release-assets/* \
-            --title "Jenkins MCP Server ${GITHUB_REF_NAME}" \
+          gh release create "${RELEASE_TAG}" release-assets/* \
+            --target "${RELEASE_TARGET}" \
+            --title "Jenkins MCP Server ${RELEASE_TAG}" \
             --notes-file release-notes.md \
-            $([[ "${GITHUB_REF_NAME}" == *-* ]] && echo --prerelease || true)
+            $([[ "${RELEASE_VERSION}" == *-* ]] && echo --prerelease || true)

@@ -1,0 +1,45 @@
+name: Backfill missing releases
+
+# This workflow is intentionally triggered by changes to this file only. It
+# backfills releases that were skipped while publishing required a manual tag.
+# Each called workflow is idempotent, so a retry skips releases that already
+# exist and continues with the remaining versions.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/backfill-releases.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  attestations: write
+  artifact-metadata: write
+  id-token: write
+  actions: read
+
+jobs:
+  release-1-18:
+    uses: ./.github/workflows/release.yml
+    with:
+      source_ref: 1a6db437cefc08530d2b79fa1190d7b732112dc8
+      notes_ref: ${{ github.sha }}
+    secrets: inherit
+
+  release-1-19:
+    needs: release-1-18
+    uses: ./.github/workflows/release.yml
+    with:
+      source_ref: b457b6ebf741df4763a93b8046f59ff7726daff0
+      notes_ref: ${{ github.sha }}
+    secrets: inherit
+
+  release-1-20:
+    needs: release-1-19
+    uses: ./.github/workflows/release.yml
+    with:
+      source_ref: 9b0cb04bad35a9f2c9526e4f247ae58caadb8356
+      notes_ref: ${{ github.sha }}
+    secrets: inherit
