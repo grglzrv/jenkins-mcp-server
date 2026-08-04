@@ -2,6 +2,41 @@
 
 All notable changes are documented here. The project follows Semantic Versioning.
 
+## [1.19.0] - 2026-08-04
+
+### Added
+
+- Per-field Jenkins credential Secret references, allowing the username and API
+  token to come from independently managed Secrets without supporting unsafe
+  inline production values.
+- An independent Secret/key reference for encrypted Minibridge TLS private-key
+  passphrases, while preserving the same-Secret `passSecretKey` option.
+- A hardened `compose.yaml` for either the plain server or the single-container
+  Minibridge variant with destructive tools blocked.
+
+### Fixed
+
+- Remote HTTP policer settings now use the Minibridge v0.8.0 environment names:
+  `MINIBRIDGE_POLICER_HTTP_URL`, `MINIBRIDGE_POLICER_HTTP_BEARER_TOKEN`, and
+  `MINIBRIDGE_POLICER_HTTP_CA`.
+- Raw Minibridge deployments now mount a writable XDG config directory and use
+  `/tmp` for transient MCP configuration, so they work with a read-only root
+  filesystem like the Helm deployment.
+- Documentation, Argo CD guidance, release instructions, raw manifest paths,
+  Docker examples, and version synchronization were audited and refreshed.
+
+## [1.18.0] - 2026-08-04
+
+### Fixed
+
+- The Minibridge smoke probe now distinguishes an explicit policy rejection
+  from Jenkins DNS, connection, timeout, TLS, and certificate failures. Those
+  downstream failures prove the call crossed the policy boundary and no longer
+  produce false rejection results.
+- The Jenkins-through-Minibridge smoke test exercises the complete tool surface:
+  destructive tools must be hidden and refused, while every other tool must be
+  advertised and reach Jenkins.
+
 ## [1.17.0] - 2026-08-03
 
 ### Changed
@@ -78,16 +113,6 @@ tailscale:
 - A Kubernetes compatibility matrix in the chart README, listing the minors that
   are actually installed and tested, and the apiVersion of every resource the
   chart emits.
-
-### Fixed
-
-- The chart's own `helm test` pod targeted `mcp.healthPort` and `/readyz`
-  directly. With minibridge enabled the health port moves and the path becomes
-  `/`, so `helm test` would have failed against a working deployment. It now
-  uses the same helpers as the Service and NetworkPolicy, and is omitted
-  entirely when `service.exposeHealthPort` is false, since it could not reach
-  the endpoint anyway.
-
 
 ## [1.15.0] - 2026-08-03
 

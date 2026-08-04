@@ -141,3 +141,26 @@ def test_base_manifests_are_environment_neutral():
     # No tailnet hostnames outside the Tailscale-specific pieces.
     config = (base / "config.env").read_text()
     assert "ts.net" not in config
+
+
+def test_compose_offers_plain_and_single_container_minibridge_deployments():
+    compose = load("compose.yaml")[0]
+    plain = compose["services"]["server"]
+    bridge = compose["services"]["minibridge"]
+    assert plain["image"].endswith("}")
+    assert bridge["image"].endswith("}-minibridge")
+    assert bridge["profiles"] == ["minibridge"]
+    assert bridge["environment"]["TOOLS_DENY"] == "@destructive"
+    for service in [plain, bridge]:
+        assert service["read_only"] is True
+        assert service["cap_drop"] == ["ALL"]
+        assert "no-new-privileges:true" in service["security_opt"]
+
+
+def test_license_and_security_documents_are_present_and_current():
+    license_text = (ROOT / "LICENSE").read_text()
+    assert "MIT License" in license_text
+    assert "2026" in license_text
+    security = (ROOT / "SECURITY.md").read_text()
+    for topic in ["valueFrom", "Minibridge controls", "passSecretKey"]:
+        assert topic in security

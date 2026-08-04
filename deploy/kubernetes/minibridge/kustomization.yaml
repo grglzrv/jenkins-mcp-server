@@ -13,7 +13,7 @@ resources:
   - ../base
 images:
   - name: ghcr.io/grglzrv/jenkins-mcp-server
-    newTag: 1.18.0-minibridge
+    newTag: 1.19.0-minibridge
 configMapGenerator:
   - name: jenkins-mcp-minibridge
     envs:
@@ -33,6 +33,19 @@ patches:
         value:
           configMapRef:
             name: jenkins-mcp-minibridge
+      # The base uses a read-only root filesystem. minibridge resolves its XDG
+      # config directory during startup, so provide a small writable mount.
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: minibridge-config
+          mountPath: /home/app/.config
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: minibridge-config
+          emptyDir:
+            sizeLimit: 16Mi
       # minibridge health listens on 8080 and exposes "/" only.
       - op: replace
         path: /spec/template/spec/containers/0/ports/1/containerPort

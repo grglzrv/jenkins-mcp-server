@@ -30,7 +30,7 @@ def scan_for_stale_pins(version: str) -> list[str]:
         ("--version", re.compile(r"--version\s+(\d+\.\d+\.\d+)")),
     ]
     roots = ["deploy", "examples", "charts"]
-    candidates = [ROOT / "README.md"]
+    candidates = [ROOT / "README.md", ROOT / "compose.yaml"]
     for root in roots:
         candidates.extend(sorted((ROOT / root).rglob("*")))
     for path in candidates:

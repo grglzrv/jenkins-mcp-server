@@ -8,7 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> None:
-    roots = [ROOT / "deploy" / "kubernetes", ROOT / "deploy" / "argocd"]
+    roots = [
+        ROOT / "deploy" / "kubernetes",
+        ROOT / "deploy" / "argocd",
+        ROOT / "examples" / "argocd",
+    ]
     paths = [path for root in roots for path in sorted(root.rglob("*.yaml"))]
     paths += [path for root in roots for path in sorted(root.rglob("*.yml"))]
     failures: list[str] = []
@@ -27,7 +31,16 @@ def main() -> None:
                 failures.append(f"{path}: document missing apiVersion/kind")
     if failures:
         raise SystemExit("\n".join(failures))
-    print(f"Validated {count} Kubernetes/Argo CD YAML documents from {len(paths)} files")
+    compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
+    services = compose.get("services", {}) if isinstance(compose, dict) else {}
+    if set(services) != {"server", "minibridge"}:
+        failures.append("compose.yaml: expected server and minibridge services")
+    if failures:
+        raise SystemExit("\n".join(failures))
+    print(
+        f"Validated {count} Kubernetes/Argo CD YAML documents from "
+        f"{len(paths)} files and compose.yaml"
+    )
 
 
 if __name__ == "__main__":

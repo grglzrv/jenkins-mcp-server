@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.18.0 \
+  --version 1.19.0 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.18.0 \
+  --version 1.19.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -172,7 +172,8 @@ token. Choose one source.
 
 | Key | Default | Use when |
 | :--- | :--- | :--- |
-| `jenkins.credentials.existingSecret` | `jenkins-mcp-secrets` | You create the Secret. The default path |
+| `jenkins.credentials.existingSecret` | `jenkins-mcp-secrets` | You create one Secret. The default path |
+| `jenkins.credentials.valueFrom` | empty | Username and token are keys in separate existing Secrets |
 | `jenkins.credentials.create` | `false` | Disposable environments only; the token lands in the Helm release |
 | `externalSecret.enabled` | `false` | External Secrets Operator manages it |
 
@@ -195,6 +196,8 @@ Enabling more than one fails the render, naming which value to clear.
 Requires the `-minibridge` image, which the chart selects automatically by
 appending `minibridge.image.tagSuffix` to the app version. That tag is published
 on every release alongside the default image; `edge-minibridge` tracks `main`.
+It is one bundled container, not a sidecar: Minibridge spawns the Python server
+over stdio.
 
 | Key | Default | Notes |
 | --- | --- | --- |
@@ -204,7 +207,9 @@ on every release alongside the default image; `edge-minibridge` tracks `main`.
 | `minibridge.methodsDeny` | `[]` | Deny MCP capabilities by method name |
 | `minibridge.guardrails` | `[]` | Content checks: covert instructions, secrets redaction, and four more |
 | `minibridge.policer.enforce` | `true` | `false` logs violations without blocking |
-| `minibridge.basicAuth` / `tls` | disabled | Shared-secret auth and TLS, both from Secrets |
+| `minibridge.policer.rego` / `http` | Rego / disabled | Exactly one policer must be enabled; remote HTTP URL, CA and bearer token are supported |
+| `minibridge.mcp.useTempDir` | `true` | Uses the writable `/tmp` mount with a read-only root filesystem |
+| `minibridge.basicAuth` / `tls` | disabled | Shared-secret auth and TLS, both from Secrets. A TLS key passphrase may come from the TLS Secret or `tls.pass.valueFrom` |
 
 ### Workload
 
@@ -252,6 +257,7 @@ on every release alongside the default image; `edge-minibridge` tracks `main`.
 | File | Shows |
 | --- | --- |
 | `examples/values/existing-secret.yaml` | The default credentials path |
+| `examples/values/per-field-secret-refs.yaml` | Username and token from separate existing Secrets |
 | `examples/values/chart-managed-secret.yaml` | Chart-created Secret, disposable environments |
 | `examples/values/external-secrets-gcp-workload-identity.yaml` | GCP Secret Manager with Workload Identity |
 | `examples/values/tailscale-production.yaml` | Tailscale ingress and egress |
@@ -283,6 +289,7 @@ kubectl -n jenkins-mcp get ingress jenkins-mcp-jenkins-mcp-server \
 The chart `version` and `appVersion` are intentionally released together. Run:
 
 ```bash
-make version VERSION=1.14.0
+NEW_VERSION=1.19.0
+make version VERSION="$NEW_VERSION"
 make verify-version
 ```

@@ -61,13 +61,13 @@ spec:
             - name: JENKINS_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "jenkins-mcp-server.credentialsSecretName" . }}
-                  key: {{ .Values.jenkins.credentials.usernameKey }}
+                  name: {{ include "jenkins-mcp-server.usernameSecretName" . }}
+                  key: {{ include "jenkins-mcp-server.usernameSecretKey" . }}
             - name: JENKINS_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "jenkins-mcp-server.credentialsSecretName" . }}
-                  key: {{ .Values.jenkins.credentials.tokenKey }}
+                  name: {{ include "jenkins-mcp-server.tokenSecretName" . }}
+                  key: {{ include "jenkins-mcp-server.tokenSecretKey" . }}
             {{- if .Values.minibridge.enabled }}
             {{- include "jenkins-mcp-server.minibridgeEnv" . | nindent 12 }}
             {{- end }}

@@ -97,10 +97,14 @@ controller, are in [docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md
 
 ```text
 ghcr.io/grglzrv/jenkins-mcp-server:<version>
+ghcr.io/grglzrv/jenkins-mcp-server:<version>-minibridge
 oci://ghcr.io/grglzrv/charts/jenkins-mcp-server --version <version>
 ```
 
-Release images are published for `linux/amd64` and `linux/arm64`.
+Release images are published for `linux/amd64` and `linux/arm64`. The plain
+image contains only the Python server. The `-minibridge` tag is a separately
+built variant that bundles both executables in one container; Minibridge is not
+a sidecar and is not downloaded at pod startup.
 
 ## Architecture
 
@@ -157,6 +161,22 @@ docker run --rm \
   jenkins-mcp-server:$(cat VERSION)
 ```
 
+Or use the maintained Compose deployment, which applies a read-only root
+filesystem, dropped capabilities, writable temporary mounts, and an audit
+volume:
+
+```bash
+cp .env.example .env
+# Edit .env, keep it out of source control, and restrict its permissions.
+docker compose up server
+
+# Run the single-container Minibridge variant instead. Its sample policy
+# allows every non-destructive tool and refuses @destructive.
+docker compose --profile minibridge up minibridge
+```
+
+Do not start both services together because they publish the same MCP port.
+
 Health endpoints:
 
 ```text
@@ -180,12 +200,18 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.18.0 \
+  --version 1.19.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
 
-The chart includes hardened pod settings, probes, NetworkPolicy, PodDisruptionBudget, optional External Secrets, Tailscale ingress, and Tailscale egress to Jenkins.
+The chart includes hardened pod settings, probes, NetworkPolicy,
+PodDisruptionBudget, optional External Secrets, Tailscale ingress, and Tailscale
+egress to Jenkins. Credentials can come from one existing Secret, separate
+username and token Secret references, a chart-managed development Secret, or
+External Secrets Operator. See
+[`per-field-secret-refs.yaml`](examples/values/per-field-secret-refs.yaml) for
+the split-secret form.
 
 For strict TLS, configure `jenkins.url` with Jenkins's exact Tailscale MagicDNS
 FQDN and route the tailnet DNS zone through the Operator `DNSConfig`; do not
@@ -270,9 +296,10 @@ minibridge:
 
 The chart selects `ghcr.io/grglzrv/jenkins-mcp-server:<version>-minibridge`,
 published alongside the default image on every release. `edge-minibridge`
-tracks `main`. minibridge itself is pinned to a specific commit rather than
-`latest`, since a proxy in the request path should not change enforcement
-behaviour on an unrelated rebuild.
+tracks `main`. The chart runs one container: its entrypoint starts Minibridge,
+which spawns `jenkins-mcp-server --transport stdio`. Minibridge v0.8.0 is
+checksum-pinned rather than fetched from `latest`, since a proxy in the request
+path should not change enforcement behaviour on an unrelated rebuild.
 
 Credential injection is unchanged with the proxy on or off: `JENKINS_TOKEN`
 always arrives via `secretKeyRef` from a Kubernetes Secret, which External
@@ -381,7 +408,15 @@ minibridge:
       policy: /policy.rego
     http:
       enabled: false       # or delegate to a remote HTTP policer
+      url: ""
+      token:
+        existingSecret: ""
+        secretKey: MINIBRIDGE_POLICER_HTTP_BEARER_TOKEN
 ```
+
+The Rego and HTTP policers are mutually exclusive. For encrypted listener keys,
+`minibridge.tls.passSecretKey` reads the passphrase from the TLS Secret, while
+`minibridge.tls.pass.valueFrom` can reference a different Secret and key.
 
 ### Recommended posture
 
@@ -430,19 +465,20 @@ So `Chart.appVersion` *is* the image tag. Bumping the version moves the chart an
 the image together by construction.
 
 ```bash
-make version VERSION=1.14.0     # rewrites every version pin in the repo
-git commit -am "chore(release): prepare v1.14.0"
-git tag -a v1.14.0 -m "Release v1.14.0"
-git push origin main v1.14.0
+NEW_VERSION=1.19.0
+make version VERSION="$NEW_VERSION"     # rewrites every version pin in the repo
+git commit -am "chore(release): prepare v$NEW_VERSION"
+git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+git push origin main "v$NEW_VERSION"
 ```
 
 `make version` rewrites every version pin in the repository: `VERSION`,
 `pyproject.toml`, `src/jenkins_mcp_server/__init__.py`, the chart's `version`
 **and** `appVersion`, both README install commands, the Kustomize base,
 production and minibridge overlays, the standalone minibridge deployment, the
-example values, and all three Argo CD applications.
+example values, Compose deployment, and all versioned Argo CD applications.
 `scripts/check_version.py` then asserts they all agree, and additionally scans
-`README.md`, `deploy/`, `examples/` and `charts/` for any version pin that
+`README.md`, `compose.yaml`, `deploy/`, `examples/` and `charts/` for any version pin that
 disagrees — several examples had silently frozen at older versions before that
 check existed.
 
@@ -450,11 +486,11 @@ The release workflow refuses to publish anything if they do not:
 
 ```bash
 test "${version}" = "$(cat VERSION)"   # git tag must match VERSION
-python scripts/check_version.py        # all 9 locations must agree
+python scripts/check_version.py        # every versioned artifact must agree
 ```
 
 Only after that gate passes does it build the multi-architecture image (tagged
-`1.14.0`, `1.14`, `1`, and `latest`), package the chart at the same version, push
+with the full version, major/minor, major, and `latest`), package the chart at the same version, push
 both to GHCR, and create the GitHub Release with provenance and SBOM metadata.
 
 Two consequences worth knowing:

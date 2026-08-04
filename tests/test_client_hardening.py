@@ -293,7 +293,7 @@ async def test_empty_parameters_still_use_buildWithParameters() -> None:
 
 def test_context_path_is_preserved_in_urls() -> None:
     """Jenkins behind a prefix such as https://ci.corp/jenkins must still work."""
-    c = httpx.Client(base_url="https://ci.corp/jenkins")
+    c = httpx.Client(base_url="https://ci.corp/jenkins", trust_env=False)
     assert (
         str(c.build_request("GET", "/job/AI/job/x/api/json").url)
         == "https://ci.corp/jenkins/job/AI/job/x/api/json"

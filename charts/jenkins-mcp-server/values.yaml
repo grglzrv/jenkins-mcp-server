@@ -181,6 +181,16 @@ jenkins:
     existingSecret: jenkins-mcp-secrets
     usernameKey: JENKINS_USERNAME
     tokenKey: JENKINS_TOKEN
+    # Optional per-field Secret references. Use these when the Jenkins username
+    # and token live in different Secrets. Set both names and clear
+    # existingSecret; an empty key falls back to usernameKey/tokenKey above.
+    valueFrom:
+      username:
+        name: ""
+        key: ""
+      token:
+        name: ""
+        key: ""
     # Only for disposable development environments. Prefer existingSecret or
     # External Secrets in production.
     create: false
@@ -358,6 +368,10 @@ minibridge:
     url: ""
   # Ship the SBOM baked into the image. Set false to disable the check.
   sbom: true
+  mcp:
+    # Let minibridge place transient MCP configuration in the writable /tmp
+    # mount instead of the read-only container filesystem.
+    useTempDir: true
 
   # TLS on the minibridge listener. Certificates come from an existing Secret
   # rather than inline values, so nothing sensitive lives in values.yaml.
@@ -367,8 +381,13 @@ minibridge:
     existingSecret: ""
     certKey: tls.crt
     keyKey: tls.key
-    # Optional passphrase for the private key, from the same Secret.
+    # Optional passphrase for the private key, from the same Secret. For a
+    # passphrase stored separately, use pass.valueFrom instead.
     passSecretKey: ""
+    pass:
+      valueFrom:
+        name: ""
+        key: ""
     # Optional client CA to enable mTLS, from the same Secret.
     clientCASecretKey: ""
 
@@ -431,6 +450,6 @@ minibridge:
       url: ""
       token:
         existingSecret: ""
-        secretKey: MINIBRIDGE_POLICER_TOKEN
+        secretKey: MINIBRIDGE_POLICER_HTTP_BEARER_TOKEN
       # Path to a CA bundle for the policer's certificate, from a mounted volume.
       caPath: ""

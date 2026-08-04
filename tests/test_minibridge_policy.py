@@ -165,8 +165,10 @@ def test_no_secret_material_is_inlined_in_minibridge_values() -> None:
     assert "value" not in mb["basicAuth"], "basicAuth must not accept a raw value"
     assert "value" not in mb["policer"]["http"]["token"]
     assert "existingSecret" in mb["policer"]["http"]["token"]
-    for k in ["cert", "key", "pass"]:
+    for k in ["cert", "key"]:
         assert k not in mb["tls"], f"tls.{k} must not accept inline material"
+    assert "value" not in mb["tls"]["pass"]
+    assert set(mb["tls"]["pass"]["valueFrom"]) == {"name", "key"}
 
 
 def test_policer_env_uses_minibridge_variable_names() -> None:
@@ -174,7 +176,9 @@ def test_policer_env_uses_minibridge_variable_names() -> None:
     for var in ["MINIBRIDGE_MODE", "MINIBRIDGE_LISTEN", "MINIBRIDGE_HEALTH_LISTEN",
                 "MINIBRIDGE_LOG_LEVEL", "MINIBRIDGE_POLICER_TYPE",
                 "MINIBRIDGE_POLICER_ENFORCE", "MINIBRIDGE_POLICER_REGO_POLICY",
-                "MINIBRIDGE_POLICER_URL", "MINIBRIDGE_POLICER_TOKEN",
+                "MINIBRIDGE_POLICER_HTTP_URL",
+                "MINIBRIDGE_POLICER_HTTP_BEARER_TOKEN",
+                "MINIBRIDGE_POLICER_HTTP_CA", "MINIBRIDGE_MCP_USE_TEMPDIR",
                 "MINIBRIDGE_TLS_SERVER_CERT", "MINIBRIDGE_TLS_SERVER_KEY",
                 "MINIBRIDGE_TLS_SERVER_CLIENT_CA", "OTEL_EXPORTER_OTLP_ENDPOINT"]:
         assert var in helpers, f"{var} not emitted by the minibridge env helper"
