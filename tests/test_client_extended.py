@@ -111,7 +111,8 @@ async def test_read_and_mutation_methods() -> None:
                 headers={"Location": "https://jenkins.test/queue/item/2/"},
             )
         if path == "/createItem":
-            return httpx.Response(200)
+            # Jenkins redirects to the copied job after a successful copy.
+            return httpx.Response(302, headers={"Location": "/job/demo-copy/"})
         if path == "/manage/reload":
             return httpx.Response(302, text="reloading", headers={"X-Jenkins": "2"})
         return httpx.Response(404, text=f"unhandled {request.method} {path}")

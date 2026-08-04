@@ -260,7 +260,7 @@ class JenkinsClient:
             "/createItem",
             action="job.copy",
             params={"name": target, "mode": "copy", "from": source},
-            expected=(200,),
+            expected=(200, 302),
         )
         return {"source": source, "target": target}
 
