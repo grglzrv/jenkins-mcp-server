@@ -267,3 +267,77 @@ jobs:
                       --tail=40 --all-containers 2>/dev/null)
           logs=$(printf '%s' "$logs" | tr '\n' '~' | tr -s ' ' | tail -c 1200)
           echo "::error::minibridge smoke failed on ${{ matrix.k3s }} :: ${logs:-no container output}"
+
+  minibridge-all-tools:
+    # Deploys a real disposable Jenkins and proves the effective policy, not
+    # merely that Minibridge starts. The server-side policy permits everything;
+    # Minibridge alone hides/refuses @destructive while all other tools must
+    # complete against Jenkins.
+    name: "minibridge all-tools Jenkins smoke"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.2.3
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install 'mcp>=2.0.0,<3'
+
+      - name: Start k3s v1.36.2+k3s1
+        run: |
+          curl -sfL https://get.k3s.io | \
+            INSTALL_K3S_VERSION='v1.36.2+k3s1' \
+            INSTALL_K3S_EXEC='--disable traefik --disable metrics-server' \
+            sh -
+          sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+          echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> "$GITHUB_ENV"
+          kubectl wait --for=condition=Ready node --all --timeout=180s
+
+      - name: Build Jenkins and Minibridge images
+        run: |
+          docker build -f integration/jenkins/Dockerfile \
+            -t jenkins-smoke:ci integration/jenkins
+          docker build -f docker/Dockerfile.minibridge \
+            -t jenkins-mcp-server:smoke-mb .
+          docker save jenkins-smoke:ci jenkins-mcp-server:smoke-mb | \
+            sudo k3s ctr images import -
+
+      - name: Deploy Jenkins
+        run: |
+          kubectl create namespace jenkins-mcp
+          kubectl -n jenkins-mcp apply -f integration/jenkins/kubernetes-smoke.yaml
+          kubectl -n jenkins-mcp rollout status deployment/jenkins-smoke --timeout=6m
+          kubectl -n jenkins-mcp wait --for=condition=Ready \
+            pod -l app.kubernetes.io/name=jenkins-smoke --timeout=2m
+
+      - name: Install Helm chart with only destructive tools denied
+        run: |
+          kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
+            --from-literal=JENKINS_USERNAME=admin \
+            --from-literal=JENKINS_TOKEN=admin-test-password
+          helm install jenkins-mcp charts/jenkins-mcp-server \
+            --namespace jenkins-mcp \
+            --values .github/smoke-values-minibridge-tools.yaml \
+            --set image.repository=jenkins-mcp-server \
+            --set minibridge.image.repository=jenkins-mcp-server \
+            --set minibridge.image.tag=smoke-mb \
+            --set image.pullPolicy=Never \
+            --wait --timeout 5m
+
+      - name: Exercise every non-destructive tool through Minibridge
+        run: |
+          kubectl -n jenkins-mcp port-forward \
+            svc/jenkins-mcp-jenkins-mcp-server 8000:8000 &
+          sleep 5
+          python integration/minibridge_all_tools.py http://127.0.0.1:8000/mcp
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "::group::pods"; kubectl -n jenkins-mcp get pods -o wide || true; echo "::endgroup::"
+          echo "::group::jenkins"; kubectl -n jenkins-mcp logs deployment/jenkins-smoke --tail=200 || true; echo "::endgroup::"
+          echo "::group::minibridge"; kubectl -n jenkins-mcp logs deployment/jenkins-mcp-jenkins-mcp-server --tail=200 || true; echo "::endgroup::"
