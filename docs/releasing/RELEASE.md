@@ -10,6 +10,12 @@ The repository uses one application version across:
 - Production Kustomize image tag
 - Minibridge image tags and raw deployment
 - Versioned Argo CD applications and Compose defaults
+- README install commands and release examples
+
+The canonical inventory is `scripts/version_pins.py`. `make version` updates
+all declared pins, and `make verify-version` scans the whole repository for a
+stale application image, chart, Kustomize, Argo CD, Compose, or documentation
+version that was not added to that inventory.
 
 ## Prepare a release
 

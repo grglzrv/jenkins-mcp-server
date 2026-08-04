@@ -603,7 +603,7 @@ def test_chart_readme_documents_every_value() -> None:
 
 
 def test_no_stale_version_pins_anywhere() -> None:
-    """Examples added after set_version.py froze at old versions."""
+    """Every declared pin and the repository-wide stale scan must pass."""
     import subprocess
 
     result = subprocess.run(
@@ -611,6 +611,56 @@ def test_no_stale_version_pins_anywhere() -> None:
         capture_output=True, text=True, cwd=ROOT,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_version_bump_updates_every_pin_and_detects_future_unmanaged_files(
+    tmp_path,
+) -> None:
+    """A new manifest cannot freeze without either being updated or failing CI."""
+    import shutil
+    import subprocess
+    import sys
+
+    copied = tmp_path / "repo"
+    shutil.copytree(
+        ROOT,
+        copied,
+        ignore=shutil.ignore_patterns(
+            ".git", ".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+            "__pycache__", "build", "dist",
+        ),
+    )
+    bump = subprocess.run(
+        [sys.executable, "scripts/set_version.py", "9.8.7"],
+        cwd=copied,
+        capture_output=True,
+        text=True,
+    )
+    assert bump.returncode == 0, bump.stderr
+    check = subprocess.run(
+        [sys.executable, "scripts/check_version.py"],
+        cwd=copied,
+        capture_output=True,
+        text=True,
+    )
+    assert check.returncode == 0, check.stderr
+    assert "22 managed version pins in 17 files" in check.stdout
+
+    future = copied / "future/deployment.md"
+    future.parent.mkdir()
+    stale_version = ".".join(["1", "19", "0"])
+    future.write_text(
+        f"image: ghcr.io/grglzrv/jenkins-mcp-server:{stale_version}\n",
+        encoding="utf-8",
+    )
+    stale = subprocess.run(
+        [sys.executable, "scripts/check_version.py"],
+        cwd=copied,
+        capture_output=True,
+        text=True,
+    )
+    assert stale.returncode != 0
+    assert f"future/deployment.md: pins {stale_version}" in stale.stderr
 
 
 # --- cluster smoke test ---------------------------------------------------

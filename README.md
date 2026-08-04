@@ -472,15 +472,18 @@ git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
 git push origin main "v$NEW_VERSION"
 ```
 
-`make version` rewrites every version pin in the repository: `VERSION`,
+`make version` rewrites all 22 managed application-version pins across 17
+files: `VERSION`,
 `pyproject.toml`, `src/jenkins_mcp_server/__init__.py`, the chart's `version`
 **and** `appVersion`, both README install commands, the Kustomize base,
 production and minibridge overlays, the standalone minibridge deployment, the
 example values, Compose deployment, and all versioned Argo CD applications.
-`scripts/check_version.py` then asserts they all agree, and additionally scans
-`README.md`, `compose.yaml`, `deploy/`, `examples/` and `charts/` for any version pin that
-disagrees — several examples had silently frozen at older versions before that
-check existed.
+`scripts/check_version.py` then asserts every declared pin exists exactly where
+expected and agrees. It additionally scans every small UTF-8 file in the
+repository, regardless of directory or extension, for application image tags,
+Helm install versions, Argo CD revisions, Kustomize tags, Compose defaults, and
+release examples. A newly added manifest or README with a stale version fails
+CI until it is added to the canonical pin inventory.
 
 The release workflow refuses to publish anything if they do not:
 

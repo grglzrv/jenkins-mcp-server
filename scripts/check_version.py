@@ -3,10 +3,43 @@ from __future__ import annotations
 
 import re
 import sys
-import tomllib
 from pathlib import Path
 
+from version_pins import PINS, SEMVER
+
 ROOT = Path(__file__).resolve().parents[1]
+EXCLUDED_PARTS = {
+    ".git",
+    ".venv",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+    "build",
+    "dist",
+}
+EXCLUDED_FILES = {"CHANGELOG.md"}  # Historical releases must retain their versions.
+
+# These contexts represent deployable application/chart pins, not unrelated
+# dependency, Jenkins, Kubernetes, or historical changelog versions. Scanning
+# the whole repository means a new manifest or README cannot silently escape
+# the explicit PINS inventory above.
+IMAGE_PIN_PATTERN = re.compile(
+    rf"ghcr\.io/grglzrv/jenkins-mcp-server:(?P<version>{SEMVER})"
+)
+REPOSITORY_PIN_PATTERNS = (
+    IMAGE_PIN_PATTERN,
+    re.compile(rf"^\s*targetRevision:\s*(?P<version>{SEMVER})", re.MULTILINE),
+    re.compile(rf"^\s*newTag:\s*(?P<version>{SEMVER})", re.MULTILINE),
+    re.compile(rf"--version\s+(?P<version>{SEMVER})"),
+    re.compile(rf"^NEW_VERSION=(?P<version>{SEMVER})$", re.MULTILINE),
+    re.compile(rf"JENKINS_MCP_VERSION:-(?P<version>{SEMVER})"),
+    re.compile(
+        rf'^\s*(?:appVersion|version|tag):\s*["\']?(?P<version>{SEMVER})',
+        re.MULTILINE,
+    ),
+    re.compile(rf'^__version__\s*=\s*["\'](?P<version>{SEMVER})', re.MULTILINE),
+)
 
 
 def fail(message: str) -> None:
@@ -14,102 +47,76 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def scan_for_stale_pins(version: str) -> list[str]:
-    """Catch version pins in files nobody remembered to add to set_version.py.
-
-    Several examples froze at the version current when they were written,
-    because they were added after the release script and never wired into it.
-    """
-    import re
-
-    stale: list[str] = []
-    patterns = [
-        ("ghcr.io/grglzrv/jenkins-mcp-server:", re.compile(r"jenkins-mcp-server:(\d+\.\d+\.\d+)")),
-        ("targetRevision:", re.compile(r"^\s*targetRevision:\s*(\d+\.\d+\.\d+)", re.M)),
-        ("newTag:", re.compile(r"^\s*newTag:\s*(\d+\.\d+\.\d+)", re.M)),
-        ("--version", re.compile(r"--version\s+(\d+\.\d+\.\d+)")),
-    ]
-    roots = ["deploy", "examples", "charts"]
-    candidates = [ROOT / "README.md", ROOT / "compose.yaml"]
-    for root in roots:
-        candidates.extend(sorted((ROOT / root).rglob("*")))
-    for path in candidates:
-        if True:
-            if path.suffix not in {".yaml", ".yml", ".md"} or not path.is_file():
+def repository_text_files(root: Path):
+    """Yield every small UTF-8 repository file, regardless of extension."""
+    for path in sorted(root.rglob("*")):
+        if (
+            not path.is_file()
+            or path.name in EXCLUDED_FILES
+            or any(part in EXCLUDED_PARTS for part in path.parts)
+        ):
+            continue
+        try:
+            if path.stat().st_size > 2_000_000:
                 continue
-            text = path.read_text(encoding="utf-8")
-            for _label, pattern in patterns:
-                for found in pattern.findall(text):
-                    if found != version:
-                        stale.append(f"{path.relative_to(ROOT)}: pins {found}")
+            path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        yield path
+
+
+def managed_pin_errors(version: str, root: Path = ROOT) -> list[str]:
+    """Validate the exact count and value of every intentionally managed pin."""
+    errors: list[str] = []
+    for pin in PINS:
+        path = root / pin.path
+        if not path.is_file():
+            errors.append(f"{pin.path}: managed pin file is missing")
+            continue
+        matches = list(pin.pattern.finditer(path.read_text(encoding="utf-8")))
+        if len(matches) != pin.expected:
+            errors.append(
+                f"{pin.path}: expected {pin.expected} managed pin(s) for "
+                f"{pin.pattern.pattern!r}, found {len(matches)}"
+            )
+            continue
+        found = {match.group("version") for match in matches}
+        if found != {version}:
+            errors.append(f"{pin.path}: expected {version}, found {sorted(found)}")
+    return errors
+
+
+def scan_for_stale_pins(version: str, root: Path = ROOT) -> list[str]:
+    """Find stale application pins anywhere, including files not yet inventoried."""
+    stale: list[str] = []
+    for path in repository_text_files(root):
+        text = path.read_text(encoding="utf-8")
+        for pattern in REPOSITORY_PIN_PATTERNS:
+            for match in pattern.finditer(text):
+                found = match.group("version")
+                if found.endswith("-minibridge"):
+                    found = found.removesuffix("-minibridge")
+                if found != version:
+                    stale.append(f"{path.relative_to(root)}: pins {found}")
     return sorted(set(stale))
 
 
 def main() -> None:
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", version):
+    if not re.fullmatch(SEMVER, version):
         fail(f"VERSION is not semantic: {version!r}")
 
-    with (ROOT / "pyproject.toml").open("rb") as fh:
-        pyproject = tomllib.load(fh)
-    python_version = pyproject["project"]["version"]
+    errors = managed_pin_errors(version)
+    errors.extend(scan_for_stale_pins(version))
+    if errors:
+        fail("repository version pins are inconsistent:\n  " + "\n  ".join(errors))
 
-    init_text = (ROOT / "src/jenkins_mcp_server/__init__.py").read_text(encoding="utf-8")
-    match = re.search(r'^__version__\s*=\s*"([^"]+)"', init_text, re.MULTILINE)
-    if not match:
-        fail("could not find __version__")
-    package_version = match.group(1)
-
-    chart_text = (ROOT / "charts/jenkins-mcp-server/Chart.yaml").read_text(encoding="utf-8")
-    chart_version_match = re.search(r"^version:\s*([^\s]+)", chart_text, re.MULTILINE)
-    app_version_match = re.search(r'^appVersion:\s*["\']?([^"\'\s]+)', chart_text, re.MULTILINE)
-    if not chart_version_match or not app_version_match:
-        fail("could not read chart version/appVersion")
-
-    raw_kustomize = (
-        ROOT / "deploy/kubernetes/overlays/production/kustomization.yaml"
-    ).read_text(encoding="utf-8")
-    raw_tag_match = re.search(r"^\s*newTag:\s*([^\s]+)", raw_kustomize, re.MULTILINE)
-    if not raw_tag_match:
-        fail("could not read Kustomize image tag")
-
-    raw_deployment = (ROOT / "deploy/kubernetes/base/deployment.yaml").read_text(encoding="utf-8")
-    raw_image_match = re.search(r"ghcr\.io/grglzrv/jenkins-mcp-server:([^\s]+)", raw_deployment)
-    if not raw_image_match:
-        fail("could not read raw Deployment image tag")
-
-    example_values = (
-        ROOT / "examples/values/tailscale-production.yaml"
-    ).read_text(encoding="utf-8")
-    example_tag_match = re.search(r'^\s*tag:\s*["\']?([^"\'\s]+)', example_values, re.MULTILINE)
-    if not example_tag_match:
-        fail("could not read Helm example image tag")
-
-    argo_oci = (ROOT / "examples/argocd/application-oci.yaml").read_text(encoding="utf-8")
-    argo_revision_match = re.search(r"^\s*targetRevision:\s*([^\s]+)", argo_oci, re.MULTILINE)
-    if not argo_revision_match:
-        fail("could not read Argo CD OCI chart version")
-
-    actual = {
-        "VERSION": version,
-        "pyproject": python_version,
-        "package": package_version,
-        "chart": chart_version_match.group(1),
-        "appVersion": app_version_match.group(1),
-        "kustomize": raw_tag_match.group(1),
-        "rawDeployment": raw_image_match.group(1),
-        "helmExample": example_tag_match.group(1),
-        "argoOCI": argo_revision_match.group(1),
-    }
-    mismatches = {name: value for name, value in actual.items() if value != version}
-    if mismatches:
-        fail(f"expected {version}; mismatches: {mismatches}")
-
-    stale = scan_for_stale_pins(version)
-    if stale:
-        fail("stale version pins found:\n  " + "\n  ".join(stale))
-
-    print(f"all versions are synchronized at {version}")
+    count = sum(pin.expected for pin in PINS)
+    files = len({pin.path for pin in PINS})
+    print(
+        f"all {count} managed version pins in {files} files are synchronized "
+        f"at {version}; repository-wide stale-pin scan passed"
+    )
 
 
 if __name__ == "__main__":
