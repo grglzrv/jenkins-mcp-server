@@ -294,7 +294,8 @@ jobs:
             INSTALL_K3S_EXEC='--disable traefik --disable metrics-server' \
             sh -
           sudo chmod 644 /etc/rancher/k3s/k3s.yaml
-          echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> "$GITHUB_ENV"
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+          echo "KUBECONFIG=$KUBECONFIG" >> "$GITHUB_ENV"
           kubectl wait --for=condition=Ready node --all --timeout=180s
 
       - name: Build Jenkins and Minibridge images
