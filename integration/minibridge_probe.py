@@ -42,9 +42,9 @@ def check(condition: bool, description: str) -> None:
 
 
 # The smoke cluster has no Jenkins, so an allowed tool fails on connection.
-# Matching refusal wording is brittle -- the proxy, the Rego policy and the
-# server each phrase it differently -- so classify by what a Jenkins failure
-# looks like instead, and treat every other error as a refusal.
+# For CallToolResult errors, classify by what a Jenkins transport failure looks
+# like. Raised MCP errors use Minibridge's explicit convention below instead of
+# treating every exception as a refusal.
 JENKINS_ERRORS = (
     "connect",
     "connection",
