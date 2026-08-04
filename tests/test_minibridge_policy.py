@@ -1,5 +1,7 @@
 """Tests for the minibridge guardrail policy and chart wiring."""
 
+import re
+import runpy
 import shutil
 import subprocess
 from pathlib import Path
@@ -28,6 +30,48 @@ def test_policy_and_entrypoint_exist() -> None:
         assert (DOCKER / name).is_file(), f"docker/{name} missing"
 
 
+def test_all_tools_smoke_covers_exact_server_surface() -> None:
+    smoke = runpy.run_path(ROOT / "integration" / "minibridge_all_tools.py")
+    server = (ROOT / "src" / "jenkins_mcp_server" / "server.py").read_text()
+    registered = set(re.findall(r"@mcp\.tool\(\)\s*\n\s*async def ([a-z_0-9]+)", server))
+
+    allowed = smoke["ALLOWED"]
+    denied = smoke["DENIED"]
+    assert not (allowed & denied)
+    assert allowed | denied == registered
+    assert denied == {
+        "update_job_config",
+        "delete_job",
+        "stop_build",
+        "cancel_queue_item",
+        "set_node_offline",
+    }
+
+
+def test_all_tools_smoke_denies_only_destructive_at_minibridge() -> None:
+    values = yaml.safe_load(
+        (ROOT / ".github" / "smoke-values-minibridge-tools.yaml").read_text()
+    )
+    minibridge = values["minibridge"]
+    assert minibridge["tools"] == {"deny": ["@destructive"], "allow": []}
+    assert minibridge["methodsDeny"] == []
+    assert minibridge["guardrails"] == []
+
+    mcp = values["mcp"]
+    assert mcp["readOnly"] is False
+    for option in [
+        "allowJobWrite",
+        "allowBuildWrite",
+        "allowNodeWrite",
+        "allowAdminRequest",
+        "allowDestructive",
+        "allowJobDelete",
+        "allowJobUpdate",
+        "allowBuildStop",
+    ]:
+        assert mcp[option] is True
+
+
 def test_entrypoint_requires_credentials_and_forces_stdio() -> None:
     text = (DOCKER / "entrypoint.sh").read_text()
     for var in ["JENKINS_URL", "JENKINS_USERNAME", "JENKINS_TOKEN"]:
@@ -44,8 +88,6 @@ def test_policy_covers_every_declared_guardrail() -> None:
 
 def test_policy_knows_this_servers_tools() -> None:
     """Our own tool names must be excluded or cross-origin detection misfires."""
-    import re
-
     server = (ROOT / "src/jenkins_mcp_server/server.py").read_text()
     tools = re.findall(r"@mcp\.tool\(\)\s*\n\s*async def ([a-z_0-9]+)", server)
     policy = (DOCKER / "policy.rego").read_text()
@@ -56,8 +98,6 @@ def test_policy_knows_this_servers_tools() -> None:
 
 def test_every_tool_belongs_to_exactly_one_group() -> None:
     """The chart advertises groups; they must cover the real tool surface."""
-    import re
-
     server = (ROOT / "src/jenkins_mcp_server/server.py").read_text()
     tools = set(re.findall(r"@mcp\.tool\(\)\s*\n\s*async def ([a-z_0-9]+)", server))
     policy = (DOCKER / "policy.rego").read_text()

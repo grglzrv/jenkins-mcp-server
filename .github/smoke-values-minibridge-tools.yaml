@@ -1,0 +1,58 @@
+# Full Jenkins-through-Minibridge smoke values. The server's own policy allows
+# every category so the test proves Minibridge alone blocks @destructive.
+jenkins:
+  url: http://jenkins:8080
+  credentials:
+    existingSecret: jenkins-mcp-secrets
+    create: false
+
+replicaCount: 1
+
+ingress:
+  enabled: false
+
+minibridge:
+  enabled: true
+  tools:
+    deny: ["@destructive"]
+    allow: []
+  methodsDeny: []
+  # No content guardrail is enabled here: only the destructive tool group may
+  # be blocked, and every other tool must reach Jenkins.
+  guardrails: []
+  policer:
+    enforce: true
+
+networkPolicy:
+  enabled: true
+  additionalEgress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: jenkins-smoke
+      ports:
+        - protocol: TCP
+          port: 8080
+
+podDisruptionBudget:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi
+  limits:
+    cpu: 500m
+    memory: 384Mi
+
+mcp:
+  readOnly: false
+  allowJobWrite: true
+  allowBuildWrite: true
+  allowNodeWrite: true
+  allowAdminRequest: true
+  allowDestructive: true
+  allowJobDelete: true
+  allowJobUpdate: true
+  allowBuildStop: true
+  allowedJobs: "*"

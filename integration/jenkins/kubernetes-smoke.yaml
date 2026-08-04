@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jenkins-smoke
+  labels:
+    app.kubernetes.io/name: jenkins-smoke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jenkins-smoke
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jenkins-smoke
+    spec:
+      containers:
+        - name: jenkins
+          image: jenkins-smoke:ci
+          imagePullPolicy: Never
+          # The integration image defaults to self-signed TLS for the Docker
+          # Compose suite. This in-cluster fixture uses HTTP on an isolated
+          # disposable network, avoiding certificate plumbing unrelated to the
+          # Minibridge policy being tested.
+          command: ["/usr/bin/tini", "--", "/usr/local/bin/jenkins.sh"]
+          args: ["--httpPort=8080"]
+          env:
+            - name: CASC_JENKINS_CONFIG
+              value: /usr/share/jenkins/ref/casc/jenkins.yaml
+            - name: JAVA_OPTS
+              value: -Djenkins.install.runSetupWizard=false
+          ports:
+            - name: http
+              containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /login
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: home
+              mountPath: /var/jenkins_home
+      volumes:
+        - name: home
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins
+  labels:
+    app.kubernetes.io/name: jenkins-smoke
+spec:
+  selector:
+    app.kubernetes.io/name: jenkins-smoke
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
