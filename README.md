@@ -180,7 +180,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.17.0 \
+  --version 1.18.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```

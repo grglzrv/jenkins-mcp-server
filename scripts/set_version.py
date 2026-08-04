@@ -8,12 +8,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def replace(path: str, pattern: str, replacement: str) -> None:
+def replace(path: str, pattern: str, replacement: str, expected: int = 1) -> None:
+    """Rewrite version pins in one file.
+
+    `expected` is the number of matches required. A file may legitimately pin
+    the version more than once, for example a README showing both a quick start
+    and a full install command, and every occurrence must move together.
+    """
     file_path = ROOT / path
     original = file_path.read_text(encoding="utf-8")
     updated, count = re.subn(pattern, replacement, original, flags=re.MULTILINE)
-    if count != 1:
-        raise RuntimeError(f"expected one version match in {path}, found {count}")
+    if count != expected:
+        raise RuntimeError(
+            f"expected {expected} version match(es) in {path}, found {count}"
+        )
     file_path.write_text(updated, encoding="utf-8")
 
 
@@ -83,6 +91,7 @@ def main() -> None:
         "charts/jenkins-mcp-server/README.md",
         r"^  --version [0-9][^\s]*",
         f"  --version {version}",
+        expected=2,
     )
     replace(
         "README.md",
