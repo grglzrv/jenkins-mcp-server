@@ -35,6 +35,17 @@ def test_current_release_has_complete_professional_notes() -> None:
         assert f"### {heading}" in notes
 
 
+@pytest.mark.parametrize("version", ["1.18.0", "1.19.0", "1.20.0"])
+def test_unpublished_release_notes_are_complete(version: str) -> None:
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+
+    validate_document(changelog, version)
+    notes = render_release_notes(changelog, version)
+
+    for heading in HEADINGS:
+        assert f"### {heading}" in notes
+
+
 def test_prepare_promotes_curated_notes_and_recreates_template(tmp_path: Path) -> None:
     path = tmp_path / "CHANGELOG.md"
     curated = _categories("Reviewed release detail.")

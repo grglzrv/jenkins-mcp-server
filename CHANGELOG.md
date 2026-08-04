@@ -10,35 +10,48 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- Releases now follow the canonical `VERSION` automatically after a validated
+  version-change pull request merges to `main`.
 
 ### New Features
 
-- None yet.
+- The release workflow is reusable with explicit version, source commit, and
+  changelog commit inputs, enabling reproducible historical release recovery.
+- A one-time ordered backfill publishes the missing `1.18.0`, `1.19.0`, and
+  `1.20.0` releases from their exact release commits.
 
 ### Improvements
 
-- None yet.
+- Release publication is idempotent: reruns detect an existing GitHub Release
+  and safely skip its image, chart, smoke-test, and release jobs.
+- Historical release smoke tests check out the same source commit used to build
+  the application images and Helm chart.
 
 ### Bug Fixes
 
-- None yet.
+- Merging a complete application/chart version bump no longer leaves GitHub
+  Releases and tags behind at an older version.
+- Ordered backfill prevents older releases from overwriting the `latest`,
+  major, or minor image aliases after a newer version is published.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None known.
 
 ### Security
 
-- None yet.
+- None. Release permissions remain job-scoped, and recovered artifacts retain
+  the existing provenance and SBOM publication gates.
 
 ### Upgrade Notes
 
-- None yet.
+- No application, chart, configuration, or deployment change is required.
+  Release maintainers should merge the prepared version pull request; creating
+  a matching tag manually is now only a recovery option.
 
 ## [1.20.0] - 2026-08-04
 
@@ -152,7 +165,24 @@ from the matching version entry after CI validates it.
 
 ## [1.18.0] - 2026-08-04
 
-### Fixed
+### Highlights
+
+- The Jenkins-through-Minibridge policy boundary is now verified across the
+  complete MCP tool surface without mistaking downstream Jenkins failures for
+  policy rejection.
+
+### New Features
+
+- A Minibridge integration smoke test verifies that destructive tools are
+  hidden and refused while every non-destructive tool is advertised and reaches
+  Jenkins.
+
+### Improvements
+
+- The probe classifies Jenkins DNS, connection, timeout, TLS, and certificate
+  errors as evidence that the request passed through Minibridge policy.
+
+### Bug Fixes
 
 - The Minibridge smoke probe now distinguishes an explicit policy rejection
   from Jenkins DNS, connection, timeout, TLS, and certificate failures. Those
@@ -161,6 +191,24 @@ from the matching version entry after CI validates it.
 - The Jenkins-through-Minibridge smoke test exercises the complete tool surface:
   destructive tools must be hidden and refused, while every other tool must be
   advertised and reach Jenkins.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Destructive tools are required to remain undiscoverable and explicitly
+  refused by Minibridge; all other tools must cross the policy boundary.
+
+### Upgrade Notes
+
+- Update the application image and Helm chart together to `1.18.0`. No runtime
+  configuration migration is required.
 
 ## [1.17.0] - 2026-08-03
 

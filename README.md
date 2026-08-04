@@ -468,8 +468,8 @@ the image together by construction.
 NEW_VERSION=1.20.0
 make version VERSION="$NEW_VERSION"     # prepares notes and rewrites every pin
 git commit -am "chore(release): prepare v$NEW_VERSION"
-git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
-git push origin main "v$NEW_VERSION"
+git push origin "release/v$NEW_VERSION"
+# Open a PR and merge it after every required check is green.
 ```
 
 `make version` rewrites all 22 managed application-version pins across 17
@@ -494,10 +494,12 @@ notes. Use `None` or `None known` where appropriate; placeholders such as
 Release publishes this validated entry verbatim instead of generating primary
 notes from commit titles.
 
-The release workflow refuses to publish anything if they do not:
+When the validated version-change pull request merges to `main`, the release
+workflow starts automatically. It refuses to publish anything if these do not
+agree:
 
 ```bash
-test "${version}" = "$(cat VERSION)"   # git tag must match VERSION
+test "${version}" = "$(cat VERSION)"   # requested release must match VERSION
 python scripts/check_version.py        # every versioned artifact must agree
 python scripts/changelog.py validate   # release notes must be complete
 ```
@@ -506,6 +508,10 @@ Only after that gate passes does it build the multi-architecture image (tagged
 with the full version, major/minor, major, and `latest`), package the chart at the same version, push
 both to GHCR, and create the GitHub Release from the curated changelog entry
 with provenance and SBOM metadata.
+
+A matching annotated tag can still trigger the same idempotent workflow as a
+manual recovery path. If the GitHub Release already exists, the run validates
+the version and safely skips republication.
 
 Two consequences worth knowing:
 

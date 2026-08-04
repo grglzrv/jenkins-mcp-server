@@ -704,6 +704,42 @@ def test_release_is_gated_on_the_smoke_test() -> None:
     assert "minibridge-image" in release["jobs"]
 
 
+def test_version_changes_publish_automatically_and_idempotently() -> None:
+    text = (ROOT / ".github/workflows/release.yml").read_text()
+    assert "workflow_call:" in text
+    assert "branches:\n      - main" in text
+    assert "paths:\n      - VERSION" in text
+    assert "releases/tags/${TAG}" in text
+    assert "needs.validate.outputs.publish == 'true'" in text
+    assert "--target \"${RELEASE_TARGET}\"" in text
+    # Branch and reusable runs have no tag event for metadata-action to infer.
+    for pattern in ["{{version}}", "{{major}}.{{minor}}", "{{major}}"]:
+        assert f"pattern={pattern},value=${{{{ needs.validate.outputs.version }}}}" in text
+
+
+def test_release_backfill_is_ordered_and_uses_exact_sources() -> None:
+    backfill = yaml.safe_load(
+        (ROOT / ".github/workflows/backfill-releases.yml").read_text()
+    )
+    jobs = backfill["jobs"]
+    expected = {
+        "release-1-18": "1a6db437cefc08530d2b79fa1190d7b732112dc8",
+        "release-1-19": "b457b6ebf741df4763a93b8046f59ff7726daff0",
+        "release-1-20": "9b0cb04bad35a9f2c9526e4f247ae58caadb8356",
+    }
+    for job, source_ref in expected.items():
+        assert jobs[job]["uses"] == "./.github/workflows/release.yml"
+        assert jobs[job]["with"]["source_ref"] == source_ref
+    assert jobs["release-1-19"]["needs"] == "release-1-18"
+    assert jobs["release-1-20"]["needs"] == "release-1-19"
+
+
+def test_historical_release_smoke_checks_out_release_source() -> None:
+    text = (ROOT / ".github/workflows/chart-smoke.yml").read_text()
+    assert "source_ref:" in text
+    assert text.count("ref: ${{ inputs.source_ref || github.ref }}") == 3
+
+
 def test_smoke_values_disable_what_the_cluster_lacks() -> None:
     v = yaml.safe_load((ROOT / ".github/smoke-values.yaml").read_text())
     assert v["ingress"]["enabled"] is False

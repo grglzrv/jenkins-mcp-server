@@ -28,3 +28,8 @@ Compose defaults, install commands, and release examples. `make verify-version`
 validates both the repository-wide pins and the release notes, so a newly added
 pinned manifest or document must be included in `scripts/version_pins.py` and
 an incomplete changelog cannot be released.
+
+After the version pull request passes every required check and merges to
+`main`, GitHub Actions publishes the matching images, chart, tag, and GitHub
+Release automatically. Do not create the release tag before the merge; manual
+tagging is reserved for recovery and invokes the same idempotent workflow.

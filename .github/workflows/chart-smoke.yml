@@ -16,6 +16,10 @@ on:
         required: false
         default: '["v1.36.2+k3s1","v1.35.6+k3s1","v1.34.9+k3s1","v1.33.13+k3s1"]'
         type: string
+      source_ref:
+        description: "Commit or ref containing the chart and application to test"
+        required: false
+        type: string
   workflow_dispatch:
 
 permissions:
@@ -32,6 +36,8 @@ jobs:
         k3s: ${{ fromJSON(inputs.k3s_versions || '["v1.36.2+k3s1","v1.35.6+k3s1","v1.34.9+k3s1","v1.33.13+k3s1"]') }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - uses: azure/setup-helm@v5
         with:
@@ -185,6 +191,8 @@ jobs:
         k3s: ${{ fromJSON(inputs.k3s_versions || '["v1.36.2+k3s1"]') }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
       - uses: azure/setup-helm@v5
         with:
           version: v4.2.3
@@ -278,6 +286,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
       - uses: azure/setup-helm@v5
         with:
           version: v4.2.3
