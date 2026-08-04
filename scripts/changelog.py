@@ -150,7 +150,7 @@ def prepare_release(path: Path, version: str, released: date | None = None) -> b
         "## [Unreleased]\n\n"
         f"{UNRELEASED_TEMPLATE}\n\n"
         f"## [{version}] - {release_date.isoformat()}\n\n"
-        f"{release_body}"
+        f"{release_body}\n\n"
     ).splitlines()
     updated = lines[:start] + replacement + lines[end:]
     path.write_text("\n".join(updated).rstrip() + "\n", encoding="utf-8")
