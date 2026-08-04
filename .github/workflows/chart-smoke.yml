@@ -250,5 +250,12 @@ jobs:
         run: |
           echo "::group::pods"; kubectl -n jenkins-mcp get pods -o wide || true; echo "::endgroup::"
           echo "::group::logs"; kubectl -n jenkins-mcp logs -l app.kubernetes.io/name=jenkins-mcp-server --tail=150 --all-containers || true; echo "::endgroup::"
-          states=$(kubectl -n jenkins-mcp get pods -o jsonpath='{range .items[*]}{.metadata.name}{" phase="}{.status.phase}{range .status.containerStatuses[*]}{" | "}{.name}{"="}{.state}{end}{"\n"}{end}' 2>/dev/null | tr '\n' '~' | cut -c1-600)
-          echo "::error::minibridge smoke failed on ${{ matrix.k3s }} :: ${states:-no pods}"
+          # The container's own output is what explains a crash loop; pod
+          # state only says that it restarted. Annotations are readable from
+          # the API, the job log is not.
+          logs=$(kubectl -n jenkins-mcp logs -l app.kubernetes.io/name=jenkins-mcp-server \
+                   --tail=40 --all-containers --previous 2>/dev/null \
+                 || kubectl -n jenkins-mcp logs -l app.kubernetes.io/name=jenkins-mcp-server \
+                      --tail=40 --all-containers 2>/dev/null)
+          logs=$(printf '%s' "$logs" | tr '\n' '~' | tr -s ' ' | tail -c 1200)
+          echo "::error::minibridge smoke failed on ${{ matrix.k3s }} :: ${logs:-no container output}"
