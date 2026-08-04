@@ -20,6 +20,7 @@ import sys
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from mcp.shared.exceptions import MCPError
 
 # Matches examples/values/minibridge.yaml: tools.deny is ["@destructive"].
 DENIED = {
@@ -41,9 +42,9 @@ def check(condition: bool, description: str) -> None:
 
 
 # The smoke cluster has no Jenkins, so an allowed tool fails on connection.
-# Matching refusal wording is brittle -- the proxy, the Rego policy and the
-# server each phrase it differently -- so classify by what a Jenkins failure
-# looks like instead, and treat every other error as a refusal.
+# For CallToolResult errors, classify by what a Jenkins transport failure looks
+# like. Raised MCP errors use Minibridge's explicit convention below instead of
+# treating every exception as a refusal.
 JENKINS_ERRORS = (
     "connect",
     "connection",
@@ -57,6 +58,13 @@ JENKINS_ERRORS = (
     "certificate",
 )
 
+# Minibridge follows HTTP semantics for an enforced policer verdict: it returns
+# JSON-RPC error code 451 with a message prefixed by "request blocked:". Match
+# both parts so an arbitrary MCP/server error is never mistaken for a policy
+# refusal merely because ClientSession raised it.
+MINIBRIDGE_POLICY_ERROR_CODE = 451
+MINIBRIDGE_POLICY_ERROR_PREFIX = "request blocked:"
+
 
 def error_text(result) -> str:
     return " ".join(getattr(c, "text", "") for c in (result.content or [])).lower()
@@ -65,6 +73,21 @@ def error_text(result) -> str:
 def reached_jenkins(result) -> bool:
     """The call got past policy and failed trying to talk to Jenkins."""
     return any(marker in error_text(result) for marker in JENKINS_ERRORS)
+
+
+def raised_mcp_refused(exc: MCPError) -> bool:
+    """Classify a JSON-RPC exception raised by an MCP tool call.
+
+    Jenkins transport failures are proof that Minibridge allowed the call to
+    reach the server. Minibridge refusals use its explicit code/prefix pair.
+    Other MCP errors are application/server failures, not evidence of policy
+    rejection.
+    """
+    detail = str(exc).lower()
+    return (
+        exc.code == MINIBRIDGE_POLICY_ERROR_CODE
+        and detail.startswith(MINIBRIDGE_POLICY_ERROR_PREFIX)
+    )
 
 
 def refused(result) -> bool:
@@ -86,8 +109,8 @@ async def call(session, name: str, arguments: dict):
     """
     try:
         result = await session.call_tool(name, arguments)
-    except Exception as exc:  # noqa: BLE001 - any protocol error is a refusal
-        return True, str(exc)[:120]
+    except MCPError as exc:
+        return raised_mcp_refused(exc), str(exc)[:120]
     return refused(result), error_text(result)[:120]
 
 
