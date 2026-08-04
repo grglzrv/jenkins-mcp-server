@@ -6,7 +6,7 @@ resources:
 images:
   - name: ghcr.io/grglzrv/jenkins-mcp-server
     newName: ghcr.io/grglzrv/jenkins-mcp-server
-    newTag: 1.20.0
+    newTag: 1.21.0
 patches:
   - target:
       kind: ConfigMap

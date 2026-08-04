@@ -27,6 +27,12 @@ on:
 permissions:
   contents: read
 
+# A branch-triggered release and a manually pushed recovery tag must never race
+# while updating mutable image aliases or creating the same GitHub Release.
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/jenkins-mcp-server
@@ -72,15 +78,48 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
+          refs=$(git ls-remote origin "refs/tags/${TAG}" "refs/tags/${TAG}^{}")
+          tag_sha=$(printf '%s\n' "$refs" | awk '$2 ~ /\^\{\}$/ {print $1; found=1} END {if (!found) exit 1}' || true)
+          if [ -z "$tag_sha" ]; then
+            tag_sha=$(printf '%s\n' "$refs" | awk 'NR == 1 {print $1}')
+          fi
+          if [ -n "$tag_sha" ] && [ "$tag_sha" != "${{ steps.version.outputs.source_sha }}" ]; then
+            echo "${TAG} already points to ${tag_sha}, not ${{ steps.version.outputs.source_sha }}" >&2
+            exit 1
+          fi
           status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
             --header 'Accept: application/vnd.github+json' \
             --header "Authorization: Bearer ${GH_TOKEN}" \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
           case "$status" in
-            200) echo "publish=false" >> "$GITHUB_OUTPUT" ;;
-            404) echo "publish=true" >> "$GITHUB_OUTPUT" ;;
+            200)
+              if [ -z "$tag_sha" ]; then
+                echo "${TAG} has a GitHub Release but no corresponding Git tag" >&2
+                exit 1
+              fi
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              latest_status=$(curl --silent --show-error \
+                --output "$RUNNER_TEMP/latest-release.json" --write-out '%{http_code}' \
+                --header 'Accept: application/vnd.github+json' \
+                --header "Authorization: Bearer ${GH_TOKEN}" \
+                --header 'X-GitHub-Api-Version: 2022-11-28' \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest")
+              case "$latest_status" in
+                200)
+                  latest_tag=$(jq --raw-output '.tag_name' "$RUNNER_TEMP/latest-release.json")
+                  python scripts/check_release_bump.py --assert-newer \
+                    "$RELEASE_VERSION" "${latest_tag#v}"
+                  ;;
+                404) echo "no existing release; allowing the initial publication" ;;
+                *) echo "unexpected latest-release API status: $latest_status" >&2; exit 1 ;;
+              esac
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              ;;
             *) echo "unexpected GitHub Releases API status: $status" >&2; exit 1 ;;
           esac
       - name: Test and build package
@@ -90,7 +129,7 @@ jobs:
           ruff check .
           pytest -q
           python -m build
-          twine check dist/*
+          twine check dist/*.whl dist/*.tar.gz
       - uses: actions/upload-artifact@v7
         if: steps.release_state.outputs.publish == 'true'
         with:
@@ -98,7 +137,7 @@ jobs:
           path: dist/*
 
   image:
-    needs: validate
+    needs: [validate, chart-smoke]
     if: needs.validate.outputs.publish == 'true'
     permissions:
       contents: read
@@ -157,7 +196,7 @@ jobs:
     # The -minibridge variant, built from docker/Dockerfile.minibridge. The chart
     # selects it by appending minibridge.image.tagSuffix to the app version, so
     # this tag must exist or minibridge deployments ImagePullBackOff.
-    needs: validate
+    needs: [validate, chart-smoke]
     if: needs.validate.outputs.publish == 'true'
     permissions:
       contents: read
@@ -217,7 +256,7 @@ jobs:
           create-storage-record: false
 
   helm:
-    needs: validate
+    needs: [validate, chart-smoke]
     if: needs.validate.outputs.publish == 'true'
     permissions:
       contents: read

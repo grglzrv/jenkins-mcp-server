@@ -42,13 +42,13 @@ jobs:
       - name: Build Python package
         run: python -m build
       - name: Validate Python package metadata
-        run: twine check dist/*
+        run: twine check dist/*.whl dist/*.tar.gz
 
   version-bump:
     # The chart's image tag follows appVersion, which follows VERSION, and the
-    # release workflow triggers on a VERSION change. A change under src/,
-    # charts/ or docker/ that does not bump VERSION is therefore never
-    # published, and nothing else in CI notices.
+    # release workflow triggers on a VERSION change. The checker has an
+    # explicit policy for package, image, chart, and deployment inputs so a
+    # deployable change cannot merge without a strictly newer release version.
     name: Shipped changes bump VERSION
     runs-on: ubuntu-latest
     steps:
@@ -56,16 +56,15 @@ jobs:
         with:
           fetch-depth: 0
       - name: Compare against the base
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
         run: |
-          base="${{ github.event.pull_request.base.sha }}"
+          base="${PR_BASE_SHA:-$PUSH_BASE_SHA}"
           if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
-            base="${{ github.event.before }}"
+            base=$(git rev-parse HEAD^)
           fi
-          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            echo "no usable base commit; skipping"
-            exit 0
-          fi
-          ./scripts/check_release_bump.sh "$base"
+          python scripts/check_release_bump.py "$base"
 
   policy:
     name: Guardrail policy

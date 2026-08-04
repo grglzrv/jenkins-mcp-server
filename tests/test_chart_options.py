@@ -875,13 +875,41 @@ def test_shipped_changes_require_a_version_bump() -> None:
     The release workflow triggers on a VERSION change, and the chart's image
     tag follows appVersion, so an unbumped change silently ships nothing.
     """
-    script = ROOT / "scripts/check_release_bump.sh"
-    assert script.is_file() and script.stat().st_mode & 0o111
+    script = ROOT / "scripts/check_release_bump.py"
+    assert script.is_file()
     body = script.read_text()
-    for path in ["src/", "charts/jenkins-mcp-server/", "docker/"]:
+    for path in [
+        "src/",
+        "charts/jenkins-mcp-server/",
+        "docker/",
+        "deploy/",
+        "examples/argocd/",
+        "examples/values/",
+    ]:
         assert path in body, f"{path} should require a bump"
     ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     assert "version-bump" in ci["jobs"]
+
+
+def test_release_reruns_refuse_a_tag_from_another_commit() -> None:
+    release = (ROOT / ".github/workflows/release.yml").read_text()
+    assert "git ls-remote origin" in release
+    assert "already points to" in release
+    assert "GitHub Release but no corresponding Git tag" in release
+    assert "group: release-${{ github.repository }}" in release
+    assert "--assert-newer" in release
+
+
+def test_release_smoke_gates_every_external_publish() -> None:
+    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+    for job in ["image", "minibridge-image", "helm"]:
+        assert "chart-smoke" in release["jobs"][job]["needs"]
+
+
+def test_python_metadata_check_ignores_packaged_helm_chart() -> None:
+    makefile = (ROOT / "Makefile").read_text()
+    assert "twine check dist/*.whl dist/*.tar.gz" in makefile
+    assert "twine check dist/*\n" not in makefile
 
 
 def test_chart_version_and_app_version_move_together() -> None:

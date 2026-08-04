@@ -5,6 +5,8 @@ Describe the change and its operational impact.
 ## Validation
 
 - [ ] `make verify-version`
+- [ ] Deployable changes use `make version VERSION=X.Y.Z`, with a version newer
+      than the base branch.
 - [ ] `make lint`
 - [ ] `make test`
 - [ ] `make helm-lint`

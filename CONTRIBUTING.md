@@ -16,7 +16,7 @@
 Use one command to keep all versioned files aligned:
 
 ```bash
-NEW_VERSION=1.20.0
+NEW_VERSION=1.21.0
 make version VERSION="$NEW_VERSION"
 ```
 
@@ -33,3 +33,10 @@ After the version pull request passes every required check and merges to
 `main`, GitHub Actions publishes the matching images, chart, tag, and GitHub
 Release automatically. Do not create the release tag before the merge; manual
 tagging is reserved for recovery and invokes the same idempotent workflow.
+
+Changes to server/package inputs, runtime images, functional Helm files,
+Compose, production manifests, Argo CD applications, or shipped values require
+a release bump—even when the application source itself is unchanged. Run
+`make version VERSION=X.Y.Z`; CI verifies that the new SemVer is strictly newer
+than the base branch. Documentation, tests, integration fixtures, and workflow
+changes alone do not require a release.

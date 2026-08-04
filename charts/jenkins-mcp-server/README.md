@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.20.0 \
+  --version 1.21.0 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.20.0 \
+  --version 1.21.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -287,12 +287,15 @@ kubectl -n jenkins-mcp get ingress jenkins-mcp-jenkins-mcp-server \
 ## Chart and application versions
 
 `version` and `appVersion` are deliberately kept equal, and `image.tag` is left
-empty so the chart uses `appVersion` as its image tag. A chart can therefore
-only ever deploy the application it was released with.
+empty so the chart uses `appVersion` as its image tag. The chart therefore
+deploys the application it was released with by default. Operators can still
+override `image.tag` explicitly, but the supported release pair is tested and
+published together.
 
 ```bash
-make version VERSION=1.21.0   # rewrites every version pin in the repository
-make verify-version           # asserts they all agree
+NEW_VERSION=1.21.0
+make version VERSION="$NEW_VERSION"  # rewrites every version pin
+make verify-version                 # asserts they all agree
 ```
 
 Merging that to `main` triggers the release: the workflow watches the `VERSION`
@@ -306,11 +309,14 @@ k3s smoke test installs the chart with the image built from the same commit, so
 "chart 1.20.1 with appVersion 1.20.0" is a combination nothing has ever
 exercised. Coupling means the version you deploy is the version that was tested.
 
-The cost is a version increment for a chart-only fix. That is cheap: rebuilding
-an identical image under a new tag takes a few minutes of CI and changes
-nothing for anyone who pins a version.
+The cost is a version increment for a chart-only fix. The application source is
+unchanged, but both images are rebuilt and the complete pair is tested again;
+users who pin an older version are unaffected.
 
-**What catches a forgotten bump.** A change under `src/`, `charts/` or `docker/`
-that leaves `VERSION` alone would never be published, because the release only
-triggers on a `VERSION` change. CI fails such a pull request and names the files
-involved. Documentation, examples and workflow changes are exempt.
+**What catches a forgotten bump.** CI classifies changes to the server package,
+runtime images, functional chart files, Compose deployment, production
+manifests, Argo CD applications, and shipped values as release-impacting. It
+requires `VERSION` to be valid SemVer and strictly newer than the pull request's
+base version, then names every offending path when the check fails. README and
+documentation edits, tests, integration fixtures, and workflow-only changes are
+exempt. The behavioral cases are covered by `tests/test_release_bump.py`.

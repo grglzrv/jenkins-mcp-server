@@ -10,7 +10,44 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- Releases now follow the canonical `VERSION` automatically after a validated
+- None yet.
+
+### New Features
+
+- None yet.
+
+### Improvements
+
+- None yet.
+
+### Bug Fixes
+
+- None yet.
+
+### Breaking Changes
+
+- None yet.
+
+### Known Issues
+
+- None yet.
+
+### Security
+
+- None yet.
+
+### Upgrade Notes
+
+- None yet.
+
+## [1.21.0] - 2026-08-04
+
+### Highlights
+
+- Release integrity is now enforced end to end: deployable server, image,
+  chart, Compose, Kubernetes, Argo CD, and values changes cannot merge without
+  a strictly newer synchronized version.
+- Releases follow the canonical `VERSION` automatically after a validated
   version-change pull request merges to `main`.
 
 ### New Features
@@ -19,6 +56,9 @@ from the matching version entry after CI validates it.
   changelog commit inputs, enabling reproducible historical release recovery.
 - A one-time ordered backfill publishes the missing `1.18.0`, `1.19.0`, and
   `1.20.0` releases from their exact release commits.
+- A release-impact classifier distinguishes deployable behavior from
+  documentation, tests, integration fixtures, and workflow-only changes, then
+  compares full SemVer precedence against the pull request base.
 
 ### Improvements
 
@@ -26,6 +66,15 @@ from the matching version entry after CI validates it.
   and safely skip its image, chart, smoke-test, and release jobs.
 - Historical release smoke tests check out the same source commit used to build
   the application images and Helm chart.
+- Release runs are serialized so automatic publication and a manual recovery
+  tag cannot race while updating mutable image aliases.
+- Images and the Helm OCI chart are published only after every release smoke
+  test succeeds; failed smoke tests leave no externally published release
+  artifacts.
+- CI failures name every release-impacting path and show the base and proposed
+  versions with the exact remediation command.
+- Python metadata validation selects only wheel and source-distribution files,
+  so it remains valid when a packaged Helm chart shares the `dist/` directory.
 
 ### Bug Fixes
 
@@ -33,6 +82,15 @@ from the matching version entry after CI validates it.
   Releases and tags behind at an older version.
 - Ordered backfill prevents older releases from overwriting the `latest`,
   major, or minor image aliases after a newer version is published.
+- The initial release-bump guard no longer rejects its own chart documentation
+  update or remove a version pin required by repository consistency checks.
+- Idempotent release reruns now reject a pre-existing tag that points to a
+  different source commit instead of silently treating it as the requested
+  release.
+- New publications must be newer than the current latest GitHub Release, so an
+  older recovery tag cannot move `latest` or other mutable aliases backward.
+- Running `make helm-package` before `make build` no longer makes Twine parse
+  the chart archive as a Python distribution.
 
 ### Breaking Changes
 
@@ -44,14 +102,16 @@ from the matching version entry after CI validates it.
 
 ### Security
 
-- None. Release permissions remain job-scoped, and recovered artifacts retain
-  the existing provenance and SBOM publication gates.
+- Release permissions remain job-scoped, recovered artifacts retain the
+  existing provenance and SBOM gates, and tag/source identity is verified
+  before publication.
 
 ### Upgrade Notes
 
-- No application, chart, configuration, or deployment change is required.
-  Release maintainers should merge the prepared version pull request; creating
-  a matching tag manually is now only a recovery option.
+- Update the application image and Helm chart together to `1.21.0`. No runtime
+  configuration migration is required. Release maintainers must run `make
+  version VERSION=X.Y.Z` for any deployable behavior change; creating a
+  matching tag manually remains a recovery option only.
 
 ## [1.20.0] - 2026-08-04
 
