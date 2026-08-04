@@ -196,6 +196,28 @@
               "type": "string",
               "minLength": 1
             },
+            "valueFrom": {
+              "type": "object",
+              "required": ["username", "token"],
+              "properties": {
+                "username": {
+                  "type": "object",
+                  "required": ["name", "key"],
+                  "properties": {
+                    "name": {"type": "string"},
+                    "key": {"type": "string"}
+                  }
+                },
+                "token": {
+                  "type": "object",
+                  "required": ["name", "key"],
+                  "properties": {
+                    "name": {"type": "string"},
+                    "key": {"type": "string"}
+                  }
+                }
+              }
+            },
             "create": {
               "type": "boolean"
             },
@@ -731,6 +753,13 @@
         "sbom": {
           "type": "boolean"
         },
+        "mcp": {
+          "type": "object",
+          "required": ["useTempDir"],
+          "properties": {
+            "useTempDir": {"type": "boolean"}
+          }
+        },
         "tls": {
           "type": "object",
           "required": [
@@ -751,6 +780,20 @@
             },
             "passSecretKey": {
               "type": "string"
+            },
+            "pass": {
+              "type": "object",
+              "required": ["valueFrom"],
+              "properties": {
+                "valueFrom": {
+                  "type": "object",
+                  "required": ["name", "key"],
+                  "properties": {
+                    "name": {"type": "string"},
+                    "key": {"type": "string"}
+                  }
+                }
+              }
             },
             "clientCASecretKey": {
               "type": "string"

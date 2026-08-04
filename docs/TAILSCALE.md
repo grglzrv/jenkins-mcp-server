@@ -97,7 +97,7 @@ ingress:
 | --- | --- |
 | `deploy/kubernetes/base/config.env` | `JENKINS_URL` |
 | `deploy/kubernetes/tailscale/jenkins-egress-service.yaml` | `tailscale.com/tailnet-fqdn` annotation |
-| `deploy/kubernetes/base/ingress.yaml` | `spec.rules[].host` (machine name only) |
+| `deploy/kubernetes/tailscale/ingress.yaml` | `spec.tls[].hosts[]` (machine name only) |
 
 The distinction that catches people out: **`jenkins.url` and `tailnetFQDN` take
 the full FQDN, the Ingress hostname takes only the machine name.** Tailscale

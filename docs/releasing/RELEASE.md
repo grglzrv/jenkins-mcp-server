@@ -8,27 +8,31 @@ The repository uses one application version across:
 - Helm chart `version`
 - Helm chart `appVersion`
 - Production Kustomize image tag
+- Minibridge image tags and raw deployment
+- Versioned Argo CD applications and Compose defaults
 
 ## Prepare a release
 
 ```bash
-git checkout main
-git pull --ff-only
-make version VERSION=1.14.0
+NEW_VERSION=1.19.0
+git checkout -b "release/v$NEW_VERSION"
+make version VERSION="$NEW_VERSION"
 make install
 make lint test verify-version
 make helm-lint helm-template
 
 git add .
-git commit -m "chore(release): prepare v1.14.0"
-git push origin main
+git commit -m "chore(release): prepare v$NEW_VERSION"
+git push origin "release/v$NEW_VERSION"
 ```
+
+Open a pull request to `main` and merge only after every required check passes.
 
 ## Publish
 
 ```bash
-git tag -a v1.14.0 -m "Release v1.14.0"
-git push origin v1.14.0
+git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+git push origin "v$NEW_VERSION"
 ```
 
 The `Release` workflow:
@@ -43,9 +47,10 @@ The `Release` workflow:
 ## Published artifacts
 
 ```text
-ghcr.io/grglzrv/jenkins-mcp-server:1.14.0
-ghcr.io/grglzrv/jenkins-mcp-server:1.2
-ghcr.io/grglzrv/jenkins-mcp-server:1
+ghcr.io/grglzrv/jenkins-mcp-server:<version>
+ghcr.io/grglzrv/jenkins-mcp-server:<major>.<minor>
+ghcr.io/grglzrv/jenkins-mcp-server:<major>
 ghcr.io/grglzrv/jenkins-mcp-server:latest
-oci://ghcr.io/grglzrv/charts/jenkins-mcp-server --version 1.14.0
+ghcr.io/grglzrv/jenkins-mcp-server:<version>-minibridge
+oci://ghcr.io/grglzrv/charts/jenkins-mcp-server --version <version>
 ```

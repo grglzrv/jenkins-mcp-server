@@ -6,12 +6,13 @@ find yours, and which fields take the full FQDN rather than the machine name.
 
 ## Credentials
 
-The chart supports three ways to supply the Jenkins API token. The token is
+The chart supports four ways to supply the Jenkins API token. The token is
 always injected with `secretKeyRef` and never written into the pod spec.
 
 | Example | Who creates the Secret | Use when |
 | --- | --- | --- |
 | `values/existing-secret.yaml` | You, out of band | Default choice. The chart only references it. |
+| `values/per-field-secret-refs.yaml` | You or a secret operator, out of band | Username and token are rotated in separate existing Secrets. |
 | `values/chart-managed-secret.yaml` | The chart, from values | Disposable environments only — the token lands in the Helm release. |
 | `values/external-secrets-gcp.yaml` | External Secrets Operator | An existing `SecretStore` is already provisioned. |
 | `values/external-secrets-gcp-workload-identity.yaml` | External Secrets Operator | The chart should create the `ClusterSecretStore` too, via GCP Workload Identity. |
@@ -35,13 +36,15 @@ hostname arriving at the controller. Override with `ingress.hostRule`.
 | `values/minibridge.yaml` | The proxy enabled, all guardrails on, destructive tools excluded with `tools.deny: ["@destructive"]`. |
 | `values/minibridge-hardened.yaml` | Strict `tools.allow: ["@read"]` allowlist, shared-secret auth, and TLS on the listener. |
 
-Both need the `-minibridge` image variant, which the chart selects automatically.
+Both need the `-minibridge` image variant, which the chart selects
+automatically. It bundles Minibridge and the server in one container; it is not
+a sidecar image.
 
 ## Raw manifests
 
 | Path | What it is |
 | --- | --- |
-| `../deploy/kubernetes/base` | Plain Deployment, Service, Ingress, PDB, NetworkPolicy. |
+| `../deploy/kubernetes/base` | Plain Deployment, Service, PDB and NetworkPolicy. Add an ingress overlay when external access is required. |
 | `../deploy/kubernetes/overlays/production` | The base plus the Tailscale proxy group, egress Service and DNSConfig. |
 | `../deploy/kubernetes/minibridge` | Kustomize overlay putting minibridge in front of the base. |
 | `../deploy/kubernetes/minibridge/standalone-deployment.yaml` | One self-contained file: Secret, ConfigMap, Deployment, Service. |
@@ -69,3 +72,15 @@ Every Application pins `targetRevision`, sets `ignoreDifferences` for the
 Ingress host that the Tailscale Operator rewrites, and expects
 `jenkins-mcp-secrets` to exist beforehand — Argo CD does not create it. The
 autoscaling example additionally ignores `/spec/replicas`, which the HPA owns.
+
+`../deploy/argocd/application.yaml` follows the repository’s raw manifests from
+`main` for development. Pin its `targetRevision` to a release tag or commit
+before using automated sync in production.
+
+## Docker Compose
+
+The root [`compose.yaml`](../compose.yaml) runs either the plain server or the
+single-container Minibridge variant. Copy `.env.example` to `.env`, set the
+Jenkins URL and credentials, then run `docker compose up server` or
+`docker compose --profile minibridge up minibridge`. The Minibridge profile
+blocks only `@destructive` and leaves all other tool groups available.

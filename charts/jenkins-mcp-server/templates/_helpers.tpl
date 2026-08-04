@@ -50,6 +50,30 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- end }}
 
+{{- define "jenkins-mcp-server.usernameSecretName" -}}
+{{- if .Values.jenkins.credentials.valueFrom.username.name -}}
+{{- .Values.jenkins.credentials.valueFrom.username.name -}}
+{{- else -}}
+{{- include "jenkins-mcp-server.credentialsSecretName" . -}}
+{{- end -}}
+{{- end }}
+
+{{- define "jenkins-mcp-server.usernameSecretKey" -}}
+{{- default .Values.jenkins.credentials.usernameKey .Values.jenkins.credentials.valueFrom.username.key -}}
+{{- end }}
+
+{{- define "jenkins-mcp-server.tokenSecretName" -}}
+{{- if .Values.jenkins.credentials.valueFrom.token.name -}}
+{{- .Values.jenkins.credentials.valueFrom.token.name -}}
+{{- else -}}
+{{- include "jenkins-mcp-server.credentialsSecretName" . -}}
+{{- end -}}
+{{- end }}
+
+{{- define "jenkins-mcp-server.tokenSecretKey" -}}
+{{- default .Values.jenkins.credentials.tokenKey .Values.jenkins.credentials.valueFrom.token.key -}}
+{{- end }}
+
 {{/* Image to run: the minibridge variant when the proxy is enabled. */}}
 {{- define "jenkins-mcp-server.image" -}}
 {{- $tag := .Values.image.tag | default .Chart.AppVersion -}}
@@ -104,17 +128,19 @@ every secret arrives via secretKeyRef so nothing sensitive lives in values.
 - name: MINIBRIDGE_SBOM
   value: /sbom.disabled
 {{- end }}
+- name: MINIBRIDGE_MCP_USE_TEMPDIR
+  value: {{ $mb.mcp.useTempDir | quote }}
 {{- if $mb.tls.enabled }}
 - name: MINIBRIDGE_TLS_SERVER_CERT
   value: /tls/{{ $mb.tls.certKey }}
 - name: MINIBRIDGE_TLS_SERVER_KEY
   value: /tls/{{ $mb.tls.keyKey }}
-{{- with $mb.tls.passSecretKey }}
+{{- if or $mb.tls.passSecretKey $mb.tls.pass.valueFrom.name }}
 - name: MINIBRIDGE_TLS_SERVER_KEY_PASS
   valueFrom:
     secretKeyRef:
-      name: {{ $mb.tls.existingSecret }}
-      key: {{ . }}
+      name: {{ default $mb.tls.existingSecret $mb.tls.pass.valueFrom.name }}
+      key: {{ default $mb.tls.passSecretKey $mb.tls.pass.valueFrom.key }}
 {{- end }}
 {{- with $mb.tls.clientCASecretKey }}
 - name: MINIBRIDGE_TLS_SERVER_CLIENT_CA
@@ -126,14 +152,14 @@ every secret arrives via secretKeyRef so nothing sensitive lives in values.
 {{- if $mb.policer.http.enabled }}
 - name: MINIBRIDGE_POLICER_TYPE
   value: "http"
-- name: MINIBRIDGE_POLICER_URL
+- name: MINIBRIDGE_POLICER_HTTP_URL
   value: {{ required "minibridge.policer.http.url is required when the http policer is enabled" $mb.policer.http.url | quote }}
 {{- with $mb.policer.http.caPath }}
-- name: MINIBRIDGE_POLICER_CA
+- name: MINIBRIDGE_POLICER_HTTP_CA
   value: {{ . | quote }}
 {{- end }}
 {{- with $mb.policer.http.token.existingSecret }}
-- name: MINIBRIDGE_POLICER_TOKEN
+- name: MINIBRIDGE_POLICER_HTTP_BEARER_TOKEN
   valueFrom:
     secretKeyRef:
       name: {{ . }}

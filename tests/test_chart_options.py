@@ -220,7 +220,7 @@ def test_examples_readme_references_every_values_file() -> None:
         assert f.name in readme, f"{f.name} is not documented in examples/README.md"
 
 
-def test_secret_examples_cover_all_three_credential_paths() -> None:
+def test_secret_examples_cover_all_four_credential_paths() -> None:
     existing = yaml.safe_load((EXAMPLES / "existing-secret.yaml").read_text())
     assert existing["jenkins"]["credentials"]["create"] is False
     assert existing["jenkins"]["credentials"]["existingSecret"]
@@ -231,6 +231,24 @@ def test_secret_examples_cover_all_three_credential_paths() -> None:
     assert managed["jenkins"]["credentials"]["existingSecret"] == ""
     # A real token must never be committed in an example.
     assert not managed["jenkins"]["credentials"]["token"]
+
+    per_field = yaml.safe_load((EXAMPLES / "per-field-secret-refs.yaml").read_text())
+    refs = per_field["jenkins"]["credentials"]["valueFrom"]
+    assert per_field["jenkins"]["credentials"]["existingSecret"] == ""
+    assert refs["username"]["name"] != refs["token"]["name"]
+
+
+def test_per_field_credential_refs_are_wired_and_validated() -> None:
+    helpers = (CHART / "templates/_helpers.tpl").read_text()
+    deployment = (CHART / "templates/deployment.yaml").read_text()
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    for helper in ["usernameSecretName", "usernameSecretKey",
+                   "tokenSecretName", "tokenSecretKey"]:
+        assert helper in helpers
+        assert helper in deployment
+    assert "valueFrom must set both username.name and token.name" in validate
+    for conflict in ["existingSecret", "credentials.create", "externalSecret.enabled"]:
+        assert "credentials.valueFrom" in validate and conflict in validate
 
 
 def test_minibridge_examples_demonstrate_both_policy_shapes() -> None:
@@ -245,6 +263,28 @@ def test_minibridge_examples_demonstrate_both_policy_shapes() -> None:
     # Secrets are referenced, never inlined.
     assert allow["basicAuth"]["existingSecret"]
     assert allow["tls"]["existingSecret"]
+
+
+def test_minibridge_v080_environment_names_and_secret_pass_ref() -> None:
+    helpers = (CHART / "templates/_helpers.tpl").read_text()
+    for env in ["MINIBRIDGE_POLICER_HTTP_URL",
+                "MINIBRIDGE_POLICER_HTTP_BEARER_TOKEN",
+                "MINIBRIDGE_POLICER_HTTP_CA",
+                "MINIBRIDGE_MCP_USE_TEMPDIR"]:
+        assert env in helpers
+    for obsolete in ["MINIBRIDGE_POLICER_URL", "MINIBRIDGE_POLICER_TOKEN",
+                     "MINIBRIDGE_POLICER_CA"]:
+        assert f"name: {obsolete}\n" not in helpers
+    assert "tls.pass.valueFrom.name" in helpers
+    assert "tls.pass.valueFrom.key" in helpers
+
+
+def test_raw_minibridge_manifests_support_read_only_root_filesystems() -> None:
+    for path in [DEPLOY / "minibridge/kustomization.yaml",
+                 DEPLOY / "minibridge/standalone-deployment.yaml"]:
+        text = path.read_text()
+        assert "/home/app/.config" in text
+        assert "minibridge-config" in text
 
 
 def test_config_env_covers_every_supported_setting() -> None:

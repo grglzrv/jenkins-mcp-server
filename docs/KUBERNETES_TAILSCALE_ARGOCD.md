@@ -33,6 +33,8 @@ MCP server Pod
 4. Adjust `MCP_ALLOWED_JOBS` and write controls.
 5. Review namespace names in `networkpolicy.yaml`.
 6. Create the Jenkins credential Secret through your secret manager.
+7. Choose the plain image or the `-minibridge` Kustomize overlay. The latter is
+   one bundled container and blocks `@destructive` in the shipped example.
 
 ## CoreDNS
 
@@ -51,6 +53,10 @@ kubectl kustomize deploy/kubernetes/overlays/production > /tmp/jenkins-mcp.yaml
 kubectl apply --server-side --dry-run=server -f /tmp/jenkins-mcp.yaml
 ```
 
+For the bundled Minibridge variant, render
+`deploy/kubernetes/minibridge` instead. Its writable `/tmp` and
+`/home/app/.config` mounts are required by the read-only root filesystem.
+
 ## Deploy with Argo CD
 
 ```bash
@@ -58,6 +64,11 @@ kubectl apply -f deploy/argocd/application.yaml
 argocd app get jenkins-mcp
 argocd app sync jenkins-mcp
 ```
+
+That raw-manifest Application follows `main` and is intended for development or
+a fork. Pin `spec.source.targetRevision` to a release tag or commit for
+production. The examples under `examples/argocd` use the immutable OCI Helm
+chart and pin its chart version.
 
 ## Discover the MCP URL
 

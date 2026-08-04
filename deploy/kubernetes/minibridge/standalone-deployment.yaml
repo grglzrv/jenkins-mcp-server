@@ -49,6 +49,7 @@ data:
   # child, so no MCP_TRANSPORT or MCP_PORT is needed here.
   MINIBRIDGE_LISTEN: ":8000"
   MINIBRIDGE_HEALTH_LISTEN: ":8080"
+  MINIBRIDGE_MCP_USE_TEMPDIR: "true"
   MINIBRIDGE_POLICER_ENFORCE: "true"
 
   # Tool policy. Empty means every tool is allowed, which is the default.
@@ -89,7 +90,7 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:1.18.0-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:1.19.0-minibridge
           imagePullPolicy: IfNotPresent
           # No args: the entrypoint runs
           #   minibridge aio -- jenkins-mcp-server --transport stdio
@@ -128,9 +129,14 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
+            - name: minibridge-config
+              mountPath: /home/app/.config
             - name: tmp
               mountPath: /tmp
       volumes:
+        - name: minibridge-config
+          emptyDir:
+            sizeLimit: 16Mi
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi

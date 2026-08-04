@@ -88,6 +88,12 @@ def main() -> None:
         f"ghcr.io/grglzrv/jenkins-mcp-server:{version}-minibridge",
     )
     replace(
+        "compose.yaml",
+        r"\$\{JENKINS_MCP_VERSION:-[^}]+\}",
+        f"${{JENKINS_MCP_VERSION:-{version}}}",
+        expected=2,
+    )
+    replace(
         "charts/jenkins-mcp-server/README.md",
         r"^  --version [0-9][^\s]*",
         f"  --version {version}",

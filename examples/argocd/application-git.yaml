@@ -8,7 +8,7 @@
 # sync can pick up whatever landed on main since you last looked.
 #
 # If you do track a branch, pin it to a tag or commit SHA once you are happy:
-#   targetRevision: v1.8.0
+#   targetRevision: <release-tag>
 #   targetRevision: 392948f1a2b3c4d5e6f7890abcdef1234567890a
 #
 # Prerequisites are identical to application-oci.yaml except that no registry

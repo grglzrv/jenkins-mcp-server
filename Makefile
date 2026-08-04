@@ -33,10 +33,10 @@ version:
 	python scripts/check_version.py
 
 helm-lint:
-	helm lint --strict $(CHART)
+	helm lint --strict $(CHART) --set jenkins.url=https://jenkins.example.com
 
 helm-template:
-	helm template jenkins-mcp $(CHART) --namespace jenkins-mcp > /tmp/jenkins-mcp.yaml
+	helm template jenkins-mcp $(CHART) --namespace jenkins-mcp --set jenkins.url=https://jenkins.example.com > /tmp/jenkins-mcp.yaml
 	helm template jenkins-mcp $(CHART) --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/jenkins-mcp-production.yaml
 
 helm-package:

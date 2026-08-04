@@ -1,0 +1,49 @@
+services:
+  server:
+    image: ghcr.io/grglzrv/jenkins-mcp-server:${JENKINS_MCP_VERSION:-1.19.0}
+    env_file: .env
+    ports:
+      - "8000:8000"
+      - "8081:8081"
+    volumes:
+      - audit-data:/data
+      - ./certs:/certs:ro
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  # The -minibridge image contains both minibridge and jenkins-mcp-server.
+  # It is a single container, not a sidecar. Start this profile instead of
+  # `server` when policy enforcement at the proxy is required.
+  minibridge:
+    profiles: [minibridge]
+    image: ghcr.io/grglzrv/jenkins-mcp-server:${JENKINS_MCP_VERSION:-1.19.0}-minibridge
+    env_file: .env
+    environment:
+      MINIBRIDGE_LISTEN: :8000
+      MINIBRIDGE_HEALTH_LISTEN: :8080
+      MINIBRIDGE_MCP_USE_TEMPDIR: "true"
+      MINIBRIDGE_POLICER_ENFORCE: "true"
+      TOOLS_DENY: "@destructive"
+      TOOLS_ALLOW: ""
+      METHODS_DENY: ""
+      GUARDRAILS: ""
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    volumes:
+      - audit-data:/data
+      - ./certs:/certs:ro
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /home/app/.config:size=16m,mode=0700,uid=10001,gid=10001
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+volumes:
+  audit-data:

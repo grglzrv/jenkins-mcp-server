@@ -30,6 +30,21 @@ Cross-field validation that would otherwise only surface at runtime.
        would leave the chart reading from a Secret the operator did not
        intend. */ -}}
 {{- $creds := .Values.jenkins.credentials -}}
+{{- $usernameRef := $creds.valueFrom.username.name -}}
+{{- $tokenRef := $creds.valueFrom.token.name -}}
+{{- $fieldRefs := or $usernameRef $tokenRef $creds.valueFrom.username.key $creds.valueFrom.token.key -}}
+{{- if and $fieldRefs (not (and $usernameRef $tokenRef)) }}
+{{- fail "jenkins.credentials.valueFrom must set both username.name and token.name. Use per-field references for both credentials, or clear valueFrom and use one shared existingSecret." }}
+{{- end }}
+{{- if and $fieldRefs $creds.existingSecret }}
+{{- fail "jenkins.credentials.valueFrom and jenkins.credentials.existingSecret are mutually exclusive. Clear existingSecret when using per-field Secret references." }}
+{{- end }}
+{{- if and $fieldRefs $creds.create }}
+{{- fail "jenkins.credentials.valueFrom and jenkins.credentials.create are mutually exclusive. Per-field references read existing Secrets; they do not create one." }}
+{{- end }}
+{{- if and $fieldRefs .Values.externalSecret.enabled }}
+{{- fail "jenkins.credentials.valueFrom and externalSecret.enabled are mutually exclusive. Point valueFrom at Secrets already managed by your operator, or let this chart create one ExternalSecret target." }}
+{{- end }}
 {{- if and .Values.externalSecret.enabled $creds.create }}
 {{- fail "externalSecret.enabled and jenkins.credentials.create are mutually exclusive: both produce a Secret named <fullname>-credentials and External Secrets would fight Helm for ownership. Pick one." }}
 {{- end }}
@@ -60,8 +75,39 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if .Values.minibridge.guardrails }}{{- $ignored = append $ignored "guardrails" }}{{- end }}
 {{- if .Values.minibridge.basicAuth.enabled }}{{- $ignored = append $ignored "basicAuth.enabled" }}{{- end }}
 {{- if .Values.minibridge.tls.enabled }}{{- $ignored = append $ignored "tls.enabled" }}{{- end }}
+{{- if .Values.minibridge.tls.passSecretKey }}{{- $ignored = append $ignored "tls.passSecretKey" }}{{- end }}
+{{- if or .Values.minibridge.tls.pass.valueFrom.name .Values.minibridge.tls.pass.valueFrom.key }}{{- $ignored = append $ignored "tls.pass.valueFrom" }}{{- end }}
+{{- if .Values.minibridge.policer.http.enabled }}{{- $ignored = append $ignored "policer.http.enabled" }}{{- end }}
 {{- if $ignored }}
 {{- fail (printf "minibridge.enabled is false, so these settings would be silently ignored: %s. Set minibridge.enabled: true to enforce them, or remove them. Note the server's own mcp.* policy still applies either way." (join ", " $ignored)) }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.minibridge.enabled }}
+{{- $mb := .Values.minibridge -}}
+{{- if and $mb.policer.rego.enabled $mb.policer.http.enabled }}
+{{- fail "minibridge.policer.rego.enabled and minibridge.policer.http.enabled are mutually exclusive. Select exactly one policer." }}
+{{- end }}
+{{- if and (not $mb.policer.rego.enabled) (not $mb.policer.http.enabled) }}
+{{- fail "minibridge requires a policer. Enable exactly one of minibridge.policer.rego.enabled or minibridge.policer.http.enabled." }}
+{{- end }}
+{{- if and $mb.policer.http.enabled (not $mb.policer.http.url) }}
+{{- fail "minibridge.policer.http.url is required when the HTTP policer is enabled." }}
+{{- end }}
+{{- if and $mb.policer.http.token.existingSecret (not $mb.policer.http.token.secretKey) }}
+{{- fail "minibridge.policer.http.token.secretKey is required when its existingSecret is set." }}
+{{- end }}
+{{- if and (not $mb.policer.http.enabled) (or $mb.policer.http.url $mb.policer.http.caPath $mb.policer.http.token.existingSecret) }}
+{{- fail "minibridge.policer.http is disabled but its URL, CA, or token is configured. Enable the HTTP policer and disable the Rego policer, or clear those HTTP settings." }}
+{{- end }}
+{{- if and $mb.tls.passSecretKey $mb.tls.pass.valueFrom.name }}
+{{- fail "minibridge.tls.passSecretKey and minibridge.tls.pass.valueFrom are mutually exclusive. Use the first for the TLS certificate Secret or valueFrom for a separate Secret." }}
+{{- end }}
+{{- if ne (not $mb.tls.pass.valueFrom.name) (not $mb.tls.pass.valueFrom.key) }}
+{{- fail "minibridge.tls.pass.valueFrom requires both name and key." }}
+{{- end }}
+{{- if and (not $mb.tls.enabled) (or $mb.tls.existingSecret $mb.tls.passSecretKey $mb.tls.pass.valueFrom.name $mb.tls.pass.valueFrom.key $mb.tls.clientCASecretKey) }}
+{{- fail "minibridge.tls is disabled but TLS Secret settings are configured. Enable TLS or clear those settings." }}
 {{- end }}
 {{- end }}
 
