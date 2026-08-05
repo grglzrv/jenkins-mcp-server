@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -29,7 +30,14 @@ def test_current_release_has_complete_professional_notes() -> None:
     validate_document(changelog, version)
     notes = render_release_notes(changelog, version)
 
-    assert notes.startswith("Released 2026-08-04.\n")
+    # The date is asserted by shape, not value: hardcoding it makes the test
+    # fail on every release, which is the opposite of what it should catch.
+    assert re.match(r"^Released \d{4}-\d{2}-\d{2}\.\n", notes), notes[:40]
+    # It must also match the date on that release's own heading.
+    heading = re.search(rf"^## \[{re.escape(version)}\] - (\d{{4}}-\d{{2}}-\d{{2}})$",
+                        changelog, re.M)
+    assert heading, f"no dated heading for {version}"
+    assert notes.startswith(f"Released {heading.group(1)}.\n")
     assert "## [Unreleased]" not in notes
     for heading in HEADINGS:
         assert f"### {heading}" in notes

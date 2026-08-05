@@ -40,6 +40,56 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [1.22.0] - 2026-08-05
+
+### Highlights
+
+- Documentation now describes only what the repository actually defines. The
+  client configuration section previously showed an `mcp_servers` YAML structure
+  that no component in this project reads.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- The client section states the transport, the `/mcp` path and an endpoint table
+  per deployment method, with `kubectl` commands to read back the Service and
+  ingress names rather than assuming them. Configuration key names are left to
+  each client's own documentation.
+- `minibridge.basicAuth` and `minibridge.policer.http` document their purpose in
+  `values.yaml`. `basicAuth` authenticates callers of the MCP endpoint;
+  `policer.http` delegates decisions to an external policy service, and its
+  token is that service's credential.
+
+### Bug Fixes
+
+- `examples/values/minibridge-hardened.yaml` pointed `minibridge.basicAuth` at
+  `jenkins-mcp-secrets`, reusing the Jenkins credentials Secret to hold the
+  proxy's shared secret. The example now uses a dedicated Secret so the two
+  concerns stay separate.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Separating the proxy's shared secret from the Jenkins credentials means a
+  consumer of one no longer implicitly gains the other.
+
+### Upgrade Notes
+
+- If you copied `minibridge-hardened.yaml`, create the dedicated Secret before
+  upgrading:
+  `kubectl -n <namespace> create secret generic jenkins-mcp-proxy-auth --from-literal=BASIC_AUTH_SECRET="$(openssl rand -hex 32)"`,
+  or set `minibridge.basicAuth.existingSecret` back to your existing Secret.
+
 ## [1.21.0] - 2026-08-04
 
 ### Highlights
