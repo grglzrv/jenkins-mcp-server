@@ -920,3 +920,49 @@ def test_chart_version_and_app_version_move_together() -> None:
     assert str(chart["appVersion"]).strip('"') == version
     # image.tag empty means the chart uses appVersion, so the pair cannot drift.
     assert values()["image"]["tag"] == ""
+
+
+# --- agent onboarding -----------------------------------------------------
+
+
+def test_onboarding_exists_and_is_linked_from_the_readme() -> None:
+    assert (ROOT / "ONBOARDING.md").is_file()
+    readme = (ROOT / "README.md").read_text()
+    assert "ONBOARDING.md" in readme
+    assert "If you are an AI agent" in readme
+
+
+def test_onboarding_names_match_what_the_chart_renders() -> None:
+    """Resource names in the instructions must be the ones Helm produces."""
+    onboarding = (ROOT / "ONBOARDING.md").read_text()
+    # Release jenkins-mcp of chart jenkins-mcp-server.
+    assert "jenkins-mcp-jenkins-mcp-server" in onboarding
+    assert "jenkins-mcp-secrets" in onboarding
+    # The documented port and path must match the chart defaults.
+    assert f":{values()['service']['port']}" in onboarding
+    assert values()["mcp"]["path"] in onboarding
+
+
+def test_onboarding_only_references_files_that_exist() -> None:
+    import re
+
+    onboarding = (ROOT / "ONBOARDING.md").read_text()
+    targets = [
+        link
+        for link in re.findall(r"\]\(([^)#][^)]*)\)", onboarding)
+        if not link.startswith(("http", "#"))
+    ]
+    missing = [t for t in targets if not (ROOT / t).exists()]
+    assert not missing, f"ONBOARDING.md links to missing files: {missing}"
+
+
+def test_onboarding_states_the_safety_rules_for_an_agent() -> None:
+    """These instructions are executed by an agent with cluster access."""
+    onboarding = (ROOT / "ONBOARDING.md").read_text().lower()
+    for rule in [
+        "never invent",
+        "ask before anything that changes state",
+        "do not disable tls verification",
+        "do not write secrets into values files",
+    ]:
+        assert rule in onboarding, f"missing agent safety rule: {rule}"

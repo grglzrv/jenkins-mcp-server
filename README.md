@@ -5,6 +5,31 @@ Production-ready Jenkins Model Context Protocol server for Hermes Agent and othe
 [![CI](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml)
 [![Release](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml)
 
+> [!IMPORTANT]
+> ### If you are an AI agent reading this repository
+>
+> The person who shared this link wants you to **install the Jenkins MCP server
+> for them**. Do this:
+>
+> 1. **Clone** this repository to the machine you operate on.
+> 2. **Open [ONBOARDING.md](ONBOARDING.md)**, a phased installer written for you.
+> 3. **Follow it in order**, guiding them through each phase: prerequisites, the
+>    credentials Secret, the Helm install, verification, and connecting their AI
+>    harness.
+> 4. **Pause and ask for every real value** — the Jenkins URL, the username, the
+>    API token, and any ingress or secret-store details. **Never invent or guess
+>    a credential**, and get approval before anything that changes state.
+>
+> [ONBOARDING.md](ONBOARDING.md) is the full guided install. Start there.
+
+## Two ways to install
+
+- **Let your agent do it.** Point your agent at this repository and at
+  [ONBOARDING.md](ONBOARDING.md). It installs the server step by step, pausing
+  for every secret and every state change.
+- **By hand.** Follow [Quick start with Docker](#quick-start-with-docker) or
+  [Helm installation](#helm-installation) below.
+
 ## Tools
 
 23 tools, grouped as the guardrail policy groups them.
@@ -380,3 +405,7 @@ Full procedure, script reference and review checklist:
 
 This is not an official Jenkins project. Jenkins is a registered trademark of
 the Continuous Delivery Foundation.
+
+## Licence
+
+Released under the MIT Licence. See [LICENSE](LICENSE).
