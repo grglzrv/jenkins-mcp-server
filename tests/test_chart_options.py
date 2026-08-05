@@ -31,6 +31,17 @@ def schema() -> dict:
     return json.loads((CHART / "values.schema.json").read_text())
 
 
+def _section(text: str, start_heading: str, end_heading: str) -> str:
+    """Slice a section by heading text, ignoring any emoji prefix."""
+    import re
+
+    start = re.search(rf"^## .*{re.escape(start_heading)}\s*$", text, re.M)
+    end = re.search(rf"^## .*{re.escape(end_heading)}\s*$", text, re.M)
+    assert start, f"no heading matching {start_heading!r}"
+    assert end, f"no heading matching {end_heading!r}"
+    return text[start.end() : end.start()]
+
+
 def test_destructive_flags_exist_with_safe_defaults() -> None:
     mcp = values()["mcp"]
     for key in DESTRUCTIVE_VALUES:
@@ -575,7 +586,7 @@ def test_autoscaling_argocd_example_ignores_replicas() -> None:
 def test_compatibility_matrix_lists_concrete_versions() -> None:
     """The README must state which cores were actually tested, not just 'LTS'."""
     readme = (ROOT / "README.md").read_text()
-    section = readme.split("## Jenkins compatibility")[1].split("## Capabilities")[0]
+    section = _section(readme, "Jenkins compatibility", "Capabilities")
     # The versions actually exercised end to end must be named.
     for version in ["2.555", "2.541.3", "2.504.3", "2.504.1"]:
         assert version in section, f"{version} missing from the compatibility matrix"
@@ -966,3 +977,52 @@ def test_onboarding_states_the_safety_rules_for_an_agent() -> None:
         "do not write secrets into values files",
     ]:
         assert rule in onboarding, f"missing agent safety rule: {rule}"
+
+
+def test_readme_headline_claims_match_reality() -> None:
+    """The opening is a promise; keep it tied to what CI actually proves."""
+    import re
+
+    readme = (ROOT / "README.md").read_text()
+    intro = " ".join(readme.split("## 🚀 Two ways to install")[0].split())
+
+    # Tool count.
+    server = (ROOT / "src/jenkins_mcp_server/server.py").read_text()
+    tools = len(re.findall(r"@mcp\.tool\(\)", server))
+    assert f"{tools} Jenkins tools" in intro, f"intro should say {tools} tools"
+
+    # Verified Jenkins lines, as counted by the compatibility table.
+    verified = readme.count("✅ Verified")
+    assert "four Jenkins LTS lines" in intro and verified == 4, (
+        f"intro claims four verified lines, table shows {verified}"
+    )
+
+    # Kubernetes versions actually installed by the smoke matrix.
+    smoke = (ROOT / ".github/workflows/chart-smoke.yml").read_text()
+    minors = {m for m in re.findall(r"v(1\.\d+)\.\d+\+k3s", smoke)}
+    assert "four Kubernetes versions" in intro
+    assert len(minors) == 4, f"smoke matrix covers {sorted(minors)}"
+
+    # The defaults the intro promises are opt-in.
+    mcp = values()["mcp"]
+    assert mcp["allowJobDelete"] is False
+    assert mcp["allowAdminRequest"] is False
+
+
+def test_readme_anchor_links_resolve() -> None:
+    """An emoji heading gains a leading hyphen in GitHub's anchor.
+
+    `## 🚀 Two ways to install` renders as `#-two-ways-to-install`, so a link
+    written as `#two-ways-to-install` silently goes nowhere.
+    """
+    import re
+
+    readme = (ROOT / "README.md").read_text()
+
+    def slug(heading: str) -> str:
+        cleaned = re.sub(r"[^\w\s-]", "", heading.lower())
+        return "#" + re.sub(r"\s+", "-", cleaned).strip()
+
+    anchors = {slug(h) for h in re.findall(r"^#{2,3} (.+)$", readme, re.M)}
+    used = set(re.findall(r"\]\((#[^)]+)\)", readme))
+    assert used <= anchors, f"broken anchor links: {sorted(used - anchors)}"

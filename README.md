@@ -1,6 +1,29 @@
 # Jenkins MCP Server
 
-Production-ready Jenkins Model Context Protocol server for Hermes Agent and other MCP clients.
+**Give an AI agent controlled access to Jenkins — without handing it the keys.**
+
+A Model Context Protocol server for Jenkins, built for the case where the client
+is an autonomous agent rather than a person. Works with any MCP client over
+Streamable HTTP.
+
+Most of this repository is not the 23 Jenkins tools. It is the machinery that
+decides which of them an agent may actually call:
+
+- 🔒 **Two enforcement layers.** An in-process policy that always applies, and an
+  optional [minibridge](https://github.com/acuvity/minibridge) proxy that filters
+  tools before they reach the server and inspects content in both directions.
+- 🧨 **Irreversible actions are opt-in.** `delete_job` and `jenkins_admin_request`
+  are off by default. Job paths are a glob allowlist, and traversal segments are
+  rejected rather than normalised.
+- 🕵️ **Prompt-injection guardrails.** A Jenkins-aware Rego policy that treats the
+  script console, credential stores and `$JENKINS_HOME` as sensitive, redacts API
+  tokens and crumbs from responses, and detects instructions hidden in build logs.
+- ✅ **Verified, not asserted.** Every tool is exercised against four Jenkins LTS
+  lines in CI, and the chart is installed into real k3s clusters across four
+  Kubernetes versions — install, upgrade, `helm test`, uninstall.
+
+The Jenkins account behind it remains the outer boundary: these controls only
+narrow what that account can already do.
 
 [![CI](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml)
 [![Release](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml)
@@ -22,15 +45,15 @@ Production-ready Jenkins Model Context Protocol server for Hermes Agent and othe
 >
 > [ONBOARDING.md](ONBOARDING.md) is the full guided install. Start there.
 
-## Two ways to install
+## 🚀 Two ways to install
 
 - **Let your agent do it.** Point your agent at this repository and at
   [ONBOARDING.md](ONBOARDING.md). It installs the server step by step, pausing
   for every secret and every state change.
-- **By hand.** Follow [Quick start with Docker](#quick-start-with-docker) or
-  [Helm installation](#helm-installation) below.
+- **By hand.** Follow [Quick start with Docker](#-quick-start-with-docker) or
+  [Helm installation](#-helm-installation) below.
 
-## Tools
+## 🧰 Tools
 
 23 tools, grouped as the guardrail policy groups them.
 
@@ -60,10 +83,10 @@ Production-ready Jenkins Model Context Protocol server for Hermes Agent and othe
 | `@destructive` | `set_node_offline` | Take an agent offline or online |
 | `@admin` | `jenkins_admin_request` | Generic Jenkins REST call — disabled by default |
 
-See [Security and guardrails](#security-and-guardrails) for how to restrict
+See [Security and guardrails](#-security-and-guardrails) for how to restrict
 these at either layer.
 
-## Jenkins compatibility
+## 🧪 Jenkins compatibility
 
 | Jenkins | Line | Status | Coverage |
 | :--- | :--- | :---: | :--- |
@@ -105,7 +128,7 @@ freestyle and node tools, continue to work on a core-only controller.
 Plugin, permission, proxy and scale details, and how to verify against your own
 controller, are in [docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
 
-## Capabilities
+## ⚙️ Capabilities
 
 - Native MCP Streamable HTTP endpoint at `/mcp` and optional stdio transport.
 - Job list/read/create/update/delete/copy/enable/disable.
@@ -118,7 +141,7 @@ controller, are in [docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md
 - Read-only mode, job allowlist, write-category controls, and JSONL audit logging.
 - Optional generic administrator REST request, disabled by default.
 
-## Published artifacts
+## 📦 Published artifacts
 
 ```text
 ghcr.io/grglzrv/jenkins-mcp-server:<version>
@@ -131,7 +154,7 @@ image contains only the Python server. The `-minibridge` tag is a separately
 built variant that bundles both executables in one container; Minibridge is not
 a sidecar and is not downloaded at pod startup.
 
-## Architecture
+## 🏗️ Architecture
 
 Requests pass through up to two independent enforcement layers before reaching
 Jenkins. The server's own policy always applies. The minibridge proxy is
@@ -169,7 +192,7 @@ Jenkins controller
 
 Hermes never receives the Jenkins API token. The token stays in a Kubernetes Secret or external secret provider and is used only by the MCP server.
 
-## Quick start with Docker
+## 🐳 Quick start with Docker
 
 ```bash
 cp .env.example .env
@@ -215,7 +238,7 @@ MCP endpoint:
 http://localhost:8000/mcp
 ```
 
-## Helm installation
+## ☸️ Helm installation
 
 ```bash
 kubectl create namespace jenkins-mcp
@@ -242,7 +265,7 @@ For strict TLS, configure `jenkins.url` with Jenkins's exact Tailscale MagicDNS
 FQDN and route the tailnet DNS zone through the Operator `DNSConfig`; do not
 use the Kubernetes egress Service name as the HTTPS hostname.
 
-## Connecting a client
+## 🔌 Connecting a client
 
 The server speaks **Streamable HTTP**. Point any MCP client at the `/mcp` path
 of whichever address exposes it; the exact configuration keys differ per client,
@@ -274,7 +297,7 @@ kubectl -n <namespace> get ingress -l app.kubernetes.io/name=jenkins-mcp-server 
 Whichever client you use, it never receives the Jenkins API token. The token
 stays in a Kubernetes Secret and is used only by this server.
 
-## Security and guardrails
+## 🛡️ Security and guardrails
 
 Two independent layers. The server's own policy always applies; the minibridge
 proxy is optional and sits in front of it.
@@ -329,7 +352,7 @@ CI proves this end to end: the chart is installed into k3s with
 Threat model, required production controls, secret handling and the known
 limitations are in [SECURITY.md](SECURITY.md).
 
-## Development
+## 🛠️ Development
 
 ```bash
 make install
@@ -351,7 +374,7 @@ Full Docker-based Jenkins TLS integration test:
 make integration
 ```
 
-## Releases and versioning
+## 🏷️ Releases and versioning
 
 One semantic version covers the Python package, the image and the chart. The
 chart pins no image tag of its own:
@@ -392,7 +415,7 @@ opt in with `image.tag: edge`.
 Full procedure, script reference and review checklist:
 [docs/releasing/RELEASE.md](docs/releasing/RELEASE.md).
 
-## Documentation
+## 📚 Documentation
 
 - [Release process](docs/releasing/RELEASE.md)
 - [Jenkins compatibility: versions, plugins, permissions](docs/JENKINS_COMPATIBILITY.md)
@@ -401,11 +424,14 @@ Full procedure, script reference and review checklist:
 - [Helm chart](charts/jenkins-mcp-server/README.md)
 - [Security model](SECURITY.md)
 
-## Attribution
+## 📄 Licence and attribution
 
-This is not an official Jenkins project. Jenkins is a registered trademark of
-the Continuous Delivery Foundation.
+Released under the MIT Licence — see [LICENSE](LICENSE). That covers this
+repository only. The images additionally bundle
+[minibridge](https://github.com/acuvity/minibridge) (Apache 2.0) and their base
+image's own packages; `docker/Dockerfile.minibridge` pins the exact minibridge
+release.
 
-## Licence
-
-Released under the MIT Licence. See [LICENSE](LICENSE).
+This is an independent project, not affiliated with or endorsed by the Jenkins
+project or the Continuous Delivery Foundation. Jenkins is a registered trademark
+of the Continuous Delivery Foundation.
