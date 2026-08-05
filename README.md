@@ -107,23 +107,29 @@ backports.
 
 ### Requirements
 
-| | |
+| Requirement | Needed for |
 | --- | --- |
-| Authentication | Username and **API token**. Do not use the account password |
-| Folder paths such as `AI/nightly` | `cloudbees-folder` |
-| Pipeline tools, and `term`/`kill` on `stop_build` | `workflow-aggregator` |
-| Multibranch tools | `workflow-multibranch`, `branch-api`, `git` |
+| Username and **API token** | Everything. Do not use the account password |
+| `cloudbees-folder` | Any job path containing `/`. Treat as required unless every job is top-level |
+| `workflow-aggregator` | Pipeline tools, and the `term`/`kill` modes of `stop_build` |
+| `workflow-multibranch`, `branch-api`, `git` | Multibranch tools |
 
-A missing plugin disables the tools that depend on it. The rest, including all
-freestyle and node tools, continue to work on a core-only controller.
+A missing plugin disables only the tools that depend on it; freestyle and node
+tools keep working on a core-only controller. The Jenkins account's own
+permissions are the outer boundary — see
+[docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md) for the least
+permission each tool needs.
 
 ### Known issues
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Reads succeed, every write returns 403 | Strict Crumb Issuer with *check client IP*; the crumb is bound to a source address that changes behind SNAT or an egress proxy | Disable the IP check, or exclude the MCP server |
+| Every call returns 401 | The token is wrong, revoked, or belongs to a different user | Reissue the API token and update the Secret |
+| `certificate verify failed` at startup | Jenkins uses a private or self-signed CA | Set `jenkins.caBundle.existingSecret`. Do not disable `verifyTls` |
+| Reads succeed, every write returns 403 | Strict Crumb Issuer with *check client IP*: the crumb is bound to a source address that changes behind SNAT or an egress proxy | Disable the IP check, or exclude this server |
 | `get_job_config` fails, everything else works | The account has `Job/Read` but not `Job/ExtendedRead` | Grant `Job/ExtendedRead` |
-| `trigger_build` rejected on a parameterised job | Triggered without parameters | Pass `parameters`, an empty object is enough |
+| `trigger_build` rejected on a parameterised job | Triggered with no `parameters` at all, which uses `/build` | Pass `parameters`; an empty object is enough and uses the job's defaults |
+| A tool is missing from `tools/list` | It is denied by `minibridge.tools`, or disabled by an `mcp.allow*` setting | Intended behaviour. Check both before assuming a fault |
 
 Plugin, permission, proxy and scale details, and how to verify against your own
 controller, are in [docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
