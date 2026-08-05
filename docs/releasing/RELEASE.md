@@ -71,6 +71,57 @@ Fill in the Unreleased section of CHANGELOG.md, then run:
   make version VERSION=1.23.0
 ```
 
+## Scripts
+
+`make version` and `make verify-version` are the supported entry points and call
+these in the right order. Each is listed so a failure message can be traced back
+to the tool that produced it.
+
+| Script | Invocation | Purpose |
+| --- | --- | --- |
+| `scripts/changelog.py` | `validate` \| `prepare X.Y.Z` \| `render X.Y.Z [--output FILE]` | Validate the `[Unreleased]` template and one complete release entry; promote `[Unreleased]` to a dated release and recreate the template; render an entry as GitHub Release notes. |
+| `scripts/set_version.py` | `X.Y.Z` | Rewrite every declared version pin. Refuses when release notes for that version are missing. |
+| `scripts/check_version.py` | no arguments | Assert every declared pin equals `VERSION`, then scan the repository for pins nobody declared. |
+| `scripts/check_release_bump.py` | `BASE_COMMIT` \| `--assert-newer CANDIDATE BASELINE` | Fail when release-impacting paths changed without a strictly newer `VERSION`. Used by the `Shipped changes bump VERSION` check. |
+| `scripts/validate_manifests.py` | no arguments | Parse every raw Kubernetes, Argo CD and Compose file and assert each document has `apiVersion` and `kind`. Run by `make validate-manifests`. |
+| `scripts/version_pins.py` | imported, not run | The canonical inventory of every version pin. A new pinned file must be added here or `check_version.py` reports it as unmanaged. |
+
+### `scripts/set_version.py`
+
+```text
+usage: scripts/set_version.py X.Y.Z
+```
+
+Takes one positional argument, the target version, with or without a leading
+`v`. It performs no git operations: it edits files in place and leaves staging
+and committing to you.
+
+**Prefer `make version VERSION=X.Y.Z`.** That runs `changelog.py prepare` first,
+so the notes exist before any pin moves, then runs this script, then
+`make verify-version`. Running this script alone skips note preparation, which
+it detects and refuses:
+
+```console
+$ python scripts/set_version.py 1.24.0
+refusing to bump to 1.24.0: expected exactly one release entry for 1.24.0, found 0
+
+Release notes must exist before the version changes, or the release
+fails and cannot be retriggered without another bump.
+
+Fill in the Unreleased section of CHANGELOG.md, then run:
+  make version VERSION=1.24.0
+which prepares the notes and rewrites every version pin together.
+```
+
+Direct use is reasonable only when the notes are already prepared, for example
+correcting a mistyped version in an unmerged branch:
+
+```bash
+python scripts/changelog.py prepare 1.24.0   # if not already done
+python scripts/set_version.py 1.24.0
+python scripts/check_version.py              # confirm every pin moved
+```
+
 ## Prepare a release
 
 ```bash

@@ -119,3 +119,30 @@ def test_version_cannot_be_bumped_without_release_notes() -> None:
     assert "make version VERSION=9.9.9" in combined
     # The refusal must happen before anything is rewritten.
     assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() != "9.9.9"
+
+
+def test_every_release_script_is_documented() -> None:
+    """A script nobody documents is a script nobody can use correctly."""
+    doc = (ROOT / "docs/releasing/RELEASE.md").read_text(encoding="utf-8")
+    scripts = {
+        path.name
+        for path in (ROOT / "scripts").glob("*.py")
+        if not path.name.startswith("_")
+    }
+    undocumented = sorted(s for s in scripts if s not in doc)
+    assert not undocumented, f"not documented in RELEASE.md: {undocumented}"
+
+
+def test_set_version_usage_matches_the_documented_synopsis() -> None:
+    """The documented invocation must be the one the script prints."""
+    import subprocess
+
+    doc = (ROOT / "docs/releasing/RELEASE.md").read_text(encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/set_version.py")],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    usage = (result.stdout + result.stderr).strip()
+    assert usage in doc, f"RELEASE.md does not carry the real usage line: {usage!r}"
