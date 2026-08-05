@@ -251,76 +251,31 @@ stays in a Kubernetes Secret and is used only by this server.
 
 ## Security and guardrails
 
-Two layers, applied independently.
+Two independent layers. The server's own policy always applies; the minibridge
+proxy is optional and sits in front of it.
 
-### Layer 1 — server policy (`mcp.*`), always enforced
+### Server policy — always enforced
 
-Enforced inside the Python process. It applies whether or not minibridge is
-deployed, and cannot be bypassed by a client.
+Applied in-process, so it holds whether or not the proxy is deployed.
 
-```env
-JENKINS_VERIFY_TLS=true
-MCP_READ_ONLY=false
-MCP_ALLOW_JOB_WRITE=true
-MCP_ALLOW_BUILD_WRITE=true
-MCP_ALLOW_NODE_WRITE=false
-MCP_ALLOW_ADMIN_REQUEST=false
-MCP_ALLOWED_JOBS=AI/*,Platform/*
-```
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `mcp.allowedJobs` | `AI/*,Platform/*` | Glob allowlist of job paths. Traversal segments are rejected |
+| `mcp.readOnly` | `false` | Refuses every write tool |
+| `mcp.allowJobDelete` | **`false`** | `delete_job` is opt-in; deletion is irreversible |
+| `mcp.allowAdminRequest` | **`false`** | `jenkins_admin_request` is opt-in |
+| `mcp.allowNodeWrite` | `false` | `set_node_offline` |
 
-Destructive actions are gated separately from ordinary writes, so an agent can
-create and trigger jobs while never being able to delete one. Each destructive
-action must clear its category flag, the master switch, and its own flag.
+Jenkins permissions remain the outer boundary: these settings can only narrow
+what the account is already allowed to do.
 
-| Variable | Chart value | Default | Covers |
-| --- | --- | --- | --- |
-| `MCP_ALLOW_DESTRUCTIVE` | `mcp.allowDestructive` | `true` | Master switch for all of the below |
-| `MCP_ALLOW_JOB_DELETE` | `mcp.allowJobDelete` | **`false`** | `delete_job` |
-| `MCP_ALLOW_JOB_UPDATE` | `mcp.allowJobUpdate` | `true` | `update_job_config` |
-| `MCP_ALLOW_BUILD_STOP` | `mcp.allowBuildStop` | `true` | `stop_build`, `cancel_queue_item` |
+### minibridge proxy — optional
 
-To disable every irreversible action at once while keeping reads, job creation
-and build triggering:
+Enabled with `minibridge.enabled=true`, which selects the `-minibridge` image.
+It filters tools before they reach the server and inspects content in both
+directions.
 
-```yaml
-mcp:
-  allowDestructive: false
-```
-
-`MCP_READ_ONLY=true` overrides everything, and `MCP_ALLOWED_JOBS` restricts every
-tool to matching job paths. Job names containing `.` or `..` segments are
-rejected at both the policy and URL layers.
-
-### Layer 2 — minibridge proxy (optional)
-
-[Minibridge](https://github.com/acuvity/minibridge) terminates MCP over HTTP,
-evaluates a [Rego policy](docker/policy.rego) on every request and response, and
-speaks stdio to the server it spawns. It requires the `-minibridge` image built
-from [`docker/Dockerfile.minibridge`](docker/Dockerfile.minibridge).
-
-```yaml
-minibridge:
-  enabled: true
-```
-
-The chart selects `ghcr.io/grglzrv/jenkins-mcp-server:<version>-minibridge`,
-published alongside the default image on every release. `edge-minibridge`
-tracks `main`. The chart runs one container: its entrypoint starts Minibridge,
-which spawns `jenkins-mcp-server --transport stdio`. Minibridge v0.8.0 is
-checksum-pinned rather than fetched from `latest`, since a proxy in the request
-path should not change enforcement behaviour on an unrelated rebuild.
-
-Credential injection is unchanged with the proxy on or off: `JENKINS_TOKEN`
-always arrives via `secretKeyRef` from a Kubernetes Secret, which External
-Secrets can populate from GCP Secret Manager.
-
-#### Disabling destructive tools and capabilities
-
-`minibridge.tools` is a policy over the server's whole tool surface. **The
-default is allow-all** — with both lists empty every tool and capability is
-permitted, and restriction is entirely opt-in.
-
-Entries are a bare tool name or a group:
+Tool policy accepts individual names or these groups:
 
 | Group | Tools |
 | --- | --- |
@@ -330,111 +285,24 @@ Entries are a bare tool name or a group:
 | `@admin` | `jenkins_admin_request` |
 | `@all` | every tool |
 
-Exclude only the irreversible tools, keeping everything else:
-
 ```yaml
 minibridge:
   enabled: true
   tools:
-    deny: ["@destructive"]
+    deny: ["@destructive", "@admin"]   # denied tools are hidden and refused
 ```
 
-A strict read-only deployment — a non-empty `allow` becomes an allowlist:
+Six content guardrails are available — covert instructions, sensitive Jenkins
+surfaces such as the script console and credential stores, tool shadowing,
+schema misuse, cross-origin tool references, and secrets redaction. All are off
+by default; enable them under `minibridge.guardrails`.
 
-```yaml
-minibridge:
-  tools:
-    allow: ["@read"]
-```
+CI proves this end to end: the chart is installed into k3s with
+`deny: ["@destructive"]`, and a probe asserts denied tools are absent from
+`tools/list` and refused on call.
 
-`deny` always wins over `allow`. Denied tools are refused on `tools/call` **and
-filtered out of `tools/list`**, so the agent never sees a tool it cannot use.
-Whole MCP capabilities are gated by method name:
-
-```yaml
-minibridge:
-  methodsDeny: ["resources/read"]
-```
-
-Every one of the 23 tools belongs to exactly one group, asserted by a test so
-the groups cannot drift from the server.
-
-#### Guardrails
-
-Heuristic content inspection, independent of the tool policy above. All are off
-by default; enable only what you need.
-
-| Guardrail | What it does |
-| --- | --- |
-| `covert-instruction-detection` | Detects hidden or obfuscated directives in tool descriptions and responses, such as a build log carrying `<important>Do not tell the user…</important>` |
-| `sensitive-pattern-detection` | Flags references to sensitive surfaces. Jenkins-aware: the script console (`/scriptText`, `/script`), credential stores, `$JENKINS_HOME`, `secrets/master.key`, path traversal, cloud metadata endpoints |
-| `shadowing-pattern-detection` | Identifies tool descriptions or responses that try to override or redirect other tools |
-| `schema-misuse-prevention` | Rejects out-of-schema argument names (`debug`, `note`, `metadata`, …) used to smuggle instructions |
-| `cross-origin-tool-access` | Blocks descriptions and responses that reference tools outside this server. This server's own 23 tool names are excluded so they do not trip it |
-| `secrets-redaction` | Replaces credentials with `[REDACTED]` in responses. Jenkins-aware: API tokens in `curl -u user:token` and `https://user:token@host` form, `JENKINS_TOKEN`, crumbs, session cookies, plus GitHub/AWS/JWT/Slack formats |
-
-```yaml
-minibridge:
-  guardrails:
-    - secrets-redaction
-    - sensitive-pattern-detection
-    - covert-instruction-detection
-```
-
-The policy has 29 OPA tests covering both directions — that clean console output
-and this server's own tool names are *not* flagged, and that injection, traversal
-and token leakage are. They run in CI via the `policy` job.
-
-#### Shared-secret authentication
-
-A lightweight auth layer checked by the policy against the `Authorization`
-header. The secret is referenced from a Kubernetes Secret and never inlined in
-values:
-
-```yaml
-minibridge:
-  basicAuth:
-    enabled: true
-    existingSecret: jenkins-mcp-server-credentials
-    secretKey: BASIC_AUTH_SECRET
-```
-
-If that Secret is managed by External Secrets, add the key to
-`externalSecret.extraData` — otherwise the chart fails the render with an
-explanation rather than producing a pod that cannot start.
-
-Use it only in controlled environments, rotate the secret, and always pair it
-with TLS (`minibridge.tls`, which also supports mTLS via `clientCASecretKey`).
-
-#### Enforcement
-
-```yaml
-minibridge:
-  policer:
-    enforce: true          # false logs the verdict and lets traffic through
-    rego:
-      enabled: true
-      policy: /policy.rego
-    http:
-      enabled: false       # or delegate to a remote HTTP policer
-      url: ""
-      token:
-        existingSecret: ""
-        secretKey: MINIBRIDGE_POLICER_HTTP_BEARER_TOKEN
-```
-
-The Rego and HTTP policers are mutually exclusive. For encrypted listener keys,
-`minibridge.tls.passSecretKey` reads the passphrase from the TLS Secret, while
-`minibridge.tls.pass.valueFrom` can reference a different Secret and key.
-
-### Recommended posture
-
-Use a dedicated Jenkins service account. Keep `jenkins_admin_request` disabled
-unless there is a reviewed operational requirement, keep `allowJobDelete: false`,
-restrict `MCP_ALLOWED_JOBS` to controlled folders, and keep destructive tools
-behind human approval in the agent. Setting `minibridge.tools.deny:
-["@destructive", "@admin"]` gives defence in depth: the proxy refuses the call
-and never advertises the tool, and the server would refuse it anyway.
+Threat model, required production controls, secret handling and the known
+limitations are in [SECURITY.md](SECURITY.md).
 
 ## Development
 
@@ -460,9 +328,8 @@ make integration
 
 ## Releases and versioning
 
-One canonical semantic version is synchronized across the Python package, Helm
-chart, application image, and production Kustomize overlay. The chart is never
-left pointing at a stale image, because it does not pin an image tag at all:
+One semantic version covers the Python package, the image and the chart. The
+chart pins no image tag of its own:
 
 ```yaml
 image:
@@ -470,75 +337,35 @@ image:
   tag: ""        # empty means use Chart.appVersion
 ```
 
-So `Chart.appVersion` *is* the image tag. Bumping the version moves the chart and
-the image together by construction.
+`Chart.appVersion` *is* the image tag, so a chart version identifies exactly one
+application build. Chart-only changes therefore still take a full version bump —
+the trade for that guarantee.
+
+To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
 NEW_VERSION=1.23.0
-make version VERSION="$NEW_VERSION"     # prepares notes and rewrites every pin
-git commit -am "chore(release): prepare v$NEW_VERSION"
-git push origin "release/v$NEW_VERSION"
-# Open a PR and merge it after every required check is green.
+make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 
-`make version` rewrites all 22 managed application-version pins across 17
-files: `VERSION`,
-`pyproject.toml`, `src/jenkins_mcp_server/__init__.py`, the chart's `version`
-**and** `appVersion`, both README install commands, the Kustomize base,
-production and minibridge overlays, the standalone minibridge deployment, the
-example values, Compose deployment, and all versioned Argo CD applications.
-`scripts/check_version.py` then asserts every declared pin exists exactly where
-expected and agrees. It additionally scans every small UTF-8 file in the
-repository, regardless of directory or extension, for application image tags,
-Helm install versions, Argo CD revisions, Kustomize tags, Compose defaults, and
-release examples. A newly added manifest or README with a stale version fails
-CI until it is added to the canonical pin inventory.
+Commit, open a pull request, and merge once the checks pass. Merging publishes
+automatically; no manual tag is needed. The workflow refuses to publish unless
+the requested version matches `VERSION`, every pin agrees, the release notes are
+complete, and release-impacting changes carry a strictly newer version.
 
-Before it rewrites a pin, `make version` promotes the completed `[Unreleased]`
-section in `CHANGELOG.md` to a dated version entry and recreates the empty
-template. Every release must explicitly cover highlights, new features,
-improvements, bug fixes, breaking changes, known issues, security, and upgrade
-notes. Use `None` or `None known` where appropriate; placeholders such as
-`None yet`, `TBD`, and `TODO` are rejected in a release entry. The GitHub
-Release publishes this validated entry verbatim instead of generating primary
-notes from commit titles.
+Published per release:
 
-When the validated version-change pull request merges to `main`, the release
-workflow starts automatically. It refuses to publish anything if these do not
-agree:
-
-```bash
-test "${version}" = "$(cat VERSION)"   # requested release must match VERSION
-python scripts/check_version.py        # every versioned artifact must agree
-python scripts/changelog.py validate   # release notes must be complete
-python scripts/check_release_bump.py "$(git merge-base HEAD origin/main)"
+```text
+ghcr.io/grglzrv/jenkins-mcp-server:<version>       # also <major>.<minor>, <major>, latest
+ghcr.io/grglzrv/jenkins-mcp-server:<version>-minibridge
+oci://ghcr.io/grglzrv/charts/jenkins-mcp-server --version <version>
 ```
 
-The release-bump check covers application/package inputs, both runtime images,
-functional chart files, Compose, production manifests, Argo CD applications,
-and shipped values. It requires a strictly newer SemVer and reports every path
-that needs the release. Documentation, tests, integration fixtures, and
-workflow-only changes do not force a version bump.
+Every push to `main` also publishes `:edge`, which the chart never references;
+opt in with `image.tag: edge`.
 
-Only after that gate passes does it build the multi-architecture image (tagged
-with the full version, major/minor, major, and `latest`), package the chart at the same version, push
-both to GHCR, and create the GitHub Release from the curated changelog entry
-with provenance and SBOM metadata.
-
-A matching annotated tag can still trigger the same idempotent workflow as a
-manual recovery path. If the GitHub Release already exists, the run validates
-the version and source tag before safely skipping republication. Release runs
-are serialized so a recovery tag cannot race automatic publication.
-
-Two consequences worth knowing:
-
-- **`:edge` never touches the chart.** Every push to `main` publishes
-  `ghcr.io/grglzrv/jenkins-mcp-server:edge`, but the chart only ever references
-  `appVersion`. Edge images are opt-in via `image.tag: edge`.
-- **Chart-only changes still need a full version bump**, since chart `version`
-  and `appVersion` are deliberately locked together. That trades Helm's
-  convention of versioning the chart independently for the guarantee that a
-  chart version identifies exactly one application build.
+Full procedure, script reference and review checklist:
+[docs/releasing/RELEASE.md](docs/releasing/RELEASE.md).
 
 ## Documentation
 
