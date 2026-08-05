@@ -432,6 +432,11 @@ minibridge:
 
   # Shared-secret auth enforced by the policy against the Authorization header.
   # Referenced from a Secret (an ExternalSecret target works); never inlined.
+  # Shared secret that callers must present to reach the proxy. This
+  # authenticates clients of the MCP endpoint and has nothing to do with the
+  # Jenkins credentials, so keep it in its own Secret:
+  #   kubectl create secret generic jenkins-mcp-proxy-auth \
+  #     --from-literal=BASIC_AUTH_SECRET="$(openssl rand -hex 32)"
   basicAuth:
     enabled: false
     existingSecret: ""
@@ -445,6 +450,11 @@ minibridge:
       enabled: true
       policy: /policy.rego
     # Remote HTTP policer. Mutually exclusive with the rego policer.
+    # Delegate decisions to an external policy service instead of the bundled
+    # Rego policy: minibridge sends each request to url and honours the
+    # verdict. Use it when policy is managed centrally. The two policers are
+    # mutually exclusive; the chart fails the render if both or neither are
+    # enabled. token is that service's bearer credential, not a Jenkins one.
     http:
       enabled: false
       url: ""

@@ -200,7 +200,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.21.0 \
+  --version 1.22.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -217,28 +217,37 @@ For strict TLS, configure `jenkins.url` with Jenkins's exact Tailscale MagicDNS
 FQDN and route the tailnet DNS zone through the Operator `DNSConfig`; do not
 use the Kubernetes egress Service name as the HTTPS hostname.
 
-## Hermes configuration
+## Connecting a client
 
-Through the tailnet:
+The server speaks **Streamable HTTP**. Point any MCP client at the `/mcp` path
+of whichever address exposes it; the exact configuration keys differ per client,
+so use its own documentation for the surrounding structure.
 
-```yaml
-mcp_servers:
-  jenkins:
-    transport: streamable_http
-    url: https://jenkins-mcp.<tailnet>.ts.net/mcp
+| Deployment | Endpoint |
+| --- | --- |
+| Helm chart, in-cluster | `http://<release>-jenkins-mcp-server.<namespace>.svc.cluster.local:8000/mcp` |
+| Raw manifests, in-cluster | `http://jenkins-mcp.jenkins-mcp.svc.cluster.local:8000/mcp` |
+| Behind an ingress | `https://<ingress-host>/mcp` |
+
+The Helm chart derives the Service name from the release, so a release named
+`jenkins-mcp` in namespace `jenkins-mcp` gives
+`jenkins-mcp-jenkins-mcp-server.jenkins-mcp.svc.cluster.local`. Read it back
+rather than assuming:
+
+```bash
+kubectl -n <namespace> get svc -l app.kubernetes.io/name=jenkins-mcp-server \
+  -o jsonpath='{.items[0].metadata.name}'
 ```
 
-Directly inside the same Kubernetes cluster:
+With an ingress, the controller assigns the hostname asynchronously:
 
-```yaml
-mcp_servers:
-  jenkins:
-    transport: streamable_http
-    # Raw manifests (deploy/kubernetes) create a Service named jenkins-mcp.
-    # The Helm chart names it <release>-jenkins-mcp-server, so with release
-    # jenkins-mcp the host is jenkins-mcp-jenkins-mcp-server instead.
-    url: http://jenkins-mcp.jenkins-mcp.svc.cluster.local:8000/mcp
+```bash
+kubectl -n <namespace> get ingress -l app.kubernetes.io/name=jenkins-mcp-server \
+  -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'
 ```
+
+Whichever client you use, it never receives the Jenkins API token. The token
+stays in a Kubernetes Secret and is used only by this server.
 
 ## Security and guardrails
 
@@ -465,7 +474,7 @@ So `Chart.appVersion` *is* the image tag. Bumping the version moves the chart an
 the image together by construction.
 
 ```bash
-NEW_VERSION=1.21.0
+NEW_VERSION=1.22.0
 make version VERSION="$NEW_VERSION"     # prepares notes and rewrites every pin
 git commit -am "chore(release): prepare v$NEW_VERSION"
 git push origin "release/v$NEW_VERSION"

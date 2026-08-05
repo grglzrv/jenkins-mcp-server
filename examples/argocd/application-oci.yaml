@@ -43,7 +43,7 @@ spec:
     chart: jenkins-mcp-server
     # Pin an exact version. A range or "*" would let a sync move you between
     # releases without review.
-    targetRevision: 1.21.0
+    targetRevision: 1.22.0
     helm:
       releaseName: jenkins-mcp
       # valuesObject is inline and easy to read. For larger setups, keep values

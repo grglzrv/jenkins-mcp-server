@@ -8,9 +8,10 @@
 #     BASIC_AUTH_SECRET
 #   - Secret jenkins-mcp-tls with tls.crt and tls.key
 #
-# If jenkins-mcp-secrets is managed by External Secrets, add BASIC_AUTH_SECRET
-# to externalSecret.extraData, otherwise the chart fails the render rather than
-# producing a pod that cannot start.
+# basicAuth and the Jenkins credentials are deliberately separate Secrets. If
+# you would rather keep one Secret and it is managed by External Secrets, add
+# BASIC_AUTH_SECRET to externalSecret.extraData; the chart fails the render
+# otherwise rather than producing a pod that cannot start.
 
 jenkins:
   url: https://jenkins.example-tailnet.ts.net
@@ -39,8 +40,14 @@ minibridge:
   policer:
     enforce: true
   basicAuth:
+    # A shared secret callers must present to reach the proxy at all. This is
+    # authentication for the MCP endpoint, unrelated to the Jenkins credentials:
+    # a separate Secret keeps the two concerns apart.
+    #
+    #   kubectl -n jenkins-mcp create secret generic jenkins-mcp-proxy-auth \
+    #     --from-literal=BASIC_AUTH_SECRET="$(openssl rand -hex 32)"
     enabled: true
-    existingSecret: jenkins-mcp-secrets
+    existingSecret: jenkins-mcp-proxy-auth
     secretKey: BASIC_AUTH_SECRET
   tls:
     enabled: true
