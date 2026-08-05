@@ -6,9 +6,11 @@ agent and your CI.**
 Exposes 23 Jenkins tools to any MCP client over the two transports the current
 specification defines: **Streamable HTTP** for remote use and **stdio** for a
 local subprocess. Ships with an optional
-[Minibridge](https://github.com/acuvity/minibridge) proxy enforcing a
-Jenkins-aware Rego policy, destructive tools off by default, and a hardened
-non-root image. The agent never holds the Jenkins credential.
+[Minibridge](https://github.com/acuvity/minibridge) proxy by
+[Acuvity](https://github.com/acuvity), applying their runtime security model
+through a Rego policy written for Jenkins. Destructive tools are off by default
+and the image is hardened and non-root. The agent never holds the Jenkins
+credential.
 
 [![CI](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml)
 [![Release](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml)
@@ -302,11 +304,18 @@ proxy is optional and sits in front of it.
 
 ### Runtime guardrails
 
-**Minibridge integration.** [Minibridge](https://github.com/acuvity/minibridge)
-establishes secure agent-to-MCP connectivity, supports Rego and HTTP-based policy
-enforcement 🕵️, and simplifies orchestration. The `-minibridge` image bundles it
-with a **Jenkins-aware Rego policy** in a single container — no sidecar, nothing
+**Minibridge integration.** [Minibridge](https://github.com/acuvity/minibridge),
+developed by [Acuvity](https://github.com/acuvity), establishes secure
+agent-to-MCP connectivity, supports Rego and HTTP-based policy enforcement 🕵️,
+and simplifies orchestration. The `-minibridge` image bundles it with a
+**Jenkins-aware Rego policy** in a single container — no sidecar, nothing
 downloaded at startup.
+
+The guardrails below follow the runtime security model Acuvity defines for their
+[MCP server registry](https://github.com/acuvity/mcp-servers-registry), with the
+policy itself written for Jenkins: it treats the script console, credential
+stores and `$JENKINS_HOME` as sensitive, and redacts Jenkins API tokens, crumbs
+and session cookies.
 
 | Guardrail | Summary |
 | --- | --- |
@@ -479,10 +488,13 @@ Full procedure, script reference and review checklist:
 ## 📄 Licence and attribution
 
 Released under the MIT Licence — see [LICENSE](LICENSE). That covers this
-repository only. The images additionally bundle
-[minibridge](https://github.com/acuvity/minibridge) (Apache 2.0) and their base
-image's own packages; `docker/Dockerfile.minibridge` pins the exact minibridge
-release.
+repository only. The `-minibridge` image additionally bundles
+[Minibridge](https://github.com/acuvity/minibridge) by
+[Acuvity](https://github.com/acuvity), under Apache 2.0, alongside its base
+image's own packages; `docker/Dockerfile.minibridge` pins the exact Minibridge
+release and verifies its checksum. The guardrail model this project's Rego
+policy follows also originates with Acuvity's
+[MCP server registry](https://github.com/acuvity/mcp-servers-registry).
 
 This is an independent project, not affiliated with or endorsed by the Jenkins
 project or the Continuous Delivery Foundation. Jenkins is a registered trademark
