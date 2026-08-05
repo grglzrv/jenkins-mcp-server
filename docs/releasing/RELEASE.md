@@ -51,6 +51,26 @@ promotes `[Unreleased]` to `[$NEW_VERSION] - YYYY-MM-DD`, and creates a fresh
 template. `render` is the same operation used by the release workflow, so the
 reviewed changelog entry is the text published on GitHub.
 
+### Notes must exist before the version changes
+
+`make version` prepares the release notes before rewriting any pin, and
+`scripts/set_version.py` refuses to run if notes for the target version are
+missing. This ordering is enforced rather than conventional because the failure
+is not recoverable by a follow-up commit: publication is triggered by a change
+to `VERSION`, and the release workflow validates the changelog first. A version
+bumped without notes therefore fails validation with the version already
+changed, so correcting the changelog afterwards publishes nothing — only a
+further bump would trigger another attempt.
+
+Calling `scripts/set_version.py` directly is refused with the same guidance:
+
+```text
+refusing to bump to 1.23.0: expected exactly one release entry for 1.23.0, found 0
+
+Fill in the Unreleased section of CHANGELOG.md, then run:
+  make version VERSION=1.23.0
+```
+
 ## Prepare a release
 
 ```bash
