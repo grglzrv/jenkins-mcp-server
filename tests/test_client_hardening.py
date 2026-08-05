@@ -298,3 +298,58 @@ def test_context_path_is_preserved_in_urls() -> None:
         str(c.build_request("GET", "/job/AI/job/x/api/json").url)
         == "https://ci.corp/jenkins/job/AI/job/x/api/json"
     )
+
+
+# --- admin_request hardening ----------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "https://evil.test/x",
+        "HtTpS://evil.test/x",       # scheme case is not a prefix match
+        " https://evil.test/x",      # leading whitespace defeats startswith
+        "//evil.test/x",             # protocol-relative
+        "relative/path",             # not absolute
+        "/a/../../etc/passwd",       # traversal
+    ],
+)
+async def test_admin_request_rejects_non_jenkins_targets(path: str) -> None:
+    """The path is caller-controlled and reaches an HTTP request."""
+    jc = client(lambda request: httpx.Response(200, text="ok"), allow_admin=True)
+    with pytest.raises(ValueError):
+        await jc.admin_request("GET", path)
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_admin_request_withholds_session_and_csrf_headers() -> None:
+    """Jenkins issues the session to this server, not to the MCP client.
+
+    Returning Set-Cookie or the crumb hands a caller a usable session.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(
+                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
+            )
+        return httpx.Response(
+            200,
+            text="ok",
+            headers={
+                "Set-Cookie": "JSESSIONID=secret; Path=/",
+                "X-Jenkins-Crumb": "crumb-value",
+                "X-Jenkins": "2.555.1",
+            },
+        )
+
+    jc = client(handler, allow_admin=True)
+    result = await jc.admin_request("GET", "/api/json")
+    names = {name.lower() for name in result["headers"]}
+    assert "set-cookie" not in names
+    assert "x-jenkins-crumb" not in names
+    # Harmless headers still pass through, so the tool stays useful.
+    assert "x-jenkins" in names
+    await jc.close()

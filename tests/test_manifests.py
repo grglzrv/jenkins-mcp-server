@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import jsonschema
@@ -62,8 +63,14 @@ def test_tailscale_example_targets_the_magicdns_name_not_the_service():
 
 def test_coredns_forwards_parent_ts_net_zone_and_uses_current_status_field():
     snippet = (ROOT / "deploy/kubernetes/tailscale/coredns-snippet.example").read_text()
-    assert "ts.net:53" in snippet
-    assert "example-tailnet.ts.net:53" not in snippet
+    # Match the zone declaration itself, not the characters anywhere in the file:
+    # the parent zone must be forwarded, and a specific tailnet must not be
+    # hardcoded.
+    zones = re.findall(r"^\s*([A-Za-z0-9.-]*ts\.net):53\b", snippet, re.M)
+    assert "ts.net" in zones, f"parent ts.net zone not forwarded; found {zones}"
+    assert not [z for z in zones if z != "ts.net"], (
+        f"a specific tailnet is hardcoded: {zones}"
+    )
     assert ".status.nameserver.ip" in snippet
     assert "nameserverStatus" not in snippet
 

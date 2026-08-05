@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 
@@ -18,6 +17,22 @@ class JenkinsError(RuntimeError):
 
 
 TRAVERSAL_SEGMENTS = {".", ".."}
+
+# Response headers withheld from admin_request callers. The MCP client is not
+# the authenticated party: Jenkins issues the session to this server, and
+# forwarding those values hands a caller a usable session and CSRF token.
+SENSITIVE_RESPONSE_HEADERS = frozenset(
+    {
+        "set-cookie",
+        "set-cookie2",
+        "authorization",
+        "proxy-authenticate",
+        "www-authenticate",
+        "jenkins-crumb",
+        "x-jenkins-crumb",
+        "x-csrf-token",
+    }
+)
 
 
 def _job_path(full_name: str) -> str:
@@ -417,13 +432,20 @@ class JenkinsClient:
         content_type: str = "application/json",
     ) -> dict[str, Any]:
         self.policy.require_write("admin")
-        if not path.startswith("/") or re.match(r"^https?://", path):
+        # Parse rather than pattern-match the caller's path. A structural check
+        # rejects any scheme or authority outright, including forms that string
+        # prefixes miss such as '//host/x', ' https://host' and 'HtTpS://host'.
+        parsed = urlsplit(path)
+        if parsed.scheme or parsed.netloc:
             raise ValueError("path must be a Jenkins-relative absolute path")
-        # '//host/x' is a protocol-relative reference, not a Jenkins path.
-        if path.startswith("//"):
-            raise ValueError("path must not be protocol-relative")
-        if any(part in TRAVERSAL_SEGMENTS for part in path.split("/")):
+        if not parsed.path.startswith("/"):
+            raise ValueError("path must be a Jenkins-relative absolute path")
+        if any(part in TRAVERSAL_SEGMENTS for part in parsed.path.split("/")):
             raise ValueError("path must not contain '.' or '..' segments")
+        # Rebuild from the parsed components so only what was validated is sent.
+        path = parsed.path
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
         response = await self.request(
             method.upper(),
             path,
@@ -434,6 +456,10 @@ class JenkinsClient:
         )
         return {
             "status": response.status_code,
-            "headers": dict(response.headers),
+            "headers": {
+                name: value
+                for name, value in response.headers.items()
+                if name.lower() not in SENSITIVE_RESPONSE_HEADERS
+            },
             "body": response.text[: self.settings.max_log_bytes],
         }

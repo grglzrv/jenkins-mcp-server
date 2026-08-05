@@ -40,6 +40,50 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [1.24.0] - 2026-08-05
+
+### Highlights
+
+- None.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- None.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- `jenkins_admin_request` no longer returns Jenkins session or CSRF headers to
+  the caller. `Set-Cookie`, `X-Jenkins-Crumb` and related headers were passed
+  through verbatim, handing an MCP client a usable Jenkins session and crumb
+  from a tool intended to relay a response body. Harmless headers still pass
+  through.
+- The path accepted by `jenkins_admin_request` is now validated structurally
+  with `urlsplit` and rebuilt from the parsed components, instead of by string
+  prefix checks. The previous checks missed forms including uppercase schemes
+  and leading whitespace, either of which could redirect the request away from
+  the configured Jenkins.
+
+### Upgrade Notes
+
+- No action required. A caller that relied on reading `Set-Cookie` from
+  `jenkins_admin_request` was reading a credential it should not have had.
+
 ## [1.23.0] - 2026-08-05
 
 ### Highlights

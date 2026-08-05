@@ -830,10 +830,19 @@ def test_chart_defaults_assume_nothing_about_the_cluster() -> None:
 
 
 def test_no_tailnet_hostnames_leak_into_chart_defaults() -> None:
+    """The chart must not ship a tailnet hostname as a default value.
+
+    Matches a complete MagicDNS name rather than the substring "ts.net", which
+    also hits unrelated words and reads as loose host matching.
+    """
+    import re
+
+    tailnet_host = re.compile(r"\b[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.ts\.net\b")
     text = (CHART / "values.yaml").read_text()
     defaults = [
-        ln for ln in text.splitlines()
-        if "ts.net" in ln and not ln.strip().startswith("#")
+        ln
+        for ln in text.splitlines()
+        if tailnet_host.search(ln) and not ln.strip().startswith("#")
     ]
     assert not defaults, f"tailnet hostnames in non-comment defaults: {defaults}"
 
