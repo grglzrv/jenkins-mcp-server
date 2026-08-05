@@ -997,14 +997,16 @@ def test_readme_headline_claims_match_reality() -> None:
     verified = len(
         [ln for ln in table.splitlines() if ln.startswith("|") and "✅ Verified" in ln]
     )
-    assert "four Jenkins LTS lines" in intro and verified == 4, (
-        f"intro claims four verified lines, table shows {verified}"
+    # The claim moved into the security section; assert it wherever it is made.
+    assert "four Jenkins LTS lines" in " ".join(readme.split()), (
+        "README no longer states how many Jenkins lines are verified"
     )
+    assert verified == 4, f"claim says four verified lines, table shows {verified}"
 
     # Kubernetes versions actually installed by the smoke matrix.
     smoke = (ROOT / ".github/workflows/chart-smoke.yml").read_text()
     minors = {m for m in re.findall(r"v(1\.\d+)\.\d+\+k3s", smoke)}
-    assert "four Kubernetes versions" in intro
+    assert "four Kubernetes versions" in " ".join(readme.split())
     assert len(minors) == 4, f"smoke matrix covers {sorted(minors)}"
 
     # The defaults the intro promises are opt-in.
@@ -1030,3 +1032,21 @@ def test_readme_anchor_links_resolve() -> None:
     anchors = {slug(h) for h in re.findall(r"^#{2,3} (.+)$", readme, re.M)}
     used = set(re.findall(r"\]\((#[^)]+)\)", readme))
     assert used <= anchors, f"broken anchor links: {sorted(used - anchors)}"
+
+
+def test_documented_transports_match_the_code() -> None:
+    """The README advertised only one of the two transports the server has."""
+    import re
+
+    readme = (ROOT / "README.md").read_text()
+    config = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
+
+    supported = set(
+        re.findall(r'"([a-z-]+)"', re.search(r"transport: Literal\[([^\]]+)\]", config).group(1))
+    )
+    section = _section(readme, "Connecting a client", "Security and guardrails")
+    for transport in supported:
+        assert f"`{transport}`" in section, f"{transport} is supported but undocumented"
+
+    # SSE as a separate transport is deprecated; do not advertise it as offered.
+    assert "deprecated in the 2025-03-26 revision" in section

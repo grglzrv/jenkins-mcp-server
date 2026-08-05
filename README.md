@@ -3,52 +3,12 @@
 **Secure-by-design MCP server for Jenkins, with runtime guardrails between the
 agent and your CI.**
 
-Exposes 23 Jenkins tools over Streamable HTTP to any MCP client. The agent never
-holds the Jenkins credential: the API token stays in a Kubernetes Secret read
-only by this server.
-
-### 🛡️ Runtime security and guardrails
-
-**Minibridge integration.** [Minibridge](https://github.com/acuvity/minibridge)
-establishes secure agent-to-MCP connectivity, supports Rego and HTTP-based policy
-enforcement 🕵️, and simplifies orchestration. The `-minibridge` image bundles it
-with a **Jenkins-aware Rego policy** in a single container — no sidecar, nothing
-downloaded at startup.
-
-| Guardrail | Summary |
-| --- | --- |
-| `covert-instruction-detection` | Detects hidden or obfuscated directives, including instructions planted in build logs |
-| `sensitive-pattern-detection` | Flags the script console, credential stores, `$JENKINS_HOME`, `secrets/master.key`, traversal and cloud metadata endpoints |
-| `shadowing-pattern-detection` | Identifies tool descriptions that override or redirect other tools |
-| `schema-misuse-prevention` | Rejects out-of-schema arguments used to smuggle instructions |
-| `cross-origin-tool-access` | Blocks references to tools outside this server |
-| `secrets-redaction` | Redacts Jenkins API tokens, crumbs and session cookies from responses |
-| `basic authentication` | Optional shared secret restricting which clients may reach the server |
-
-Each is enabled individually, so only the protections your environment needs are
-active. Tool policy is separate: deny by name or by group, and denied tools are
-removed from discovery as well as refused on call.
-
-### 🔐 Hardened by default
-
-| Property | Detail |
-| --- | --- |
-| Non-root, least privilege | uid 10001, all capabilities dropped, no privilege escalation, `RuntimeDefault` seccomp |
-| Immutable runtime | Read-only root filesystem with explicit writable mounts |
-| Irreversible actions opt-in | `delete_job` and `jenkins_admin_request` off by default; job paths are a glob allowlist and traversal segments are rejected |
-| Version pinning | Minibridge pinned to a release archive and checksum-verified at build |
-| SBOM and provenance | Attestations published for every image and release asset |
-| Continuous scanning | CodeQL, `pip-audit` and dependency review on every change |
-
-### ✅ Verified, not asserted
-
-Every tool is exercised against four Jenkins LTS lines in CI, and the chart is
-installed into real k3s clusters across four Kubernetes versions — install,
-upgrade, `helm test`, uninstall. A probe speaks MCP through the proxy and asserts
-denied tools are absent from `tools/list` and refused on call.
-
-The Jenkins account remains the outer boundary: these controls only narrow what
-that account can already do.
+Exposes 23 Jenkins tools to any MCP client over the two transports the current
+specification defines: **Streamable HTTP** for remote use and **stdio** for a
+local subprocess. Ships with an optional
+[Minibridge](https://github.com/acuvity/minibridge) proxy enforcing a
+Jenkins-aware Rego policy, destructive tools off by default, and a hardened
+non-root image. The agent never holds the Jenkins credential.
 
 [![CI](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml)
 [![Release](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml)
@@ -287,9 +247,27 @@ use the Kubernetes egress Service name as the HTTPS hostname.
 
 ## 🔌 Connecting a client
 
-The server speaks **Streamable HTTP**. Point any MCP client at the `/mcp` path
-of whichever address exposes it; the exact configuration keys differ per client,
-so use its own documentation for the surrounding structure.
+### Transports
+
+The MCP specification defines two transports, and this server implements both.
+Select with `MCP_TRANSPORT` or `--transport`.
+
+| Transport | Value | Use for |
+| --- | --- | --- |
+| **Streamable HTTP** | `streamable-http` *(default)* | Remote and containerised deployments. Serves `POST` and `GET` on one endpoint at `mcp.path`, upgrading to an SSE stream when a response streams |
+| **stdio** | `stdio` | Running the server as a local subprocess of the client. No listener, no ports |
+
+HTTP+SSE as a *separate* transport, with its own `/sse` and `/message`
+endpoints, was deprecated in the 2025-03-26 revision and is not offered here.
+Streamable HTTP already streams over SSE within its single endpoint, which is
+what current clients expect. A client that only speaks the legacy transport can
+be bridged with `mcp-proxy` rather than changing the server.
+
+### Endpoints
+
+Point the client at the `/mcp` path of whichever address exposes it. The exact
+configuration keys differ per client, so use its own documentation for the
+surrounding structure.
 
 | Deployment | Endpoint |
 | --- | --- |
@@ -319,8 +297,51 @@ stays in a Kubernetes Secret and is used only by this server.
 
 ## 🛡️ Security and guardrails
 
-How the two layers are configured. The server's own policy always applies; the
-minibridge proxy is optional and sits in front of it.
+Two independent layers. The server's own policy always applies; the minibridge
+proxy is optional and sits in front of it.
+
+### Runtime guardrails
+
+**Minibridge integration.** [Minibridge](https://github.com/acuvity/minibridge)
+establishes secure agent-to-MCP connectivity, supports Rego and HTTP-based policy
+enforcement 🕵️, and simplifies orchestration. The `-minibridge` image bundles it
+with a **Jenkins-aware Rego policy** in a single container — no sidecar, nothing
+downloaded at startup.
+
+| Guardrail | Summary |
+| --- | --- |
+| `covert-instruction-detection` | Detects hidden or obfuscated directives, including instructions planted in build logs |
+| `sensitive-pattern-detection` | Flags the script console, credential stores, `$JENKINS_HOME`, `secrets/master.key`, traversal and cloud metadata endpoints |
+| `shadowing-pattern-detection` | Identifies tool descriptions that override or redirect other tools |
+| `schema-misuse-prevention` | Rejects out-of-schema arguments used to smuggle instructions |
+| `cross-origin-tool-access` | Blocks references to tools outside this server |
+| `secrets-redaction` | Redacts Jenkins API tokens, crumbs and session cookies from responses |
+| `basic authentication` | Optional shared secret restricting which clients may reach the server |
+
+Each is enabled individually, so only the protections your environment needs are
+active. Tool policy is separate: deny by name or by group, and denied tools are
+removed from discovery as well as refused on call.
+
+### Hardened by default
+
+| Property | Detail |
+| --- | --- |
+| Non-root, least privilege | uid 10001, all capabilities dropped, no privilege escalation, `RuntimeDefault` seccomp |
+| Immutable runtime | Read-only root filesystem with explicit writable mounts |
+| Irreversible actions opt-in | `delete_job` and `jenkins_admin_request` off by default; job paths are a glob allowlist and traversal segments are rejected |
+| Version pinning | Minibridge pinned to a release archive and checksum-verified at build |
+| SBOM and provenance | Attestations published for every image and release asset |
+| Continuous scanning | CodeQL, `pip-audit` and dependency review on every change |
+
+### Verified, not asserted
+
+Every tool is exercised against four Jenkins LTS lines in CI, and the chart is
+installed into real k3s clusters across four Kubernetes versions — install,
+upgrade, `helm test`, uninstall. A probe speaks MCP through the proxy and asserts
+denied tools are absent from `tools/list` and refused on call.
+
+The Jenkins account remains the outer boundary: these controls only narrow what
+that account can already do.
 
 ### Server policy — always enforced
 
