@@ -1,34 +1,54 @@
 # Jenkins MCP Server
 
-**A Model Context Protocol server that places a policy boundary between AI
-agents and Jenkins.**
+**Secure-by-design MCP server for Jenkins, with runtime guardrails between the
+agent and your CI.**
 
-The agent never holds the Jenkins credential. The API token stays in a
-Kubernetes Secret read only by this server, which authenticates to Jenkins on
-the agent's behalf and decides which operations are permitted before any request
-is forwarded. Revoking access means updating one Secret, not auditing which
-clients hold a token.
+Exposes 23 Jenkins tools over Streamable HTTP to any MCP client. The agent never
+holds the Jenkins credential: the API token stays in a Kubernetes Secret read
+only by this server.
 
-Works with any MCP client over Streamable HTTP.
+### 🛡️ Runtime security and guardrails
 
-Beyond the 23 Jenkins tools, the substance of this project is the control layer
-around them:
+**Minibridge integration.** [Minibridge](https://github.com/acuvity/minibridge)
+establishes secure agent-to-MCP connectivity, supports Rego and HTTP-based policy
+enforcement 🕵️, and simplifies orchestration. The `-minibridge` image bundles it
+with a **Jenkins-aware Rego policy** in a single container — no sidecar, nothing
+downloaded at startup.
 
-- 🔒 **Two enforcement layers.** An in-process policy that always applies, and an
-  optional [minibridge](https://github.com/acuvity/minibridge) proxy that filters
-  tools before they reach the server and inspects content in both directions.
-- 🧨 **Irreversible actions are opt-in.** `delete_job` and `jenkins_admin_request`
-  are off by default. Job paths are a glob allowlist, and traversal segments are
-  rejected rather than normalised.
-- 🕵️ **Prompt-injection guardrails.** A Jenkins-aware Rego policy that treats the
-  script console, credential stores and `$JENKINS_HOME` as sensitive, redacts API
-  tokens and crumbs from responses, and detects instructions hidden in build logs.
-- ✅ **Verified, not asserted.** Every tool is exercised against four Jenkins LTS
-  lines in CI, and the chart is installed into real k3s clusters across four
-  Kubernetes versions — install, upgrade, `helm test`, uninstall.
+| Guardrail | Summary |
+| --- | --- |
+| `covert-instruction-detection` | Detects hidden or obfuscated directives, including instructions planted in build logs |
+| `sensitive-pattern-detection` | Flags the script console, credential stores, `$JENKINS_HOME`, `secrets/master.key`, traversal and cloud metadata endpoints |
+| `shadowing-pattern-detection` | Identifies tool descriptions that override or redirect other tools |
+| `schema-misuse-prevention` | Rejects out-of-schema arguments used to smuggle instructions |
+| `cross-origin-tool-access` | Blocks references to tools outside this server |
+| `secrets-redaction` | Redacts Jenkins API tokens, crumbs and session cookies from responses |
+| `basic authentication` | Optional shared secret restricting which clients may reach the server |
 
-The Jenkins account behind it remains the outer boundary: these controls only
-narrow what that account can already do.
+Each is enabled individually, so only the protections your environment needs are
+active. Tool policy is separate: deny by name or by group, and denied tools are
+removed from discovery as well as refused on call.
+
+### 🔐 Hardened by default
+
+| Property | Detail |
+| --- | --- |
+| Non-root, least privilege | uid 10001, all capabilities dropped, no privilege escalation, `RuntimeDefault` seccomp |
+| Immutable runtime | Read-only root filesystem with explicit writable mounts |
+| Irreversible actions opt-in | `delete_job` and `jenkins_admin_request` off by default; job paths are a glob allowlist and traversal segments are rejected |
+| Version pinning | Minibridge pinned to a release archive and checksum-verified at build |
+| SBOM and provenance | Attestations published for every image and release asset |
+| Continuous scanning | CodeQL, `pip-audit` and dependency review on every change |
+
+### ✅ Verified, not asserted
+
+Every tool is exercised against four Jenkins LTS lines in CI, and the chart is
+installed into real k3s clusters across four Kubernetes versions — install,
+upgrade, `helm test`, uninstall. A probe speaks MCP through the proxy and asserts
+denied tools are absent from `tools/list` and refused on call.
+
+The Jenkins account remains the outer boundary: these controls only narrow what
+that account can already do.
 
 [![CI](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml)
 [![Release](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml)
@@ -299,8 +319,8 @@ stays in a Kubernetes Secret and is used only by this server.
 
 ## 🛡️ Security and guardrails
 
-Two independent layers. The server's own policy always applies; the minibridge
-proxy is optional and sits in front of it.
+How the two layers are configured. The server's own policy always applies; the
+minibridge proxy is optional and sits in front of it.
 
 ### Server policy — always enforced
 
@@ -340,14 +360,9 @@ minibridge:
     deny: ["@destructive", "@admin"]   # denied tools are hidden and refused
 ```
 
-Six content guardrails are available — covert instructions, sensitive Jenkins
-surfaces such as the script console and credential stores, tool shadowing,
-schema misuse, cross-origin tool references, and secrets redaction. All are off
-by default; enable them under `minibridge.guardrails`.
-
-CI proves this end to end: the chart is installed into k3s with
-`deny: ["@destructive"]`, and a probe asserts denied tools are absent from
-`tools/list` and refused on call.
+Content guardrails are listed at the top of this file and configured under
+`minibridge.guardrails`. All are off by default; enable only what the
+environment needs.
 
 Threat model, required production controls, secret handling and the known
 limitations are in [SECURITY.md](SECURITY.md).

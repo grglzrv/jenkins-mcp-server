@@ -991,8 +991,12 @@ def test_readme_headline_claims_match_reality() -> None:
     tools = len(re.findall(r"@mcp\.tool\(\)", server))
     assert f"{tools} Jenkins tools" in intro, f"intro should say {tools} tools"
 
-    # Verified Jenkins lines, as counted by the compatibility table.
-    verified = readme.count("✅ Verified")
+    # Count rows in the compatibility table only. Counting the whole file also
+    # matches headings that happen to contain the same marker.
+    table = _section(readme, "Jenkins compatibility", "Capabilities")
+    verified = len(
+        [ln for ln in table.splitlines() if ln.startswith("|") and "✅ Verified" in ln]
+    )
     assert "four Jenkins LTS lines" in intro and verified == 4, (
         f"intro claims four verified lines, table shows {verified}"
     )
