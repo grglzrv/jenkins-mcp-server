@@ -1,13 +1,18 @@
 # Jenkins MCP Server
 
-**Give an AI agent controlled access to Jenkins — without handing it the keys.**
+**A Model Context Protocol server that places a policy boundary between AI
+agents and Jenkins.**
 
-A Model Context Protocol server for Jenkins, built for the case where the client
-is an autonomous agent rather than a person. Works with any MCP client over
-Streamable HTTP.
+The agent never holds the Jenkins credential. The API token stays in a
+Kubernetes Secret read only by this server, which authenticates to Jenkins on
+the agent's behalf and decides which operations are permitted before any request
+is forwarded. Revoking access means updating one Secret, not auditing which
+clients hold a token.
 
-Most of this repository is not the 23 Jenkins tools. It is the machinery that
-decides which of them an agent may actually call:
+Works with any MCP client over Streamable HTTP.
+
+Beyond the 23 Jenkins tools, the substance of this project is the control layer
+around them:
 
 - 🔒 **Two enforcement layers.** An in-process policy that always applies, and an
   optional [minibridge](https://github.com/acuvity/minibridge) proxy that filters
@@ -105,34 +110,23 @@ with all 23 tools reachable. Reproduce any row with
 Run the current LTS line where possible: it is the only line receiving security
 backports.
 
-### Requirements
+### Prerequisites on the Jenkins side
 
-| Requirement | Needed for |
+**Authentication.** A Jenkins user and an **API token** for it, created at
+*People → user → Security → API Token*. The account password is not accepted.
+That account's permissions bound everything this server can do; the least
+permission each tool needs is listed in
+[docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
+
+**Plugins.** Core-only Jenkins covers the freestyle and node tools. Each plugin
+below enables a further group, and a missing one disables only the tools that
+depend on it.
+
+| Plugin | Enables |
 | --- | --- |
-| Username and **API token** | Everything. Do not use the account password |
-| `cloudbees-folder` | Any job path containing `/`. Treat as required unless every job is top-level |
-| `workflow-aggregator` | Pipeline tools, and the `term`/`kill` modes of `stop_build` |
+| `cloudbees-folder` | Any job path containing `/`. Effectively required unless every job is top-level |
+| `workflow-aggregator` | Pipeline tools, and the `term` and `kill` modes of `stop_build` |
 | `workflow-multibranch`, `branch-api`, `git` | Multibranch tools |
-
-A missing plugin disables only the tools that depend on it; freestyle and node
-tools keep working on a core-only controller. The Jenkins account's own
-permissions are the outer boundary — see
-[docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md) for the least
-permission each tool needs.
-
-### Known issues
-
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| Every call returns 401 | The token is wrong, revoked, or belongs to a different user | Reissue the API token and update the Secret |
-| `certificate verify failed` at startup | Jenkins uses a private or self-signed CA | Set `jenkins.caBundle.existingSecret`. Do not disable `verifyTls` |
-| Reads succeed, every write returns 403 | Strict Crumb Issuer with *check client IP*: the crumb is bound to a source address that changes behind SNAT or an egress proxy | Disable the IP check, or exclude this server |
-| `get_job_config` fails, everything else works | The account has `Job/Read` but not `Job/ExtendedRead` | Grant `Job/ExtendedRead` |
-| `trigger_build` rejected on a parameterised job | Triggered with no `parameters` at all, which uses `/build` | Pass `parameters`; an empty object is enough and uses the job's defaults |
-| A tool is missing from `tools/list` | It is denied by `minibridge.tools`, or disabled by an `mcp.allow*` setting | Intended behaviour. Check both before assuming a fault |
-
-Plugin, permission, proxy and scale details, and how to verify against your own
-controller, are in [docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
 
 ## ⚙️ Capabilities
 
@@ -357,6 +351,22 @@ CI proves this end to end: the chart is installed into k3s with
 
 Threat model, required production controls, secret handling and the known
 limitations are in [SECURITY.md](SECURITY.md).
+
+## 🩺 Troubleshooting
+
+Symptoms seen in practice, with the configuration that causes each.
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Every call returns 401 | The token is wrong, revoked, or belongs to a different user | Reissue the API token and update the Secret |
+| `certificate verify failed` at startup | Jenkins uses a private or self-signed CA | Set `jenkins.caBundle.existingSecret`. Do not disable `verifyTls` |
+| Reads succeed, every write returns 403 | Strict Crumb Issuer with *check client IP*: the crumb is bound to a source address that changes behind SNAT or an egress proxy | Disable the IP check, or exclude this server |
+| `get_job_config` fails, everything else works | The account has `Job/Read` but not `Job/ExtendedRead` | Grant `Job/ExtendedRead` |
+| `trigger_build` rejected on a parameterised job | Triggered with no `parameters` at all, which uses `/build` | Pass `parameters`; an empty object is enough and uses the job's defaults |
+| A tool is missing from `tools/list` | It is denied by `minibridge.tools`, or disabled by an `mcp.allow*` setting | Intended behaviour. Check both before assuming a fault |
+
+Plugin, permission, proxy and scale details are in
+[docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
 
 ## 🛠️ Development
 
