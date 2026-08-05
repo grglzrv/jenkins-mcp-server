@@ -96,3 +96,26 @@ def test_release_automation_validates_and_publishes_curated_notes() -> None:
     assert "changelog.py render" in release
     assert "--notes-file release-notes.md" in release
     assert "--generate-notes" not in release
+
+
+def test_version_cannot_be_bumped_without_release_notes() -> None:
+    """A bump without notes fails the release and cannot be retriggered.
+
+    The release workflow fires on a VERSION change and validates the changelog
+    first, so the version has already moved by the time it fails. The bump
+    itself has to refuse.
+    """
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/set_version.py"), "9.9.9"],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    assert result.returncode != 0, "set_version.py accepted a version with no notes"
+    combined = result.stdout + result.stderr
+    assert "refusing to bump" in combined
+    assert "make version VERSION=9.9.9" in combined
+    # The refusal must happen before anything is rewritten.
+    assert (ROOT / "VERSION").read_text(encoding="utf-8").strip() != "9.9.9"

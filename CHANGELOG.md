@@ -40,6 +40,46 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [1.23.0] - 2026-08-05
+
+### Highlights
+
+- None.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- None.
+
+### Bug Fixes
+
+- `scripts/set_version.py` refuses to change the version unless release notes
+  for it already exist. Bumping without notes produced a release that failed
+  validation and could not be retriggered, because the version had already
+  changed and the workflow only fires on a version change.
+- `test_current_release_has_complete_professional_notes` asserted a literal
+  release date, so it failed on every release regardless of content. It now
+  checks the date's format and that it matches the heading for that version.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- None.
+
+### Upgrade Notes
+
+- No action required.
+
 ## [1.22.0] - 2026-08-05
 
 ### Highlights
