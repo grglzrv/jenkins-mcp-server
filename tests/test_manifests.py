@@ -12,6 +12,15 @@ def load(path: str):
     return list(yaml.safe_load_all((ROOT / path).read_text()))
 
 
+# A complete MagicDNS hostname, anchored at both ends. Testing membership of the
+# bare string "ts.net" is a host check on a substring: it matches at any offset,
+# so "notts.net" and "ts.net.evil.test" both pass. CodeQL flags that pattern as
+# py/incomplete-url-substring-sanitization, and it is genuinely wrong here.
+TAILNET_HOST = re.compile(
+    r"(?<![A-Za-z0-9.-])([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.)?ts\.net(?![A-Za-z0-9.-])"
+)
+
+
 def test_tailscale_ingress_is_private_and_points_to_mcp():
     ingress = load("deploy/kubernetes/tailscale/ingress.yaml")[0]
     assert ingress["spec"]["ingressClassName"] == "tailscale"
@@ -67,10 +76,9 @@ def test_coredns_forwards_parent_ts_net_zone_and_uses_current_status_field():
     # the parent zone must be forwarded, and a specific tailnet must not be
     # hardcoded.
     zones = re.findall(r"^\s*([A-Za-z0-9.-]*ts\.net):53\b", snippet, re.M)
-    assert "ts.net" in zones, f"parent ts.net zone not forwarded; found {zones}"
-    assert not [z for z in zones if z != "ts.net"], (
-        f"a specific tailnet is hardcoded: {zones}"
-    )
+    # Exact equality, not membership: the parent zone must be forwarded and no
+    # specific tailnet may be hardcoded, so "ts.net" is the only valid entry.
+    assert zones == ["ts.net"], f"expected only the parent ts.net zone, found {zones}"
     assert ".status.nameserver.ip" in snippet
     assert "nameserverStatus" not in snippet
 
@@ -147,7 +155,8 @@ def test_base_manifests_are_environment_neutral():
     assert "ingress.yaml" not in kustomization.replace("# No Ingress here", "")
     # No tailnet hostnames outside the Tailscale-specific pieces.
     config = (base / "config.env").read_text()
-    assert "ts.net" not in config
+    hosts = [m.group(0) for m in TAILNET_HOST.finditer(config)]
+    assert not hosts, f"tailnet hostnames in the neutral base: {hosts}"
 
 
 def test_compose_offers_plain_and_single_container_minibridge_deployments():
@@ -171,3 +180,16 @@ def test_license_and_security_documents_are_present_and_current():
     security = (ROOT / "SECURITY.md").read_text()
     for topic in ["valueFrom", "Minibridge controls", "passSecretKey"]:
         assert topic in security
+
+
+def test_tailnet_host_pattern_matches_whole_hostnames_only():
+    """Guards the matcher these tests rely on.
+
+    A substring test for "ts.net" is what CodeQL flags as
+    py/incomplete-url-substring-sanitization, and it is wrong on its own terms:
+    it accepts a host that merely contains the string at any offset.
+    """
+    for hostname in ["ts.net", "jenkins.tail1234.ts.net", "a.b.cat-dog.ts.net"]:
+        assert TAILNET_HOST.search(hostname), hostname
+    for impostor in ["notts.net", "ts.network", "ts.net.evil.test", "prots.netcfg"]:
+        assert not TAILNET_HOST.search(impostor), impostor

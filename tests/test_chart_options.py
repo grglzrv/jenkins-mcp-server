@@ -837,7 +837,11 @@ def test_no_tailnet_hostnames_leak_into_chart_defaults() -> None:
     """
     import re
 
-    tailnet_host = re.compile(r"\b[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.ts\.net\b")
+    # Anchored on both sides so it matches a whole hostname. Testing for the
+    # substring "ts.net" would also match ts.network and ts.net.evil.test.
+    tailnet_host = re.compile(
+        r"(?<![A-Za-z0-9.-])([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.)?ts\.net(?![A-Za-z0-9.-])"
+    )
     text = (CHART / "values.yaml").read_text()
     defaults = [
         ln
