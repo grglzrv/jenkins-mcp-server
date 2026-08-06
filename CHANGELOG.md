@@ -40,6 +40,52 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [1.25.0] - 2026-08-06
+
+### Highlights
+
+- None.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- The `edge-minibridge` image is now built for `linux/arm64` as well as
+  `linux/amd64`, matching the default edge image and both released variants. It
+  was amd64-only from when the build compiled minibridge from source under
+  emulation; it now downloads the matching release archive per platform, so the
+  second architecture costs little.
+- With minibridge enabled the ConfigMap sets `MCP_TRANSPORT=stdio`, which is what
+  actually runs. It previously advertised `streamable-http` and a listener port
+  that nothing bound, because the entrypoint passes `--transport stdio` on the
+  command line. The rendered configuration now matches the running process.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Removes a latent conflict: minibridge and the MCP server were configured for
+  the same port, and only the entrypoint's `--transport stdio` flag kept the
+  server from binding it too. Changing that flag would have produced two
+  processes contending for the listener. The transport is now stdio in the
+  configuration itself.
+
+### Upgrade Notes
+
+- No action required.
+
 ## [1.24.0] - 2026-08-05
 
 ### Highlights

@@ -794,7 +794,12 @@ def test_numeric_env_values_are_not_rendered_in_scientific_notation() -> None:
     """
     cm = (CHART / "templates/configmap.yaml").read_text()
     for key in ["maxLogBytes", "mcp.port", "healthPort", "maxRetries"]:
-        line = next(ln for ln in cm.splitlines() if key in ln)
+        # Assignment lines only. A comment mentioning the value is not a render.
+        line = next(
+            ln
+            for ln in cm.splitlines()
+            if key in ln and not ln.lstrip().startswith("#") and "{{" in ln
+        )
         assert "| int |" in line or "printf" in line, f"{key} needs an int cast: {line}"
 
 
@@ -1063,3 +1068,33 @@ def test_documented_transports_match_the_code() -> None:
 
     # SSE as a separate transport is deprecated; do not advertise it as offered.
     assert "deprecated in the 2025-03-26 revision" in section
+
+
+def test_minibridge_runs_the_server_on_stdio_not_a_second_listener() -> None:
+    """Only one process may bind the MCP port.
+
+    minibridge owns the listener and runs the server as a stdio child. If the
+    ConfigMap advertised streamable-http the two would contend for the port the
+    moment the entrypoint's --transport flag changed.
+    """
+    configmap = (CHART / "templates/configmap.yaml").read_text()
+    assert "minibridge.enabled" in configmap
+    assert 'MCP_TRANSPORT: "stdio"' in configmap
+    entrypoint = (ROOT / "docker/entrypoint.sh").read_text()
+    assert "--transport stdio" in entrypoint
+
+
+def test_edge_and_release_images_cover_the_same_platforms() -> None:
+    """An edge tag that drops an architecture is not a preview of the release."""
+    import re
+
+    edge = (ROOT / ".github/workflows/publish-edge.yml").read_text()
+    release = (ROOT / ".github/workflows/release.yml").read_text()
+    for name, text in (("publish-edge", edge), ("release", release)):
+        platforms = set(re.findall(r"platforms:\s*(\S+)", text))
+        assert platforms == {"linux/amd64,linux/arm64"}, (
+            f"{name} builds inconsistent platforms: {sorted(platforms)}"
+        )
+    # Both workflows must build the minibridge variant, not only the default.
+    for name, text in (("publish-edge", edge), ("release", release)):
+        assert "docker/Dockerfile.minibridge" in text, name

@@ -13,7 +13,7 @@ resources:
   - ../base
 images:
   - name: ghcr.io/grglzrv/jenkins-mcp-server
-    newTag: 1.24.0-minibridge
+    newTag: 1.25.0-minibridge
 configMapGenerator:
   - name: jenkins-mcp-minibridge
     envs:

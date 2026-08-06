@@ -75,14 +75,16 @@ jobs:
           provenance: mode=max
           sbom: true
       - name: Build and publish the minibridge variant
-        # amd64 only: edge is for quick verification, and the Go build stage
-        # under emulation roughly triples the job time.
+        # Same platforms as the default image and as the released variant, so
+        # edge is a faithful preview on both architectures. The build no longer
+        # compiles Go under emulation; it downloads the matching minibridge
+        # release archive per platform, so arm64 costs little.
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile.minibridge
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:edge-minibridge
           build-args: |
             APP_VERSION=edge-${{ github.sha }}

@@ -1,6 +1,6 @@
 services:
   server:
-    image: ghcr.io/grglzrv/jenkins-mcp-server:${JENKINS_MCP_VERSION:-1.24.0}
+    image: ghcr.io/grglzrv/jenkins-mcp-server:${JENKINS_MCP_VERSION:-1.25.0}
     env_file: .env
     ports:
       - "8000:8000"
@@ -20,7 +20,7 @@ services:
   # `server` when policy enforcement at the proxy is required.
   minibridge:
     profiles: [minibridge]
-    image: ghcr.io/grglzrv/jenkins-mcp-server:${JENKINS_MCP_VERSION:-1.24.0}-minibridge
+    image: ghcr.io/grglzrv/jenkins-mcp-server:${JENKINS_MCP_VERSION:-1.25.0}-minibridge
     env_file: .env
     environment:
       MINIBRIDGE_LISTEN: :8000

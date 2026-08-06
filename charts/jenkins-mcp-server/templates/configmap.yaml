@@ -17,7 +17,16 @@ data:
   {{- else if .Values.jenkins.caBundle.existingSecret }}
   JENKINS_CA_BUNDLE: "/certs/ca.crt"
   {{- end }}
+  {{- if .Values.minibridge.enabled }}
+  # minibridge owns the listener and runs the server as a stdio child, so the
+  # server must not also bind mcp.port. The entrypoint passes --transport stdio,
+  # and this keeps the configuration saying the same thing: without it the
+  # ConfigMap advertises a listener that nothing starts, and the two would
+  # contend for the port if that flag were ever dropped.
+  MCP_TRANSPORT: "stdio"
+  {{- else }}
   MCP_TRANSPORT: {{ .Values.mcp.transport | quote }}
+  {{- end }}
   MCP_HOST: {{ .Values.mcp.host | quote }}
   MCP_PORT: {{ .Values.mcp.port | int | quote }}
   MCP_PATH: {{ .Values.mcp.path | quote }}
