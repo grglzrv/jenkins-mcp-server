@@ -38,7 +38,8 @@ hostname arriving at the controller. Override with `ingress.hostRule`.
 
 Both need the `-minibridge` image variant, which the chart selects
 automatically. It bundles Minibridge and the server in one container; it is not
-a sidecar image.
+a sidecar image. With the default `minibridge.mode: http`, clients use
+Streamable HTTP at `/mcp`; only the private Minibridge-to-server hop uses stdio.
 
 ## Raw manifests
 
@@ -84,3 +85,4 @@ single-container Minibridge variant. Copy `.env.example` to `.env`, set the
 Jenkins URL and credentials, then run `docker compose up server` or
 `docker compose --profile minibridge up minibridge`. The Minibridge profile
 blocks only `@destructive` and leaves all other tool groups available.
+Its published endpoint is Streamable HTTP at `http://localhost:8000/mcp`.

@@ -167,6 +167,7 @@ def test_compose_offers_plain_and_single_container_minibridge_deployments():
     assert bridge["image"].endswith("}-minibridge")
     assert bridge["profiles"] == ["minibridge"]
     assert bridge["environment"]["TOOLS_DENY"] == "@destructive"
+    assert bridge["environment"]["MINIBRIDGE_ENDPOINT_MCP"] == "/mcp"
     for service in [plain, bridge]:
         assert service["read_only"] is True
         assert service["cap_drop"] == ["ALL"]

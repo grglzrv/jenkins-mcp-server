@@ -55,7 +55,9 @@ kubectl apply --server-side --dry-run=server -f /tmp/jenkins-mcp.yaml
 
 For the bundled Minibridge variant, render
 `deploy/kubernetes/minibridge` instead. Its writable `/tmp` and
-`/home/app/.config` mounts are required by the read-only root filesystem.
+`/home/app/.config` mounts are required by the read-only root filesystem. The
+Service and ingress still expose Streamable HTTP at `/mcp`; stdio exists only
+as the private in-container pipe from Minibridge to Jenkins MCP Server.
 
 ## Deploy with Argo CD
 

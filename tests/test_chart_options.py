@@ -296,6 +296,12 @@ def test_raw_minibridge_manifests_support_read_only_root_filesystems() -> None:
         text = path.read_text()
         assert "/home/app/.config" in text
         assert "minibridge-config" in text
+    assert "MINIBRIDGE_ENDPOINT_MCP=/mcp" in (
+        DEPLOY / "minibridge/minibridge.env"
+    ).read_text()
+    assert "MINIBRIDGE_ENDPOINT_MCP: /mcp" in (
+        DEPLOY / "minibridge/standalone-deployment.yaml"
+    ).read_text()
 
 
 def test_config_env_covers_every_supported_setting() -> None:
@@ -1070,18 +1076,23 @@ def test_documented_transports_match_the_code() -> None:
     assert "deprecated in the 2025-03-26 revision" in section
 
 
-def test_minibridge_runs_the_server_on_stdio_not_a_second_listener() -> None:
-    """Only one process may bind the MCP port.
-
-    minibridge owns the listener and runs the server as a stdio child. If the
-    ConfigMap advertised streamable-http the two would contend for the port the
-    moment the entrypoint's --transport flag changed.
-    """
+def test_minibridge_exposes_streamable_http_with_a_private_stdio_child() -> None:
+    """Client and child transports must not be conflated in rendered config."""
     configmap = (CHART / "templates/configmap.yaml").read_text()
-    assert "minibridge.enabled" in configmap
-    assert 'MCP_TRANSPORT: "stdio"' in configmap
+    assert "not .Values.minibridge.enabled" in configmap
+    assert 'MCP_TRANSPORT: "stdio"' not in configmap
+    helpers = (CHART / "templates/_helpers.tpl").read_text()
+    assert "MINIBRIDGE_ENDPOINT_MCP" in helpers
+    assert ".Values.mcp.path" in helpers
     entrypoint = (ROOT / "docker/entrypoint.sh").read_text()
     assert "--transport stdio" in entrypoint
+    assert "mcp-proxy" not in entrypoint
+
+    # Both real smoke clients speak Streamable HTTP through Minibridge. If the
+    # public frontend regresses to stdio, CI cannot initialize either session.
+    for probe in ["minibridge_probe.py", "minibridge_all_tools.py"]:
+        text = (ROOT / "integration" / probe).read_text()
+        assert "streamable_http_client" in text
 
 
 def test_edge_and_release_images_cover_the_same_platforms() -> None:

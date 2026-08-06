@@ -40,6 +40,63 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [1.26.0] - 2026-08-06
+
+### Highlights
+
+- Minibridge-enabled deployments now state and test the actual public contract:
+  MCP 2025-03-26 Streamable HTTP at `/mcp`, with policy enforcement in the
+  same single container and no sidecar or transport adapter.
+
+### New Features
+
+- The Helm chart now passes `mcp.path` to Minibridge as
+  `MINIBRIDGE_ENDPOINT_MCP`. Docker Compose, the Kustomize overlay and the
+  standalone Kubernetes manifest set the same endpoint explicitly, keeping a
+  customised client-facing path consistent across every deployment method.
+
+### Improvements
+
+- Transport documentation now distinguishes Minibridge's public Streamable
+  HTTP frontend from its private stdio child protocol and references the same
+  one-container convention used by Acuvity's registry images.
+- Minibridge examples, Argo CD values and both k3s smoke configurations now set
+  `mode: http` explicitly, so their Streamable HTTP intent is reviewable rather
+  than merely inherited from a default.
+- Helm NOTES report the effective client transport and endpoint after install.
+
+### Bug Fixes
+
+- Minibridge-enabled ConfigMaps no longer set `MCP_TRANSPORT=stdio`, which
+  incorrectly presented the private child protocol as the client-facing
+  transport. Direct-server listener variables render only when Minibridge is
+  disabled.
+- The Minibridge entrypoint clears direct-server listener variables inherited
+  from a shared `.env` file or raw base ConfigMap before spawning the private
+  child, preventing stale HTTP listener settings from contradicting the
+  command Minibridge actually runs.
+
+### Breaking Changes
+
+- None. The public Minibridge endpoint remains Streamable HTTP on port 8000 at
+  `/mcp`; existing clients and values files continue to work.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Preserves a single exposed MCP listener: Minibridge alone binds the public
+  port and evaluates policy, while Jenkins MCP Server communicates over an
+  in-container stdio pipe and binds no bypassable backend socket.
+
+### Upgrade Notes
+
+- No action is required. `mcp.transport` configures direct-server deployments;
+  when `minibridge.enabled=true`, use `minibridge.mode=http` for client-facing
+  Streamable HTTP and `mcp.path` for its endpoint (default `/mcp`).
+
 ## [1.25.0] - 2026-08-06
 
 ### Highlights

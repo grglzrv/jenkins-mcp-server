@@ -53,6 +53,7 @@ def test_all_tools_smoke_denies_only_destructive_at_minibridge() -> None:
         (ROOT / ".github" / "smoke-values-minibridge-tools.yaml").read_text()
     )
     minibridge = values["minibridge"]
+    assert minibridge["mode"] == "http"
     assert minibridge["tools"] == {"deny": ["@destructive"], "allow": []}
     assert minibridge["methodsDeny"] == []
     assert minibridge["guardrails"] == []
@@ -72,12 +73,16 @@ def test_all_tools_smoke_denies_only_destructive_at_minibridge() -> None:
         assert mcp[option] is True
 
 
-def test_entrypoint_requires_credentials_and_forces_stdio() -> None:
+def test_entrypoint_uses_acuvity_single_container_transport_split() -> None:
     text = (DOCKER / "entrypoint.sh").read_text()
     for var in ["JENKINS_URL", "JENKINS_USERNAME", "JENKINS_TOKEN"]:
         assert var in text, f"{var} not validated in entrypoint"
-    # minibridge owns the listener; the server must not bind a port itself.
+    # Minibridge owns client-facing Streamable HTTP; only its private child is
+    # stdio, matching Acuvity's registry container convention.
     assert "--transport stdio" in text
+    assert "unset MCP_TRANSPORT MCP_HOST MCP_PORT MCP_PATH" in text
+    assert "mcp-proxy" not in text
+    assert "mcp-proxy" not in (DOCKER / "Dockerfile.minibridge").read_text()
 
 
 def test_policy_covers_every_declared_guardrail() -> None:
@@ -174,6 +179,7 @@ def test_no_secret_material_is_inlined_in_minibridge_values() -> None:
 def test_policer_env_uses_minibridge_variable_names() -> None:
     helpers = (CHART / "templates/_helpers.tpl").read_text()
     for var in ["MINIBRIDGE_MODE", "MINIBRIDGE_LISTEN", "MINIBRIDGE_HEALTH_LISTEN",
+                "MINIBRIDGE_ENDPOINT_MCP",
                 "MINIBRIDGE_LOG_LEVEL", "MINIBRIDGE_POLICER_TYPE",
                 "MINIBRIDGE_POLICER_ENFORCE", "MINIBRIDGE_POLICER_REGO_POLICY",
                 "MINIBRIDGE_POLICER_HTTP_URL",
