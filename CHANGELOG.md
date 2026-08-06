@@ -64,6 +64,9 @@ from the matching version entry after CI validates it.
   `mode: http` explicitly, so their Streamable HTTP intent is reviewable rather
   than merely inherited from a default.
 - Helm NOTES report the effective client transport and endpoint after install.
+- CI renders and inspects a custom Minibridge MCP endpoint, and the disposable
+  Jenkins fixture retries transient update-centre failures before failing the
+  all-tools smoke.
 
 ### Bug Fixes
 

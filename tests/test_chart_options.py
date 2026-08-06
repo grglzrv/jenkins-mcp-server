@@ -1094,6 +1094,15 @@ def test_minibridge_exposes_streamable_http_with_a_private_stdio_child() -> None
         text = (ROOT / "integration" / probe).read_text()
         assert "streamable_http_client" in text
 
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "Render Minibridge Streamable HTTP with a custom endpoint" in workflow
+    assert "--set mcp.path=/custom-mcp" in workflow
+    assert "MINIBRIDGE_ENDPOINT_MCP" in workflow
+
+    jenkins_fixture = (ROOT / "integration/jenkins/Dockerfile").read_text()
+    assert "install_with_retry" in jenkins_fixture
+    assert 'if [ "$attempt" -ge 3 ]' in jenkins_fixture
+
 
 def test_edge_and_release_images_cover_the_same_platforms() -> None:
     """An edge tag that drops an architecture is not a preview of the release."""
