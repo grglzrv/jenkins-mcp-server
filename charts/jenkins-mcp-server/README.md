@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.26.0 \
+  --version 1.27.0 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.26.0 \
+  --version 1.27.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -241,6 +241,7 @@ does not render direct-listener variables into the ConfigMap.
 | Key | Default | Notes |
 | --- | --- | --- |
 | `service.type` / `port` | `ClusterIP` / `8000` | |
+| `service.sessionAffinity` | `ClientIP`, 600 seconds | Keeps a Streamable HTTP session on the replica that owns its in-memory state; set the whole value to `null` only when affinity is provided upstream or there is one replica |
 | `service.exposeHealthPort` | `true` | `/readyz` reports config state; set false on an externally reachable Service |
 | `ingress.enabled` | `false` | No ingress controller is assumed |
 | `ingress.className` | `""` | Empty uses the cluster default. The template adapts to the class |
@@ -251,6 +252,11 @@ does not render direct-listener variables into the ConfigMap.
 | `networkPolicy.enabled` | `true` | |
 | `tailscale.enabled` | `false` | The whole integration is opt-in. Configuring a sub-feature while it is false fails the render |
 | `tailscale.egress`, `magicDNS`, `proxyGroups` | disabled | See `values.yaml` |
+
+Kubernetes Service affinity sees the source address that reaches the Service.
+When an ingress controller masks client addresses, configure that controller's
+cookie or backend affinity as well. Affinity prevents routine cross-pod session
+loss; it does not migrate a pod's in-memory sessions during restart or eviction.
 
 ### Audit
 
@@ -300,7 +306,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=1.26.0
+NEW_VERSION=1.27.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

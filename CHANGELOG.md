@@ -40,6 +40,53 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [1.27.0] - 2026-08-07
+
+### Highlights
+
+- Multi-replica Helm deployments now keep each Streamable HTTP session on the
+  pod that owns its in-memory Minibridge state.
+
+### New Features
+
+- The Service exposes Acuvity-compatible `service.sessionAffinity` settings,
+  defaulting to `ClientIP` with a 600-second timeout.
+
+### Improvements
+
+- Helm resources and pods now carry the standard
+  `app.kubernetes.io/component: mcp-server` label without changing immutable
+  Deployment selectors.
+- The chart documents when an ingress controller also needs cookie or backend
+  affinity because it does not preserve distinct client source addresses.
+
+### Bug Fixes
+
+- Fixes intermittent `Session not found` responses when subsequent requests in
+  one MCP session were previously balanced to another replica.
+
+### Breaking Changes
+
+- None. Existing endpoints and clients are unchanged; Service routing becomes
+  sticky by default.
+
+### Known Issues
+
+- Affinity does not migrate in-memory sessions when their owning pod restarts or
+  is evicted. Clients must reconnect and initialize a new session.
+
+### Security
+
+- Keeping a session on its owning pod avoids exposing its session identifier to
+  unrelated replicas. Authentication and Minibridge policy remain the security
+  boundary.
+
+### Upgrade Notes
+
+- No action is required. Set `service.sessionAffinity: null` only for a
+  single-replica deployment or when an upstream proxy provides equivalent
+  stickiness.
+
 ## [1.26.0] - 2026-08-06
 
 ### Highlights
