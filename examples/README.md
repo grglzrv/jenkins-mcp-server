@@ -29,6 +29,13 @@ omits `rules[].host`, because the Operator takes the name from `tls.hosts`. For
 any other class it emits the host, since a rule without one matches every
 hostname arriving at the controller. Override with `ingress.hostRule`.
 
+These production-oriented values and Argo CD examples explicitly set the chart's
+`ClientIP` Service affinity to 600 seconds. The raw MCP Services use the same
+policy. It prevents a stateful Streamable HTTP session from being balanced to a
+replica that does not own it. Configure equivalent controller-specific affinity
+when an ingress bypasses the Service or does not preserve distinct client source
+addresses; pod restarts still require clients to reconnect.
+
 ## minibridge
 
 | Example | What it shows |
@@ -40,6 +47,8 @@ Both need the `-minibridge` image variant, which the chart selects
 automatically. It bundles Minibridge and the server in one container; it is not
 a sidecar image. With the default `minibridge.mode: http`, clients use
 Streamable HTTP at `/mcp`; only the private Minibridge-to-server hop uses stdio.
+The topology is diagrammed in both the project README and the published chart
+README, so users of either installation path see the same transport contract.
 
 ## Raw manifests
 

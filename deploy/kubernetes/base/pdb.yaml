@@ -5,6 +5,8 @@ metadata:
   namespace: jenkins-mcp
   labels:
     app.kubernetes.io/name: jenkins-mcp
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: jenkins-mcp
 spec:
   minAvailable: 1
   selector:

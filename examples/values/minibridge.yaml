@@ -21,6 +21,14 @@ mcp:
   allowJobDelete: false
   allowAdminRequest: false
 
+service:
+  # Minibridge sessions are process-local; keep requests on the initializing pod.
+  sessionAffinity:
+    sessionAffinity: ClientIP
+    sessionAffinityConfig:
+      clientIP:
+        timeoutSeconds: 600
+
 minibridge:
   enabled: true
   # Client-facing MCP 2025-03-26 Streamable HTTP at mcp.path (/mcp).

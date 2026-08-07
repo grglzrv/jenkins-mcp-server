@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.27.0 \
+  --version 1.27.1 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.27.0 \
+  --version 1.27.1 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -201,6 +201,18 @@ over a private stdio pipe while exposing MCP 2025-03-26 Streamable HTTP at
 `mcp.path` (default `/mcp`). This is the same transport split used by Acuvity's
 registry images. Clients never use the internal stdio hop.
 
+```mermaid
+flowchart LR
+    Client["MCP client"]
+    subgraph Container["One container in the pod"]
+        direction LR
+        MiniBridge["Minibridge AIO"] -->|"private stdio pipe"| Server["Jenkins MCP Server"]
+    end
+    Jenkins["Jenkins"]
+    Client -->|"Streamable HTTP /mcp"| MiniBridge
+    Server -->|"HTTPS API"| Jenkins
+```
+
 | Key | Default | Notes |
 | --- | --- | --- |
 | `minibridge.enabled` | `false` | Everything below does nothing while this is false, and the render fails rather than ignoring it silently |
@@ -306,7 +318,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=1.27.0
+NEW_VERSION=1.27.1
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

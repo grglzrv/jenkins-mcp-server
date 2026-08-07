@@ -43,7 +43,7 @@ spec:
     chart: jenkins-mcp-server
     # Pin an exact version. A range or "*" would let a sync move you between
     # releases without review.
-    targetRevision: 1.27.0
+    targetRevision: 1.27.1
     helm:
       releaseName: jenkins-mcp
       # valuesObject is inline and easy to read. For larger setups, keep values
@@ -71,6 +71,14 @@ spec:
           allowAdminRequest: false
           # Deletion is irreversible; leave it off unless genuinely required.
           allowJobDelete: false
+
+        service:
+          # Keep all requests in one stateful MCP session on its owning pod.
+          sessionAffinity:
+            sessionAffinity: ClientIP
+            sessionAffinityConfig:
+              clientIP:
+                timeoutSeconds: 600
 
         ingress:
           enabled: true

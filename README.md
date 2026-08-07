@@ -230,7 +230,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.27.0 \
+  --version 1.27.1 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -265,6 +265,18 @@ then runs Jenkins MCP Server over a private stdio pipe inside the same container
 matching Acuvity's registry images. That internal hop is not a client transport,
 does not open a second listener, and adds no sidecar or adapter.
 
+```mermaid
+flowchart LR
+    Client["MCP client"]
+    subgraph Container["One container in the pod"]
+        direction LR
+        MiniBridge["Minibridge AIO"] -->|"private stdio pipe"| Server["Jenkins MCP Server"]
+    end
+    Jenkins["Jenkins"]
+    Client -->|"Streamable HTTP /mcp"| MiniBridge
+    Server -->|"HTTPS API"| Jenkins
+```
+
 HTTP+SSE as a *separate* transport, with its own `/sse` and `/message`
 endpoints, was deprecated in the 2025-03-26 revision and is not offered here.
 Streamable HTTP already streams over SSE within its single endpoint, which is
@@ -283,6 +295,13 @@ surrounding structure.
 | Helm chart, in-cluster | `http://<release>-jenkins-mcp-server.<namespace>.svc.cluster.local:8000/mcp` |
 | Raw manifests, in-cluster | `http://jenkins-mcp.jenkins-mcp.svc.cluster.local:8000/mcp` |
 | Behind an ingress | `https://<ingress-host>/mcp` |
+
+Every shipped Kubernetes MCP Service uses `ClientIP` affinity with a 600-second
+timeout so the requests in one stateful Streamable HTTP session reach the same
+replica. An ingress controller that bypasses Service load balancing or hides the
+original client address needs equivalent controller-specific affinity. Affinity
+cannot preserve in-memory sessions when their owning pod restarts; clients must
+reconnect and initialize a new session.
 
 The Helm chart derives the Service name from the release, so a release named
 `jenkins-mcp` in namespace `jenkins-mcp` gives
@@ -465,7 +484,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=1.27.0
+NEW_VERSION=1.27.1
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 

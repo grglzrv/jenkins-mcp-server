@@ -59,6 +59,24 @@ For the bundled Minibridge variant, render
 Service and ingress still expose Streamable HTTP at `/mcp`; stdio exists only
 as the private in-container pipe from Minibridge to Jenkins MCP Server.
 
+```mermaid
+flowchart LR
+    Client["MCP client"]
+    subgraph Container["One container in the pod"]
+        direction LR
+        MiniBridge["Minibridge AIO"] -->|"private stdio pipe"| Server["Jenkins MCP Server"]
+    end
+    Jenkins["Jenkins"]
+    Client -->|"Streamable HTTP /mcp"| MiniBridge
+    Server -->|"HTTPS API"| Jenkins
+```
+
+Both raw MCP Services use `ClientIP` session affinity with a 600-second timeout.
+This keeps all requests carrying one MCP session ID on the pod that initialized
+it. If an ingress controller bypasses Service load balancing or masks the source
+address, configure equivalent affinity on that controller too. A pod restart
+still requires the client to reconnect and initialize a new session.
+
 ## Deploy with Argo CD
 
 ```bash
