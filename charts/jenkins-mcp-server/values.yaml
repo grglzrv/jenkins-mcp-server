@@ -58,6 +58,15 @@ service:
   type: ClusterIP
   port: 8000
   annotations: {}
+  # Streamable HTTP sessions are held in the serving pod's memory. Keep a
+  # client's requests on one replica, matching Acuvity's Atlassian chart.
+  # Set this whole value to null only when an upstream proxy provides affinity
+  # or the deployment has a single replica.
+  sessionAffinity:
+    sessionAffinity: ClientIP
+    sessionAffinityConfig:
+      clientIP:
+        timeoutSeconds: 600
   # Publish the health port on the Service. Useful for in-cluster scraping, but
   # /readyz reports configuration state, so set false when type is LoadBalancer
   # or NodePort and the Service is reachable from outside the cluster. Probes

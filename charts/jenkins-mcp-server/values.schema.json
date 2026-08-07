@@ -69,7 +69,8 @@
       "type": "object",
       "required": [
         "type",
-        "port"
+        "port",
+        "sessionAffinity"
       ],
       "properties": {
         "type": {
@@ -88,6 +89,39 @@
         },
         "annotations": {
           "type": "object"
+        },
+        "sessionAffinity": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "sessionAffinity"
+          ],
+          "properties": {
+            "sessionAffinity": {
+              "type": "string",
+              "enum": [
+                "None",
+                "ClientIP"
+              ]
+            },
+            "sessionAffinityConfig": {
+              "type": "object",
+              "properties": {
+                "clientIP": {
+                  "type": "object",
+                  "properties": {
+                    "timeoutSeconds": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 86400
+                    }
+                  }
+                }
+              }
+            }
+          }
         },
         "exposeHealthPort": {
           "type": "boolean"

@@ -29,6 +29,7 @@ spec:
         {{- end }}
       labels:
         {{- include "jenkins-mcp-server.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mcp-server
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

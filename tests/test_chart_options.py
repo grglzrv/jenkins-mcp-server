@@ -554,6 +554,35 @@ def test_health_port_exposure_is_configurable() -> None:
     assert ".Values.service.exposeHealthPort" in svc
 
 
+def test_service_keeps_streamable_http_sessions_on_one_pod() -> None:
+    """Minibridge session state is process-local, so multi-replica traffic is sticky."""
+    affinity = values()["service"]["sessionAffinity"]
+    assert affinity == {
+        "sessionAffinity": "ClientIP",
+        "sessionAffinityConfig": {"clientIP": {"timeoutSeconds": 600}},
+    }
+    svc = (CHART / "templates/service.yaml").read_text()
+    assert ".Values.service.sessionAffinity" in svc
+    assert "toYaml" in svc
+    assert "sessionAffinity" in schema()["properties"]["service"]["properties"]
+    disabled = values()
+    disabled["service"]["sessionAffinity"] = None
+    jsonschema.validate(disabled, schema())
+
+
+def test_component_label_does_not_change_immutable_selectors() -> None:
+    """Add workload identity without making existing Deployment selectors drift."""
+    helpers = (CHART / "templates/_helpers.tpl").read_text()
+    assert "app.kubernetes.io/component: mcp-server" in helpers
+    selector = helpers.split(
+        '{{- define "jenkins-mcp-server.selectorLabels" -}}', 1
+    )[1].split("{{- end }}", 1)[0]
+    assert "app.kubernetes.io/component" not in selector
+    deployment = (CHART / "templates/deployment.yaml").read_text()
+    assert "app.kubernetes.io/component: mcp-server" in deployment
+    assert values()["podLabels"] == {}
+
+
 def test_jenkins_compatibility_is_documented() -> None:
     doc = ROOT / "docs/JENKINS_COMPATIBILITY.md"
     assert doc.is_file()

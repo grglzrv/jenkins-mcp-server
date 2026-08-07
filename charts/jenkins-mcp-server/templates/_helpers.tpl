@@ -25,6 +25,7 @@ helm.sh/chart: {{ include "jenkins-mcp-server.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: jenkins-mcp-server
+app.kubernetes.io/component: mcp-server
 {{- end }}
 
 {{- define "jenkins-mcp-server.selectorLabels" -}}
