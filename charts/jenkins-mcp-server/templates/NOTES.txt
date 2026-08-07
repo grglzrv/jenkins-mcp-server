@@ -26,6 +26,7 @@ Client configuration:
 {{- if .Values.minibridge.enabled }}
 
 minibridge is in front of the server, {{ if .Values.minibridge.policer.enforce }}ENFORCING{{ else }}in LOG-ONLY mode{{ end }}.
+  Client transport: {{ if eq .Values.minibridge.mode "http" }}Streamable HTTP at {{ .Values.mcp.path }}{{ else }}WebSocket (requires a Minibridge client){{ end }}
   Guardrails: {{ if .Values.minibridge.guardrails }}{{ join ", " .Values.minibridge.guardrails }}{{ else }}none enabled{{ end }}
   Tools denied: {{ if .Values.minibridge.tools.deny }}{{ join ", " .Values.minibridge.tools.deny }}{{ else }}none{{ end }}
   Tools allowed: {{ if .Values.minibridge.tools.allow }}{{ join ", " .Values.minibridge.tools.allow }} (strict allowlist){{ else }}all{{ end }}

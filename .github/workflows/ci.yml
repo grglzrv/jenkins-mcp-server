@@ -110,6 +110,20 @@ jobs:
             --set jenkins.url=https://jenkins.example.com > /tmp/default.yaml
       - name: Render production example
         run: helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/production.yaml
+      - name: Render Minibridge Streamable HTTP with a custom endpoint
+        run: |
+          helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
+            --set jenkins.url=https://jenkins.example.com \
+            --set minibridge.enabled=true \
+            --set minibridge.mode=http \
+            --set mcp.path=/custom-mcp > /tmp/minibridge-custom-path.yaml
+          grep -A1 -F 'name: MINIBRIDGE_ENDPOINT_MCP' /tmp/minibridge-custom-path.yaml | \
+            grep -F 'value: "/custom-mcp"'
+          if grep -q -E '^  MCP_(TRANSPORT|HOST|PORT|PATH|HEALTH_HOST|HEALTH_PORT):' \
+            /tmp/minibridge-custom-path.yaml; then
+            echo "direct-server listener variables leaked into the Minibridge render"
+            exit 1
+          fi
       - name: Render GCP External Secrets example
         run: helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/external-secrets-gcp-workload-identity.yaml > /tmp/gcp.yaml
       - name: Render every shipped values example

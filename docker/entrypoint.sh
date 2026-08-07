@@ -1,10 +1,10 @@
 #!/bin/sh
 # Entrypoint for the minibridge-wrapped Jenkins MCP server.
 #
-# minibridge terminates MCP over HTTP, applies the Rego guardrail policy to
-# every request and response, and speaks stdio to the Jenkins MCP server it
-# spawns as a child. The Python server therefore runs in stdio mode here and
-# never listens on a socket itself.
+# This follows Acuvity's registry container convention: Minibridge exposes the
+# client-facing Streamable HTTP endpoint, applies policy to every request and
+# response, and runs Jenkins MCP Server as a private stdio child. The internal
+# hop has no socket and does not change the transport clients use.
 set -eu
 
 fail() {
@@ -63,7 +63,14 @@ fi
 
 export MINIBRIDGE_OAUTH_DISABLED="${MINIBRIDGE_OAUTH_DISABLED:-true}"
 
-# Force stdio on the child: minibridge owns the network listener.
+# These listener variables belong to direct-server deployments and may arrive
+# through a shared .env or raw base ConfigMap. Do not leak them into the child:
+# Minibridge alone owns the client-facing listener in this image.
+unset MCP_TRANSPORT MCP_HOST MCP_PORT MCP_PATH MCP_HEALTH_HOST MCP_HEALTH_PORT
+
+# Jenkins defaults to Streamable HTTP when run directly, so select stdio only
+# for Minibridge's private child process. Client traffic remains Streamable HTTP
+# on Minibridge's /mcp frontend when MINIBRIDGE_MODE=aio.
 if [ "$#" -gt 0 ]; then
 	exec minibridge "${MINIBRIDGE_MODE}" -- jenkins-mcp-server --transport stdio "$@"
 else

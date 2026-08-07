@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 1.25.0
+    targetRevision: 1.26.0
     helm:
       releaseName: jenkins-mcp
       valuesObject:
@@ -37,6 +37,8 @@ spec:
 
         minibridge:
           enabled: true
+          # Client-facing MCP 2025-03-26 Streamable HTTP at /mcp.
+          mode: http
           tools:
             # Default is allow-all. This excludes only the irreversible tools,
             # which are then refused on tools/call and hidden from tools/list.

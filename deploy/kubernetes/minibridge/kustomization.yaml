@@ -4,7 +4,8 @@
 #
 # Differences from the plain base:
 #   - the -minibridge image variant, which bundles minibridge and policy.rego
-#   - no args: the entrypoint runs `minibridge aio -- jenkins-mcp-server --transport stdio`
+#   - Streamable HTTP at /mcp is served by Minibridge; its private Jenkins child
+#     uses stdio inside the same container, matching Acuvity registry images
 #   - health moves to 8080, and minibridge serves "/" rather than /healthz and /readyz
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -13,7 +14,7 @@ resources:
   - ../base
 images:
   - name: ghcr.io/grglzrv/jenkins-mcp-server
-    newTag: 1.25.0-minibridge
+    newTag: 1.26.0-minibridge
 configMapGenerator:
   - name: jenkins-mcp-minibridge
     envs:
@@ -25,7 +26,8 @@ patches:
       kind: Deployment
       name: jenkins-mcp
     patch: |-
-      # The entrypoint supplies the transport, so the base args must go.
+      # Minibridge owns the client-facing Streamable HTTP endpoint and its
+      # entrypoint supplies the private child transport, so base args must go.
       - op: remove
         path: /spec/template/spec/containers/0/args
       - op: add

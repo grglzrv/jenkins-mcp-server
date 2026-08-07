@@ -206,6 +206,10 @@ jenkins:
     key: ca.crt
 
 mcp:
+  # Direct-server transport. When minibridge.enabled=true, clients instead use
+  # the Minibridge frontend selected by minibridge.mode; mode=http is
+  # Streamable HTTP at this section's path. Minibridge's private child protocol
+  # is an implementation detail and does not change the client transport.
   transport: streamable-http
   host: 0.0.0.0
   port: 8000
@@ -337,11 +341,12 @@ terminationGracePeriodSeconds: 30
 extraVolumes: []
 extraVolumeMounts: []
 
-# Optional minibridge proxy (Acuvity) in front of the MCP server. When enabled
-# the container runs `minibridge aio -- jenkins-mcp-server --transport stdio`,
-# so minibridge owns the listener and evaluates docker/policy.rego on every MCP
-# request and response. Requires the -minibridge image variant, which is built
-# from docker/Dockerfile.minibridge.
+# Optional Minibridge proxy (Acuvity) in front of the MCP server. This follows
+# Acuvity's registry container convention: mode=http exposes MCP 2025-03-26
+# Streamable HTTP to clients at mcp.path, while Minibridge runs the server as a
+# private stdio child in the same container. The stdio hop is not exposed and
+# does not change how clients connect. Requires the -minibridge image variant,
+# built from docker/Dockerfile.minibridge.
 #
 # Credential injection is unchanged: JENKINS_TOKEN still comes from a Kubernetes
 # Secret via secretKeyRef, so an External Secrets-managed secret works exactly
@@ -353,7 +358,8 @@ minibridge:
     repository: ""
     tag: ""
     tagSuffix: "-minibridge"
-  # http    = MCP over HTTP (minibridge aio), compatible with standard clients.
+  # http      = Streamable HTTP frontend (Minibridge AIO) at mcp.path,
+  #             compatible with MCP 2025-03-26 clients.
   # websocket = websocket-to-stdio (minibridge backend); needs minibridge
   #             on the client side too.
   mode: http

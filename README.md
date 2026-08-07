@@ -230,7 +230,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.25.0 \
+  --version 1.26.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -259,11 +259,18 @@ Select with `MCP_TRANSPORT` or `--transport`.
 | **Streamable HTTP** | `streamable-http` *(default)* | Remote and containerised deployments. Serves `POST` and `GET` on one endpoint at `mcp.path`, upgrading to an SSE stream when a response streams |
 | **stdio** | `stdio` | Running the server as a local subprocess of the client. No listener, no ports |
 
+With `minibridge.enabled=true`, clients still use Streamable HTTP at `/mcp`:
+`minibridge.mode=http` makes Minibridge own that public endpoint. Minibridge
+then runs Jenkins MCP Server over a private stdio pipe inside the same container,
+matching Acuvity's registry images. That internal hop is not a client transport,
+does not open a second listener, and adds no sidecar or adapter.
+
 HTTP+SSE as a *separate* transport, with its own `/sse` and `/message`
 endpoints, was deprecated in the 2025-03-26 revision and is not offered here.
 Streamable HTTP already streams over SSE within its single endpoint, which is
-what current clients expect. A client that only speaks the legacy transport can
-be bridged with `mcp-proxy` rather than changing the server.
+what current clients expect. A client that only speaks the legacy transport
+needs an external compatibility bridge; the Minibridge deployment itself stays
+single-container and adds no adapter.
 
 ### Endpoints
 
@@ -310,6 +317,11 @@ agent-to-MCP connectivity, supports Rego and HTTP-based policy enforcement 🕵�
 and simplifies orchestration. The `-minibridge` image bundles it with a
 **Jenkins-aware Rego policy** in a single container — no sidecar, nothing
 downloaded at startup.
+
+In the default `minibridge.mode=http`, Minibridge serves MCP 2025-03-26
+Streamable HTTP at `mcp.path` (default `/mcp`). The Jenkins process is its
+private stdio child, exactly like Acuvity's `mcp-server-atlassian` container;
+the Service and ingress expose only Minibridge.
 
 The guardrails below follow the runtime security model Acuvity defines for their
 [MCP server registry](https://github.com/acuvity/mcp-servers-registry), with the
@@ -453,7 +465,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=1.25.0
+NEW_VERSION=1.26.0
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 

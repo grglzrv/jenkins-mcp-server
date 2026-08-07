@@ -25,6 +25,8 @@ mcp:
 
 minibridge:
   enabled: true
+  # TLS-protected client-facing Streamable HTTP at mcp.path (/mcp).
+  mode: http
   tools:
     # Strict allowlist: nothing outside @read can be called or even listed.
     allow: ["@read"]

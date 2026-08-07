@@ -116,6 +116,8 @@ every secret arrives via secretKeyRef so nothing sensitive lives in values.
   value: ":{{ $mb.port }}"
 - name: MINIBRIDGE_HEALTH_LISTEN
   value: ":{{ $mb.healthPort }}"
+- name: MINIBRIDGE_ENDPOINT_MCP
+  value: {{ .Values.mcp.path | quote }}
 {{- with $mb.log.level }}
 - name: MINIBRIDGE_LOG_LEVEL
   value: {{ . | quote }}

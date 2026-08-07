@@ -42,6 +42,11 @@ The plain image does not include Minibridge. The separately published
 `<version>-minibridge` image bundles Minibridge and the Python server into one
 container; the chart selects it only when `minibridge.enabled=true`.
 
+With `minibridge.mode=http`, the exposed `/mcp` endpoint is MCP 2025-03-26
+Streamable HTTP. Minibridge runs Jenkins MCP Server over a private stdio pipe
+inside that same container; no backend listener, sidecar, or transport adapter
+is added. Network policy, Service and ingress target only Minibridge.
+
 - Keep `minibridge.policer.enforce=true`; false is audit-only and passes denied
   requests.
 - Enable exactly one policer. The default local Rego policy avoids a network

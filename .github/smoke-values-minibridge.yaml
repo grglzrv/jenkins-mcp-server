@@ -14,6 +14,8 @@ ingress:
 
 minibridge:
   enabled: true
+  # The probe below uses the MCP 2025-03-26 Streamable HTTP client at /mcp.
+  mode: http
   tools:
     # integration/minibridge_probe.py asserts these are hidden and refused.
     deny: ["@destructive"]

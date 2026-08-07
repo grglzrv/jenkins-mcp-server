@@ -14,6 +14,19 @@ COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
 # && chain as the last statement of a loop body aborts the shell, so the
 # probe stopped at the first miss and reported nothing found.
 RUN set -u; \
+    install_with_retry() { \
+      attempt=1; \
+      while ! "$@"; do \
+        if [ "$attempt" -ge 3 ]; then \
+          echo "plugin installation failed after $attempt attempts" >&2; \
+          return 1; \
+        fi; \
+        delay=$((attempt * 15)); \
+        echo "plugin installation attempt $attempt failed; retrying in $delay seconds" >&2; \
+        sleep "$delay"; \
+        attempt=$((attempt + 1)); \
+      done; \
+    }; \
     CLI=""; \
     for c in /bin/jenkins-plugin-cli /usr/local/bin/jenkins-plugin-cli /usr/bin/jenkins-plugin-cli; do \
       if [ -x "$c" ]; then CLI="$c"; break; fi; \
@@ -25,7 +38,7 @@ RUN set -u; \
     done; \
     if [ -n "$CLI" ]; then \
       echo "plugin installer: $CLI"; \
-      "$CLI" --plugin-file /usr/share/jenkins/ref/plugins.txt; \
+      install_with_retry "$CLI" --plugin-file /usr/share/jenkins/ref/plugins.txt; \
     elif [ -n "$LEGACY" ]; then \
       echo "plugin installer: $LEGACY"; \
       "$LEGACY" $(tr '\n' ' ' < /usr/share/jenkins/ref/plugins.txt); \

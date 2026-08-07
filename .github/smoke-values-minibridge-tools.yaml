@@ -13,6 +13,8 @@ ingress:
 
 minibridge:
   enabled: true
+  # Every tool is exercised through the public Streamable HTTP frontend.
+  mode: http
   tools:
     deny: ["@destructive"]
     allow: []

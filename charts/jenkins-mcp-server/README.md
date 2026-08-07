@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.25.0 \
+  --version 1.26.0 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.25.0 \
+  --version 1.26.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -197,11 +197,14 @@ Requires the `-minibridge` image, which the chart selects automatically by
 appending `minibridge.image.tagSuffix` to the app version. That tag is published
 on every release alongside the default image; `edge-minibridge` tracks `main`.
 It is one bundled container, not a sidecar: Minibridge spawns the Python server
-over stdio.
+over a private stdio pipe while exposing MCP 2025-03-26 Streamable HTTP at
+`mcp.path` (default `/mcp`). This is the same transport split used by Acuvity's
+registry images. Clients never use the internal stdio hop.
 
 | Key | Default | Notes |
 | --- | --- | --- |
 | `minibridge.enabled` | `false` | Everything below does nothing while this is false, and the render fails rather than ignoring it silently |
+| `minibridge.mode` | `http` | `http` is the client-facing Streamable HTTP frontend at `mcp.path`; `websocket` requires Minibridge on the client |
 | `minibridge.tools.deny` | `[]` | Groups `@read` `@write` `@destructive` `@admin` `@all`, or tool names. `["@destructive"]` excludes the irreversible tools |
 | `minibridge.tools.allow` | `[]` | Non-empty makes it a strict allowlist |
 | `minibridge.methodsDeny` | `[]` | Deny MCP capabilities by method name |
@@ -210,6 +213,10 @@ over stdio.
 | `minibridge.policer.rego` / `http` | Rego / disabled | Exactly one policer must be enabled; remote HTTP URL, CA and bearer token are supported |
 | `minibridge.mcp.useTempDir` | `true` | Uses the writable `/tmp` mount with a read-only root filesystem |
 | `minibridge.basicAuth` / `tls` | disabled | Shared-secret auth and TLS, both from Secrets. A TLS key passphrase may come from the TLS Secret or `tls.pass.valueFrom` |
+
+`mcp.transport` configures the direct Python server only. When Minibridge is
+enabled, `minibridge.mode` selects the client-facing transport and the chart
+does not render direct-listener variables into the ConfigMap.
 
 ### Workload
 
@@ -293,7 +300,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=1.25.0
+NEW_VERSION=1.26.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```
