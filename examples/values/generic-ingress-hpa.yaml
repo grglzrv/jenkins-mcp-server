@@ -13,6 +13,14 @@ jenkins:
     existingSecret: jenkins-mcp-secrets
     create: false
 
+service:
+  # Streamable HTTP session state is process-local; keep requests on one pod.
+  sessionAffinity:
+    sessionAffinity: ClientIP
+    sessionAffinityConfig:
+      clientIP:
+        timeoutSeconds: 600
+
 ingress:
   enabled: true
   className: nginx

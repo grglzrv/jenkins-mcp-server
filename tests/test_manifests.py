@@ -50,6 +50,64 @@ def test_deployment_is_hardened_and_has_health_probes():
     assert container["readinessProbe"]["httpGet"]["path"] == "/readyz"
 
 
+def test_raw_mcp_services_keep_sessions_on_one_replica():
+    expected = {
+        "sessionAffinity": "ClientIP",
+        "sessionAffinityConfig": {"clientIP": {"timeoutSeconds": 600}},
+    }
+    base = load("deploy/kubernetes/base/service.yaml")[0]
+    standalone = next(
+        doc
+        for doc in load("deploy/kubernetes/minibridge/standalone-deployment.yaml")
+        if doc and doc["kind"] == "Service"
+    )
+    for service in [base, standalone]:
+        assert {
+            key: service["spec"][key]
+            for key in ["sessionAffinity", "sessionAffinityConfig"]
+        } == expected
+
+
+def test_raw_resources_use_one_component_label_without_selector_changes():
+    base_paths = [
+        "deploy/kubernetes/base/deployment.yaml",
+        "deploy/kubernetes/base/networkpolicy.yaml",
+        "deploy/kubernetes/base/pdb.yaml",
+        "deploy/kubernetes/base/service.yaml",
+        "deploy/kubernetes/base/serviceaccount.yaml",
+    ]
+    for path in base_paths:
+        resource = load(path)[0]
+        assert resource["metadata"]["labels"]["app.kubernetes.io/component"] == (
+            "mcp-server"
+        )
+
+    deployment = load("deploy/kubernetes/base/deployment.yaml")[0]
+    assert deployment["spec"]["template"]["metadata"]["labels"][
+        "app.kubernetes.io/component"
+    ] == "mcp-server"
+    assert "app.kubernetes.io/component" not in deployment["spec"]["selector"][
+        "matchLabels"
+    ]
+
+    standalone = [
+        doc
+        for doc in load("deploy/kubernetes/minibridge/standalone-deployment.yaml")
+        if doc and doc["kind"] != "Namespace"
+    ]
+    for resource in standalone:
+        assert resource["metadata"]["labels"]["app.kubernetes.io/component"] == (
+            "mcp-server"
+        )
+    bridge_deployment = next(doc for doc in standalone if doc["kind"] == "Deployment")
+    assert bridge_deployment["spec"]["template"]["metadata"]["labels"][
+        "app.kubernetes.io/component"
+    ] == "mcp-server"
+    assert "app.kubernetes.io/component" not in bridge_deployment["spec"][
+        "selector"
+    ]["matchLabels"]
+
+
 def test_chart_verifies_tls_by_default():
     values = load("charts/jenkins-mcp-server/values.yaml")[0]
     assert values["jenkins"]["verifyTls"] is True

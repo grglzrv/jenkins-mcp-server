@@ -23,6 +23,14 @@ mcp:
   readOnly: true
   allowedJobs: "AI/*"
 
+service:
+  # Minibridge sessions are process-local; keep requests on the initializing pod.
+  sessionAffinity:
+    sessionAffinity: ClientIP
+    sessionAffinityConfig:
+      clientIP:
+        timeoutSeconds: 600
+
 minibridge:
   enabled: true
   # TLS-protected client-facing Streamable HTTP at mcp.path (/mcp).

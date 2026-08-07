@@ -40,6 +40,52 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [1.27.1] - 2026-08-07
+
+### Highlights
+
+- Every shipped Kubernetes deployment path now makes stateful MCP routing and
+  the Minibridge AIO HTTP-to-stdio boundary explicit.
+
+### New Features
+
+- Mermaid topology diagrams show clients using public Streamable HTTP at
+  `/mcp` while Minibridge privately launches Jenkins MCP Server over stdio.
+
+### Improvements
+
+- Raw Kubernetes resources now consistently use
+  `app.kubernetes.io/component: mcp-server` without changing immutable
+  selectors.
+- Production values and all chart-based Argo CD Applications explicitly carry
+  the 600-second `ClientIP` session-affinity contract.
+
+### Bug Fixes
+
+- Raw Kubernetes and standalone Minibridge Services now keep requests in one
+  Streamable HTTP session on the replica that initialized it.
+
+### Breaking Changes
+
+- None. Existing selectors, endpoints, and client transports are unchanged.
+
+### Known Issues
+
+- Service affinity cannot migrate in-memory sessions after a pod restart, and
+  ingress controllers that bypass Service balancing or mask source addresses
+  may need their own affinity configuration.
+
+### Security
+
+- Documentation now makes clear that only Minibridge owns the public listener;
+  its child server remains reachable only through the private stdio pipe.
+
+### Upgrade Notes
+
+- Raw-manifest users should reapply their Kustomize overlay or standalone
+  manifest. Helm users already received the default affinity in 1.27.0; this
+  release makes the same contract explicit across examples and documentation.
+
 ## [1.27.0] - 2026-08-07
 
 ### Highlights

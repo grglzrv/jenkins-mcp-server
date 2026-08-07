@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 1.27.0
+    targetRevision: 1.27.1
     helm:
       releaseName: jenkins-mcp
       valuesObject:
@@ -86,6 +86,12 @@ spec:
 
         service:
           type: ClusterIP
+          # Keep all requests in one stateful MCP session on its owning pod.
+          sessionAffinity:
+            sessionAffinity: ClientIP
+            sessionAffinityConfig:
+              clientIP:
+                timeoutSeconds: 600
           # /readyz reports configuration state; keep it off any Service that is
           # reachable from outside the cluster.
           exposeHealthPort: true

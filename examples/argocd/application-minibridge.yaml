@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 1.27.0
+    targetRevision: 1.27.1
     helm:
       releaseName: jenkins-mcp
       valuesObject:
@@ -58,6 +58,15 @@ spec:
           policer:
             # Set false during rollout to log violations without blocking.
             enforce: true
+
+        service:
+          # Minibridge sessions are process-local, so requests must stay on the
+          # replica that accepted initialize.
+          sessionAffinity:
+            sessionAffinity: ClientIP
+            sessionAffinityConfig:
+              clientIP:
+                timeoutSeconds: 600
 
         ingress:
           enabled: true

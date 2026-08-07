@@ -23,6 +23,10 @@ kind: Secret
 metadata:
   name: jenkins-mcp-secrets
   namespace: jenkins-mcp
+  labels:
+    app.kubernetes.io/name: jenkins-mcp-minibridge
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: jenkins-mcp
 type: Opaque
 stringData:
   JENKINS_USERNAME: replace-with-jenkins-user
@@ -33,6 +37,10 @@ kind: ConfigMap
 metadata:
   name: jenkins-mcp-minibridge
   namespace: jenkins-mcp
+  labels:
+    app.kubernetes.io/name: jenkins-mcp-minibridge
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: jenkins-mcp
 data:
   JENKINS_URL: https://jenkins.example.com
   # Leave enabled. Only set JENKINS_CA_BUNDLE as well if Jenkins uses a private
@@ -70,6 +78,8 @@ metadata:
   namespace: jenkins-mcp
   labels:
     app.kubernetes.io/name: jenkins-mcp-minibridge
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: jenkins-mcp
 spec:
   replicas: 2
   selector:
@@ -79,6 +89,8 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: jenkins-mcp-minibridge
+        app.kubernetes.io/component: mcp-server
+        app.kubernetes.io/part-of: jenkins-mcp
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -92,7 +104,7 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:1.27.0-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:1.27.1-minibridge
           imagePullPolicy: IfNotPresent
           # No args: the entrypoint follows Acuvity's single-container pattern:
           # public Streamable HTTP in Minibridge, private stdio to Jenkins.
@@ -148,8 +160,17 @@ kind: Service
 metadata:
   name: jenkins-mcp-minibridge
   namespace: jenkins-mcp
+  labels:
+    app.kubernetes.io/name: jenkins-mcp-minibridge
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: jenkins-mcp
 spec:
   type: ClusterIP
+  # Minibridge keeps MCP session state in the process that accepted initialize.
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 600
   selector:
     app.kubernetes.io/name: jenkins-mcp-minibridge
   ports:

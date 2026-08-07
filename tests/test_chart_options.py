@@ -380,6 +380,18 @@ def test_argocd_values_render_against_the_chart() -> None:
             raise AssertionError(f"{f.name}: {exc.message}") from exc
 
 
+def test_argocd_applications_make_session_affinity_explicit() -> None:
+    expected = {
+        "sessionAffinity": "ClientIP",
+        "sessionAffinityConfig": {"clientIP": {"timeoutSeconds": 600}},
+    }
+    for f, app in applications():
+        configured = app["spec"]["source"]["helm"]["valuesObject"]["service"][
+            "sessionAffinity"
+        ]
+        assert configured == expected, f"{f.name} hides the production routing policy"
+
+
 def test_argocd_applications_never_create_the_credentials_secret() -> None:
     for f, app in applications():
         creds = app["spec"]["source"]["helm"]["valuesObject"]["jenkins"]["credentials"]
@@ -568,6 +580,23 @@ def test_service_keeps_streamable_http_sessions_on_one_pod() -> None:
     disabled = values()
     disabled["service"]["sessionAffinity"] = None
     jsonschema.validate(disabled, schema())
+
+
+def test_production_values_make_session_affinity_explicit() -> None:
+    expected = {
+        "sessionAffinity": "ClientIP",
+        "sessionAffinityConfig": {"clientIP": {"timeoutSeconds": 600}},
+    }
+    for name in [
+        "tailscale-production.yaml",
+        "generic-ingress-hpa.yaml",
+        "minibridge.yaml",
+        "minibridge-hardened.yaml",
+    ]:
+        configured = yaml.safe_load((EXAMPLES / name).read_text())["service"][
+            "sessionAffinity"
+        ]
+        assert configured == expected, name
 
 
 def test_component_label_does_not_change_immutable_selectors() -> None:
@@ -1131,6 +1160,24 @@ def test_minibridge_exposes_streamable_http_with_a_private_stdio_child() -> None
     jenkins_fixture = (ROOT / "integration/jenkins/Dockerfile").read_text()
     assert "install_with_retry" in jenkins_fixture
     assert 'if [ "$attempt" -ge 3 ]' in jenkins_fixture
+
+
+def test_minibridge_topology_diagram_is_published_with_both_install_paths() -> None:
+    markers = [
+        "```mermaid",
+        "flowchart LR",
+        'Client -->|"Streamable HTTP /mcp"| MiniBridge',
+        'MiniBridge["Minibridge AIO"] -->|"private stdio pipe"|',
+        'Server -->|"HTTPS API"| Jenkins',
+    ]
+    for path in [
+        ROOT / "README.md",
+        CHART / "README.md",
+        ROOT / "docs/KUBERNETES_TAILSCALE_ARGOCD.md",
+    ]:
+        text = path.read_text()
+        for marker in markers:
+            assert marker in text, f"{path.relative_to(ROOT)} is missing {marker}"
 
 
 def test_edge_and_release_images_cover_the_same_platforms() -> None:

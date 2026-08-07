@@ -44,6 +44,13 @@ spec:
             create: false
         mcp:
           allowedJobs: "AI/*,Platform/*"
+        service:
+          # Keep all requests in one stateful MCP session on its owning pod.
+          sessionAffinity:
+            sessionAffinity: ClientIP
+            sessionAffinityConfig:
+              clientIP:
+                timeoutSeconds: 600
         ingress:
           enabled: true
           className: tailscale
