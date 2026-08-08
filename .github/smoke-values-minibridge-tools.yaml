@@ -3,8 +3,9 @@
 jenkins:
   url: http://jenkins:8080
   credentials:
-    existingSecret: jenkins-mcp-secrets
-    create: false
+    existingSecret:
+      enabled: true
+      name: jenkins-mcp-secrets
 
 replicaCount: 1
 

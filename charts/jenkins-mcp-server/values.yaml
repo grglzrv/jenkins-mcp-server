@@ -234,6 +234,48 @@ jenkins:
     #    store. Configure the store and remote keys under externalSecret below.
     externalSecret:
       enabled: false
+      # Use external-secrets.io/v1beta1 on ESO installations older than v0.15.
+      apiVersion: external-secrets.io/v1
+      refreshInterval: 1h
+      # Reference to an existing store, or the one created below.
+      secretStoreRef:
+        name: gcp-secret-store
+        kind: ClusterSecretStore
+      # Optionally have this chart create the store too, instead of requiring the
+      # platform team to provision it first. provider is passed through verbatim,
+      # so any ESO provider works (gcpsm, vault, aws, azurekv, ...).
+      secretStore:
+        create: false
+        kind: ClusterSecretStore
+        annotations: {}
+        conditions: []
+        provider: {}
+        # provider:
+        #   gcpsm:
+        #     projectID: my-project
+        #     auth:
+        #       workloadIdentity:
+        #         clusterLocation: europe-west1
+        #         clusterName: my-cluster
+        #         serviceAccountRef:
+        #           name: jenkins-mcp-server
+      creationPolicy: Owner
+      deletionPolicy: Retain
+      annotations: {}
+      usernameRemoteKey: jenkins-mcp-username
+      tokenRemoteKey: jenkins-mcp-token
+      # Set when the remote secret stores JSON and the credential lives under a
+      # field, e.g. remote key "jenkins-mcp" with property "username".
+      usernameRemoteProperty: ""
+      tokenRemoteProperty: ""
+      # Pin a specific remote secret version; empty means latest.
+      remoteVersion: ""
+      # Extra data entries appended to the generated ExternalSecret.
+      extraData: []
+      # Use dataFrom instead of the per-key data block above (mutually exclusive).
+      dataFrom: []
+      # Optional target.template for custom Secret shaping.
+      template: {}
 
   # Mount a CA certificate from a Secret. The chart mounts it read-only and
   # points the server at it, so no other wiring is needed.
@@ -329,51 +371,6 @@ tailscale:
 # External Secrets Operator integration. Mutually exclusive with
 # jenkins.credentials.create — both would render <fullname>-credentials and
 # fight for ownership, so enabling both fails the render with a clear message.
-externalSecret:
-  enabled: false
-  # Use external-secrets.io/v1beta1 on ESO installations older than v0.15.
-  apiVersion: external-secrets.io/v1
-  refreshInterval: 1h
-  # Reference to an existing store, or the one created below.
-  secretStoreRef:
-    name: gcp-secret-store
-    kind: ClusterSecretStore
-  # Optionally have this chart create the store too, instead of requiring the
-  # platform team to provision it first. provider is passed through verbatim,
-  # so any ESO provider works (gcpsm, vault, aws, azurekv, ...).
-  secretStore:
-    create: false
-    kind: ClusterSecretStore
-    annotations: {}
-    conditions: []
-    provider: {}
-    # provider:
-    #   gcpsm:
-    #     projectID: my-project
-    #     auth:
-    #       workloadIdentity:
-    #         clusterLocation: europe-west1
-    #         clusterName: my-cluster
-    #         serviceAccountRef:
-    #           name: jenkins-mcp-server
-  creationPolicy: Owner
-  deletionPolicy: Retain
-  annotations: {}
-  usernameRemoteKey: jenkins-mcp-username
-  tokenRemoteKey: jenkins-mcp-token
-  # Set when the remote secret stores JSON and the credential lives under a
-  # field, e.g. remote key "jenkins-mcp" with property "username".
-  usernameRemoteProperty: ""
-  tokenRemoteProperty: ""
-  # Pin a specific remote secret version; empty means latest.
-  remoteVersion: ""
-  # Extra data entries appended to the generated ExternalSecret.
-  extraData: []
-  # Use dataFrom instead of the per-key data block above (mutually exclusive).
-  dataFrom: []
-  # Optional target.template for custom Secret shaping.
-  template: {}
-
 nodeSelector: {}
 tolerations: []
 affinity: {}

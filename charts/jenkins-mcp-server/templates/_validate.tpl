@@ -126,8 +126,8 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if and .Values.jenkins.credentials.externalSecret.enabled (eq .Values.minibridge.basicAuth.existingSecret $credName) }}
 {{- $key := .Values.minibridge.basicAuth.secretKey }}
 {{- $provided := list .Values.jenkins.credentials.existingSecret.usernameKey .Values.jenkins.credentials.existingSecret.tokenKey }}
-{{- range .Values.externalSecret.extraData }}{{- $provided = append $provided .secretKey }}{{- end }}
-{{- if and (not .Values.externalSecret.dataFrom) (not (has $key $provided)) }}
+{{- range .Values.jenkins.credentials.externalSecret.extraData }}{{- $provided = append $provided .secretKey }}{{- end }}
+{{- if and (not .Values.jenkins.credentials.externalSecret.dataFrom) (not (has $key $provided)) }}
 {{- fail (printf "minibridge.basicAuth points at the ExternalSecret target %q for key %q, but the ExternalSecret only creates keys %v. The pod would fail with CreateContainerConfigError. Add the key via externalSecret.extraData, or point basicAuth.existingSecret at a different Secret." $credName $key $provided) }}
 {{- end }}
 {{- end }}

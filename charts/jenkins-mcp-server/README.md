@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.0.0 \
+  --version 3.0.0 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.0.0 \
+  --version 3.0.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -103,7 +103,8 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 ```
 
 Prefer `jenkins.credentials.externalSecret.enabled=true` when the External
-Secrets Operator is available.
+Secrets Operator is available; the store, remote keys and policies are
+configured in the same block.
 
 ## Tailscale integration (optional)
 
@@ -176,7 +177,7 @@ render rather than resolving silently.
 | Existing Secret | `jenkins.credentials.existingSecret.enabled: true` *(default)* | You create the Secret. Set `name`, and `usernameKey` / `tokenKey` if they differ from `JENKINS_USERNAME` / `JENKINS_TOKEN` |
 | Per-field references | `jenkins.credentials.secretKeyRefs.enabled: true` | The username and token live in different Secrets or keys you do not control |
 | Chart-managed | `jenkins.credentials.create.enabled: true` | Disposable environments only — the token lands in the Helm release |
-| External Secrets | `jenkins.credentials.externalSecret.enabled: true` | External Secrets Operator syncs it from an external store; configure the store under `externalSecret` |
+| External Secrets | `jenkins.credentials.externalSecret.enabled: true` | External Secrets Operator syncs it from an external store; configure the store under `jenkins.credentials.externalSecret` |
 
 ```yaml
 jenkins:
@@ -327,7 +328,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.0.0
+NEW_VERSION=3.0.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

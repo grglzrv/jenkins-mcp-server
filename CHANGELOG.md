@@ -10,35 +10,102 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [3.0.0] - 2026-08-05
+
+### Highlights
+
+- Completes the credential restructure begun in 2.0.0. Every credential source,
+  including the whole External Secrets configuration, now lives under
+  `jenkins.credentials`.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- The External Secrets store, remote keys, policies and template move from the
+  top-level `externalSecret` block to `jenkins.credentials.externalSecret`. In
+  2.0.0 only the `enabled` flag moved, which left the switch in one place and
+  the sixteen settings it governs in another. All four credential sources are
+  now configured in one place.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- The top-level `externalSecret` key no longer exists. Every field beneath it
+  moves under `jenkins.credentials.externalSecret`, unchanged.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- None.
+
+### Upgrade Notes
+
+- Indent the existing block under `jenkins.credentials`; no field is renamed:
+
+  ```yaml
+  # before
+  externalSecret:
+    enabled: true
+    secretStoreRef:
+      name: gcp-secret-store
+      kind: ClusterSecretStore
+    usernameRemoteKey: jenkins-mcp-username
+
+  # after
+  jenkins:
+    credentials:
+      existingSecret:
+        enabled: false
+      externalSecret:
+        enabled: true
+        secretStoreRef:
+          name: gcp-secret-store
+          kind: ClusterSecretStore
+        usernameRemoteKey: jenkins-mcp-username
+  ```
+
+- Upgrading from 1.x: go straight to 3.0.0 and apply the 2.0.0 credential and
+  NetworkPolicy notes together with this one. 2.0.0 was released the same day
+  and its intermediate shape is not worth adopting.
 
 ## [2.0.0] - 2026-08-08
 

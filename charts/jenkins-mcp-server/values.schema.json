@@ -300,11 +300,120 @@
             "externalSecret": {
               "type": "object",
               "required": [
-                "enabled"
+                "enabled",
+                "refreshInterval",
+                "secretStoreRef",
+                "usernameRemoteKey",
+                "tokenRemoteKey",
+                "apiVersion",
+                "secretStore",
+                "creationPolicy",
+                "deletionPolicy"
               ],
               "properties": {
                 "enabled": {
                   "type": "boolean"
+                },
+                "refreshInterval": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "secretStoreRef": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "kind"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "kind": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "usernameRemoteKey": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "tokenRemoteKey": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "apiVersion": {
+                  "type": "string",
+                  "enum": [
+                    "external-secrets.io/v1",
+                    "external-secrets.io/v1beta1"
+                  ]
+                },
+                "secretStore": {
+                  "type": "object",
+                  "required": [
+                    "create"
+                  ],
+                  "properties": {
+                    "create": {
+                      "type": "boolean"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "SecretStore",
+                        "ClusterSecretStore"
+                      ]
+                    },
+                    "annotations": {
+                      "type": "object"
+                    },
+                    "conditions": {
+                      "type": "array"
+                    },
+                    "provider": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "creationPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Owner",
+                    "Orphan",
+                    "Merge",
+                    "None"
+                  ]
+                },
+                "deletionPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Retain",
+                    "Delete",
+                    "Merge"
+                  ]
+                },
+                "annotations": {
+                  "type": "object"
+                },
+                "usernameRemoteProperty": {
+                  "type": "string"
+                },
+                "tokenRemoteProperty": {
+                  "type": "string"
+                },
+                "remoteVersion": {
+                  "type": "string"
+                },
+                "extraData": {
+                  "type": "array"
+                },
+                "dataFrom": {
+                  "type": "array"
+                },
+                "template": {
+                  "type": "object"
                 }
               }
             }
@@ -587,126 +696,6 @@
         },
         "namespace": {
           "type": "string"
-        }
-      }
-    },
-    "externalSecret": {
-      "type": "object",
-      "required": [
-        "enabled",
-        "refreshInterval",
-        "secretStoreRef",
-        "usernameRemoteKey",
-        "tokenRemoteKey",
-        "apiVersion",
-        "secretStore",
-        "creationPolicy",
-        "deletionPolicy"
-      ],
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "refreshInterval": {
-          "type": "string",
-          "minLength": 1
-        },
-        "secretStoreRef": {
-          "type": "object",
-          "required": [
-            "name",
-            "kind"
-          ],
-          "properties": {
-            "name": {
-              "type": "string",
-              "minLength": 1
-            },
-            "kind": {
-              "type": "string",
-              "minLength": 1
-            }
-          }
-        },
-        "usernameRemoteKey": {
-          "type": "string",
-          "minLength": 1
-        },
-        "tokenRemoteKey": {
-          "type": "string",
-          "minLength": 1
-        },
-        "apiVersion": {
-          "type": "string",
-          "enum": [
-            "external-secrets.io/v1",
-            "external-secrets.io/v1beta1"
-          ]
-        },
-        "secretStore": {
-          "type": "object",
-          "required": [
-            "create"
-          ],
-          "properties": {
-            "create": {
-              "type": "boolean"
-            },
-            "kind": {
-              "type": "string",
-              "enum": [
-                "SecretStore",
-                "ClusterSecretStore"
-              ]
-            },
-            "annotations": {
-              "type": "object"
-            },
-            "conditions": {
-              "type": "array"
-            },
-            "provider": {
-              "type": "object"
-            }
-          }
-        },
-        "creationPolicy": {
-          "type": "string",
-          "enum": [
-            "Owner",
-            "Orphan",
-            "Merge",
-            "None"
-          ]
-        },
-        "deletionPolicy": {
-          "type": "string",
-          "enum": [
-            "Retain",
-            "Delete",
-            "Merge"
-          ]
-        },
-        "annotations": {
-          "type": "object"
-        },
-        "usernameRemoteProperty": {
-          "type": "string"
-        },
-        "tokenRemoteProperty": {
-          "type": "string"
-        },
-        "remoteVersion": {
-          "type": "string"
-        },
-        "extraData": {
-          "type": "array"
-        },
-        "dataFrom": {
-          "type": "array"
-        },
-        "template": {
-          "type": "object"
         }
       }
     },

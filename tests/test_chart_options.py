@@ -92,7 +92,7 @@ def test_validation_runs_before_the_secret_templates() -> None:
 
 
 def test_external_secret_exposes_creation_options() -> None:
-    es = values()["externalSecret"]
+    es = values()["jenkins"]["credentials"]["externalSecret"]
     for key in [
         "apiVersion",
         "creationPolicy",
@@ -108,7 +108,7 @@ def test_external_secret_exposes_creation_options() -> None:
 
 def test_optional_secret_store_creation_is_templated() -> None:
     template = (CHART / "templates/externalsecret.yaml").read_text()
-    assert ".Values.externalSecret.secretStore.create" in template
+    assert ".Values.jenkins.credentials.externalSecret.secretStore.create" in template
     assert "provider" in template
     # The provider must be required when creating a store, or ESO gets a no-op.
     assert "required" in template
@@ -159,7 +159,8 @@ def test_gcp_example_matches_the_values_schema() -> None:
 
 
 def test_gcp_example_uses_the_documented_gcpsm_field_names() -> None:
-    gcpsm = gcp_example()["externalSecret"]["secretStore"]["provider"]["gcpsm"]
+    external = gcp_example()["jenkins"]["credentials"]["externalSecret"]
+    gcpsm = external["secretStore"]["provider"]["gcpsm"]
     assert "projectID" in gcpsm
     wi = gcpsm["auth"]["workloadIdentity"]
     for field in ["clusterProjectID", "clusterName", "clusterLocation", "serviceAccountRef"]:
@@ -168,7 +169,7 @@ def test_gcp_example_uses_the_documented_gcpsm_field_names() -> None:
 
 def test_gcp_cluster_store_reference_carries_a_namespace() -> None:
     """ClusterSecretStore has no namespace of its own, so ESO needs one here."""
-    es = gcp_example()["externalSecret"]
+    es = gcp_example()["jenkins"]["credentials"]["externalSecret"]
     assert es["secretStore"]["kind"] == "ClusterSecretStore"
     ref = es["secretStore"]["provider"]["gcpsm"]["auth"]["workloadIdentity"][
         "serviceAccountRef"
@@ -179,7 +180,7 @@ def test_gcp_cluster_store_reference_carries_a_namespace() -> None:
 def test_gcp_example_service_account_name_is_deterministic() -> None:
     """The SA the chart creates must match the name ESO is pointed at."""
     v = gcp_example()
-    ref = v["externalSecret"]["secretStore"]["provider"]["gcpsm"]["auth"][
+    ref = v["jenkins"]["credentials"]["externalSecret"]["secretStore"]["provider"]["gcpsm"]["auth"][
         "workloadIdentity"
     ]["serviceAccountRef"]
     # fullnameOverride pins the SA name; without it the SA is <release>-<chart>.
