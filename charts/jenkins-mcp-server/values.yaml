@@ -229,6 +229,10 @@ jenkins:
       enabled: true
       username: ""
       token: ""
+      # Keys written to the Secret and referenced by the workload. These belong
+      # to this source; changing existingSecret keys must not affect it.
+      usernameKey: JENKINS_USERNAME
+      tokenKey: JENKINS_TOKEN
 
     # 4. Have the External Secrets Operator create the Secret from an external
     #    store. Configure the store and remote keys under externalSecret below.
@@ -262,6 +266,10 @@ jenkins:
       creationPolicy: Owner
       deletionPolicy: Retain
       annotations: {}
+      # Keys ESO writes into the target Secret and the workload reads. When
+      # dataFrom is used, the remote data must still produce these two keys.
+      targetUsernameKey: JENKINS_USERNAME
+      targetTokenKey: JENKINS_TOKEN
       usernameRemoteKey: jenkins-mcp-username
       tokenRemoteKey: jenkins-mcp-token
       # Set when the remote secret stores JSON and the credential lives under a
@@ -270,7 +278,9 @@ jenkins:
       tokenRemoteProperty: ""
       # Pin a specific remote secret version; empty means latest.
       remoteVersion: ""
-      # Extra data entries appended to the generated ExternalSecret.
+      # Extra data entries appended to the generated ExternalSecret. Cannot be
+      # combined with dataFrom because ESO treats them as different source
+      # shapes and this chart will not silently ignore one.
       extraData: []
       # Use dataFrom instead of the per-key data block above (mutually exclusive).
       dataFrom: []
@@ -368,9 +378,6 @@ tailscale:
       replicas: 2
       hostnamePrefix: jenkins-egress
 
-# External Secrets Operator integration. Mutually exclusive with
-# jenkins.credentials.create — both would render <fullname>-credentials and
-# fight for ownership, so enabling both fails the render with a clear message.
 nodeSelector: {}
 tolerations: []
 affinity: {}

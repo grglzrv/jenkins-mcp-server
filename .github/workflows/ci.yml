@@ -95,7 +95,11 @@ jobs:
       - name: Version consistency
         run: make verify-version
       - name: Lint chart
-        run: helm lint --strict charts/jenkins-mcp-server
+        run: |
+          helm lint --strict charts/jenkins-mcp-server \
+            --set jenkins.url=https://jenkins.example.com \
+            --set jenkins.credentials.create.username=ci \
+            --set jenkins.credentials.create.token=ci-placeholder
       - name: Defaults require jenkins.url
         # The chart makes no assumption about the target Jenkins, so an install
         # with no values must fail with a clear message rather than render.
@@ -107,13 +111,17 @@ jobs:
       - name: Render default chart
         run: |
           helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
-            --set jenkins.url=https://jenkins.example.com > /tmp/default.yaml
+            --set jenkins.url=https://jenkins.example.com \
+            --set jenkins.credentials.create.username=ci \
+            --set jenkins.credentials.create.token=ci-placeholder > /tmp/default.yaml
       - name: Render production example
         run: helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/production.yaml
       - name: Render Minibridge Streamable HTTP with a custom endpoint
         run: |
           helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
             --set jenkins.url=https://jenkins.example.com \
+            --set jenkins.credentials.create.username=ci \
+            --set jenkins.credentials.create.token=ci-placeholder \
             --set minibridge.enabled=true \
             --set minibridge.mode=http \
             --set mcp.path=/custom-mcp > /tmp/minibridge-custom-path.yaml

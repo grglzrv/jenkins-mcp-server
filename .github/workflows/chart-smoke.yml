@@ -177,6 +177,196 @@ jobs:
           states=$(kubectl -n jenkins-mcp get pods -o jsonpath='{range .items[*]}{.metadata.name}{" phase="}{.status.phase}{range .status.containerStatuses[*]}{" | "}{.name}{"="}{.state}{end}{"\n"}{end}' 2>/dev/null | tr '\n' '~' | cut -c1-700)
           echo "::error::k3s ${{ matrix.k3s }} smoke failed :: ${states:-no pods}"
 
+  credential-sources:
+    # Proves the ownership and runtime contracts for all production credential
+    # modes. ESO uses its Kubernetes provider against an isolated source
+    # namespace, so this is a real reconciliation/rotation test rather than a
+    # CRD render check.
+    name: "credential sources (Helm, existing, ESO)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Pin ESO independently from this repository's application version.
+      ESO_CHART_VERSION: 2.8.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.2.3
+
+      - name: Start k3s
+        run: |
+          curl -sfL https://get.k3s.io | \
+            INSTALL_K3S_VERSION='v1.36.2+k3s1' \
+            INSTALL_K3S_EXEC='--disable traefik --disable metrics-server' \
+            sh -
+          sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+          echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> "$GITHUB_ENV"
+          kubectl wait --for=condition=Ready node --all --timeout=180s
+
+      - name: Build and import the application image
+        run: |
+          docker build -t jenkins-mcp-server:credentials-smoke .
+          docker save jenkins-mcp-server:credentials-smoke | sudo k3s ctr images import -
+
+      - name: Helm-managed Secret is owned, rotated, and deleted
+        run: |
+          kubectl create namespace credentials-managed
+          helm install managed charts/jenkins-mcp-server \
+            --namespace credentials-managed \
+            --set jenkins.url=https://jenkins.smoke.invalid \
+            --set jenkins.credentials.create.username=managed-user \
+            --set jenkins.credentials.create.token=managed-v1 \
+            --set image.repository=jenkins-mcp-server \
+            --set image.tag=credentials-smoke \
+            --set image.pullPolicy=Never \
+            --set replicaCount=1 \
+            --set podDisruptionBudget.enabled=false \
+            --wait --timeout 5m
+          secret=managed-jenkins-mcp-server-credentials
+          deployment=managed-jenkins-mcp-server
+          [ "$(kubectl -n credentials-managed get secret "$secret" -o jsonpath='{.data.JENKINS_TOKEN}' | base64 -d)" = managed-v1 ]
+          old_pod=$(kubectl -n credentials-managed get pod -l app.kubernetes.io/instance=managed -o jsonpath='{.items[0].metadata.name}')
+          helm upgrade managed charts/jenkins-mcp-server \
+            --namespace credentials-managed --reuse-values \
+            --set jenkins.credentials.create.token=managed-v2 \
+            --wait --timeout 5m
+          kubectl -n credentials-managed rollout status deployment/$deployment --timeout=180s
+          kubectl -n credentials-managed wait --for=delete pod/$old_pod --timeout=120s
+          new_pod=$(kubectl -n credentials-managed get pod -l app.kubernetes.io/instance=managed -o jsonpath='{.items[0].metadata.name}')
+          [ "$old_pod" != "$new_pod" ]
+          [ "$(kubectl -n credentials-managed exec deployment/$deployment -- python -c 'import os; print(os.environ["JENKINS_TOKEN"])')" = managed-v2 ]
+          helm uninstall managed --namespace credentials-managed --wait
+          kubectl -n credentials-managed wait --for=delete secret/$secret --timeout=60s
+
+      - name: Existing Secret is read but never owned or deleted
+        run: |
+          kubectl create namespace credentials-existing
+          kubectl -n credentials-existing create secret generic supplied-credentials \
+            --from-literal=custom-user=existing-user \
+            --from-literal=custom-token=existing-token
+          helm install existing charts/jenkins-mcp-server \
+            --namespace credentials-existing \
+            --set jenkins.url=https://jenkins.smoke.invalid \
+            --set jenkins.credentials.create.enabled=false \
+            --set jenkins.credentials.existingSecret.enabled=true \
+            --set jenkins.credentials.existingSecret.name=supplied-credentials \
+            --set jenkins.credentials.existingSecret.usernameKey=custom-user \
+            --set jenkins.credentials.existingSecret.tokenKey=custom-token \
+            --set image.repository=jenkins-mcp-server \
+            --set image.tag=credentials-smoke \
+            --set image.pullPolicy=Never \
+            --set replicaCount=1 \
+            --set podDisruptionBudget.enabled=false \
+            --wait --timeout 5m
+          [ "$(kubectl -n credentials-existing exec deployment/existing-jenkins-mcp-server -- python -c 'import os; print(os.environ["JENKINS_TOKEN"])')" = existing-token ]
+          helm uninstall existing --namespace credentials-existing --wait
+          kubectl -n credentials-existing get secret supplied-credentials
+
+      - name: Install pinned External Secrets Operator
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm repo update external-secrets
+          helm install external-secrets external-secrets/external-secrets \
+            --namespace external-secrets --create-namespace \
+            --version "$ESO_CHART_VERSION" \
+            --set installCRDs=true \
+            --wait --timeout 6m
+
+      - name: ESO Kubernetes provider syncs and rotates credentials
+        run: |
+          kubectl create namespace credentials-source
+          kubectl create namespace credentials-eso
+          kubectl -n credentials-source create secret generic jenkins-source \
+            --from-literal=username=eso-user \
+            --from-literal=token=eso-v1
+          kubectl -n credentials-eso create serviceaccount eso-kubernetes-reader
+          kubectl apply -f - <<'EOF'
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: eso-kubernetes-reader
+            namespace: credentials-source
+          rules:
+            - apiGroups: [""]
+              resources: ["secrets"]
+              verbs: ["get", "list", "watch"]
+            - apiGroups: ["authorization.k8s.io"]
+              resources: ["selfsubjectrulesreviews"]
+              verbs: ["create"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: eso-kubernetes-reader
+            namespace: credentials-source
+          subjects:
+            - kind: ServiceAccount
+              name: eso-kubernetes-reader
+              namespace: credentials-eso
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: eso-kubernetes-reader
+          EOF
+          helm install eso charts/jenkins-mcp-server \
+            --namespace credentials-eso \
+            --set jenkins.url=https://jenkins.smoke.invalid \
+            --set jenkins.credentials.create.enabled=false \
+            --set jenkins.credentials.externalSecret.enabled=true \
+            --set jenkins.credentials.externalSecret.refreshInterval=5s \
+            --set jenkins.credentials.externalSecret.secretStoreRef.name=kubernetes-store \
+            --set jenkins.credentials.externalSecret.secretStoreRef.kind=SecretStore \
+            --set jenkins.credentials.externalSecret.secretStore.create=true \
+            --set jenkins.credentials.externalSecret.secretStore.kind=SecretStore \
+            --set jenkins.credentials.externalSecret.secretStore.provider.kubernetes.remoteNamespace=credentials-source \
+            --set jenkins.credentials.externalSecret.secretStore.provider.kubernetes.server.caProvider.type=ConfigMap \
+            --set jenkins.credentials.externalSecret.secretStore.provider.kubernetes.server.caProvider.name=kube-root-ca.crt \
+            --set jenkins.credentials.externalSecret.secretStore.provider.kubernetes.server.caProvider.key=ca.crt \
+            --set jenkins.credentials.externalSecret.secretStore.provider.kubernetes.auth.serviceAccount.name=eso-kubernetes-reader \
+            --set jenkins.credentials.externalSecret.usernameRemoteKey=jenkins-source \
+            --set jenkins.credentials.externalSecret.usernameRemoteProperty=username \
+            --set jenkins.credentials.externalSecret.tokenRemoteKey=jenkins-source \
+            --set jenkins.credentials.externalSecret.tokenRemoteProperty=token \
+            --set image.repository=jenkins-mcp-server \
+            --set image.tag=credentials-smoke \
+            --set image.pullPolicy=Never \
+            --set replicaCount=1 \
+            --set podDisruptionBudget.enabled=false
+          kubectl -n credentials-eso wait --for=condition=Ready \
+            externalsecret/eso-jenkins-mcp-server --timeout=180s
+          kubectl -n credentials-eso rollout status deployment/eso-jenkins-mcp-server --timeout=180s
+          target=eso-jenkins-mcp-server-credentials
+          [ "$(kubectl -n credentials-eso get secret "$target" -o jsonpath='{.data.JENKINS_TOKEN}' | base64 -d)" = eso-v1 ]
+          kubectl -n credentials-source create secret generic jenkins-source \
+            --from-literal=username=eso-user \
+            --from-literal=token=eso-v2 \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n credentials-eso annotate externalsecret eso-jenkins-mcp-server \
+            force-sync="$(date +%s)" --overwrite
+          for _ in $(seq 1 90); do
+            token=$(kubectl -n credentials-eso get secret "$target" -o jsonpath='{.data.JENKINS_TOKEN}' 2>/dev/null | base64 -d || true)
+            [ "$token" = eso-v2 ] && break
+            sleep 2
+          done
+          [ "${token:-}" = eso-v2 ]
+          kubectl -n credentials-eso rollout restart deployment/eso-jenkins-mcp-server
+          kubectl -n credentials-eso rollout status deployment/eso-jenkins-mcp-server --timeout=180s
+          [ "$(kubectl -n credentials-eso exec deployment/eso-jenkins-mcp-server -- python -c 'import os; print(os.environ["JENKINS_TOKEN"])')" = eso-v2 ]
+
+      - name: Credential diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get externalsecrets,secretstores -A || true
+          kubectl get pods -A -o wide || true
+          kubectl -n external-secrets logs deployment/external-secrets --tail=150 || true
+          for namespace in credentials-managed credentials-existing credentials-eso; do
+            kubectl -n "$namespace" describe pods 2>/dev/null || true
+          done
+
   minibridge:
     # A running proxy proves nothing about the policy in front of it. This
     # installs the minibridge variant and speaks MCP through it, asserting that

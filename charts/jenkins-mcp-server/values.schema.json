@@ -283,7 +283,9 @@
             "create": {
               "type": "object",
               "required": [
-                "enabled"
+                "enabled",
+                "usernameKey",
+                "tokenKey"
               ],
               "properties": {
                 "enabled": {
@@ -294,6 +296,14 @@
                 },
                 "token": {
                   "type": "string"
+                },
+                "usernameKey": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "tokenKey": {
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -308,7 +318,9 @@
                 "apiVersion",
                 "secretStore",
                 "creationPolicy",
-                "deletionPolicy"
+                "deletionPolicy",
+                "targetUsernameKey",
+                "targetTokenKey"
               ],
               "properties": {
                 "enabled": {
@@ -340,6 +352,14 @@
                   "minLength": 1
                 },
                 "tokenRemoteKey": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "targetUsernameKey": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "targetTokenKey": {
                   "type": "string",
                   "minLength": 1
                 },

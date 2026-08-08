@@ -41,6 +41,9 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if eq (len $enabled) 0 }}
 {{- fail "no jenkins.credentials source is enabled. The server cannot start without a username and API token. Enable one of: existingSecret (reference a Secret you created), secretKeyRefs (a different Secret or key per field), create (chart-managed, disposable environments only), externalSecret (External Secrets Operator)." }}
 {{- end }}
+{{- if and $creds.externalSecret.enabled $creds.externalSecret.dataFrom $creds.externalSecret.extraData }}
+{{- fail "jenkins.credentials.externalSecret.dataFrom and extraData cannot be combined. dataFrom replaces the explicit data list, so extraData would be ignored; choose one source shape." }}
+{{- end }}
 
 {{- /* TLS trust settings. A CA bundle is only meaningful when verification is
        on, and only needed when the issuer is not publicly trusted. A publicly
@@ -125,7 +128,7 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- $credName := include "jenkins-mcp-server.credentialsSecretName" . }}
 {{- if and .Values.jenkins.credentials.externalSecret.enabled (eq .Values.minibridge.basicAuth.existingSecret $credName) }}
 {{- $key := .Values.minibridge.basicAuth.secretKey }}
-{{- $provided := list .Values.jenkins.credentials.existingSecret.usernameKey .Values.jenkins.credentials.existingSecret.tokenKey }}
+{{- $provided := list .Values.jenkins.credentials.externalSecret.targetUsernameKey .Values.jenkins.credentials.externalSecret.targetTokenKey }}
 {{- range .Values.jenkins.credentials.externalSecret.extraData }}{{- $provided = append $provided .secretKey }}{{- end }}
 {{- if and (not .Values.jenkins.credentials.externalSecret.dataFrom) (not (has $key $provided)) }}
 {{- fail (printf "minibridge.basicAuth points at the ExternalSecret target %q for key %q, but the ExternalSecret only creates keys %v. The pod would fail with CreateContainerConfigError. Add the key via externalSecret.extraData, or point basicAuth.existingSecret at a different Secret." $credName $key $provided) }}

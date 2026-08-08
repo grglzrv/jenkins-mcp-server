@@ -67,8 +67,12 @@ so each helper answers for whichever it is.
 {{- $c := .Values.jenkins.credentials -}}
 {{- if $c.secretKeyRefs.enabled -}}
 {{- required "jenkins.credentials.secretKeyRefs.username.key is required" $c.secretKeyRefs.username.key -}}
+{{- else if $c.existingSecret.enabled -}}
+{{- required "jenkins.credentials.existingSecret.usernameKey is required" $c.existingSecret.usernameKey -}}
+{{- else if $c.create.enabled -}}
+{{- required "jenkins.credentials.create.usernameKey is required" $c.create.usernameKey -}}
 {{- else -}}
-{{- $c.existingSecret.usernameKey | default "JENKINS_USERNAME" -}}
+{{- required "jenkins.credentials.externalSecret.targetUsernameKey is required" $c.externalSecret.targetUsernameKey -}}
 {{- end -}}
 {{- end }}
 
@@ -85,8 +89,12 @@ so each helper answers for whichever it is.
 {{- $c := .Values.jenkins.credentials -}}
 {{- if $c.secretKeyRefs.enabled -}}
 {{- required "jenkins.credentials.secretKeyRefs.token.key is required" $c.secretKeyRefs.token.key -}}
+{{- else if $c.existingSecret.enabled -}}
+{{- required "jenkins.credentials.existingSecret.tokenKey is required" $c.existingSecret.tokenKey -}}
+{{- else if $c.create.enabled -}}
+{{- required "jenkins.credentials.create.tokenKey is required" $c.create.tokenKey -}}
 {{- else -}}
-{{- $c.existingSecret.tokenKey | default "JENKINS_TOKEN" -}}
+{{- required "jenkins.credentials.externalSecret.targetTokenKey is required" $c.externalSecret.targetTokenKey -}}
 {{- end -}}
 {{- end }}
 
