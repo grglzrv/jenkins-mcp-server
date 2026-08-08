@@ -104,7 +104,7 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:3.0.1-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.1.0-minibridge
           imagePullPolicy: IfNotPresent
           # No args: the entrypoint follows Acuvity's single-container pattern:
           # public Streamable HTTP in Minibridge, private stdio to Jenkins.

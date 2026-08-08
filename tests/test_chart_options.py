@@ -1241,7 +1241,7 @@ def test_edge_and_release_images_cover_the_same_platforms() -> None:
 def test_documented_values_blocks_match_the_current_schema() -> None:
     """A values example in prose is as breaking as one in examples/.
 
-    The 3.0.0 restructure changed the shape of jenkins.credentials, and a
+    The 2.0.0 restructure changed the shape of jenkins.credentials, and a
     documented block that still shows the old form sends people to a render
     failure.
     """
@@ -1256,7 +1256,7 @@ def test_documented_values_blocks_match_the_current_schema() -> None:
             creds = (parsed.get("jenkins") or {}).get("credentials")
             if not creds:
                 continue
-            # Every source is an object with an enabled flag as of 3.0.0.
+            # Every source is an object with an enabled flag as of 2.0.0.
             for name, value in creds.items():
                 assert isinstance(value, dict), (
                     f"{doc}: jenkins.credentials.{name} must be an object, got {value!r}"
@@ -1265,5 +1265,5 @@ def test_documented_values_blocks_match_the_current_schema() -> None:
                     f"{doc}: jenkins.credentials.{name} is missing 'enabled'"
                 )
             assert "externalSecret" not in parsed, (
-                f"{doc}: externalSecret moved under jenkins.credentials in 3.0.0"
+                f"{doc}: externalSecret moved under jenkins.credentials in 2.0.0"
             )

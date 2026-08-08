@@ -40,12 +40,14 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
-## [3.0.1] - 2026-08-08
+## [2.1.0] - 2026-08-08
 
 ### Highlights
 
-- Credential delivery is now verified end to end for Helm-managed, existing
-  Secret, and External Secrets Operator modes.
+- The chart creates the credentials Secret by default, so a first install needs
+  only a Jenkins URL, username and token, and credential delivery is verified
+  end to end for Helm-managed, existing Secret, and External Secrets Operator
+  modes.
 
 ### New Features
 
@@ -55,6 +57,10 @@ from the matching version entry after CI validates it.
 
 ### Improvements
 
+- `jenkins.credentials.create.enabled` defaults to `true` and
+  `existingSecret.enabled` to `false`. Installing without credentials now fails
+  at render naming the missing value, instead of deploying a pod that waits
+  indefinitely for a Secret nobody created.
 - Each credential source now owns its target key names instead of reusing the
   disabled `existingSecret` source's settings.
 - Helm-managed credential changes add a pod-template checksum and roll the
@@ -71,48 +77,6 @@ from the matching version entry after CI validates it.
   chart-managed example uses the current nested token path.
 - `externalSecret.extraData` can no longer be silently ignored when `dataFrom`
   is configured; the chart rejects the ambiguous combination.
-
-### Breaking Changes
-
-- None.
-
-### Known Issues
-
-- None.
-
-### Security
-
-- Existing and ESO-managed credentials remain outside Helm release history;
-  the smoke suite proves that Helm uninstall preserves an existing Secret and
-  that ESO performs the target synchronization.
-
-### Upgrade Notes
-
-- No action is required with the default key names. If a chart-managed Secret
-  uses custom keys, set `create.usernameKey` and `create.tokenKey`. For ESO,
-  use `externalSecret.targetUsernameKey` and `targetTokenKey`.
-
-## [3.0.0] - 2026-08-08
-
-### Highlights
-
-- The chart creates the credentials Secret by default, so a first install needs
-  only a Jenkins URL, username and token.
-
-### New Features
-
-- None.
-
-### Improvements
-
-- `jenkins.credentials.create.enabled` defaults to `true` and
-  `existingSecret.enabled` to `false`. Installing without credentials now fails
-  at render naming the missing value, instead of deploying a pod that waits
-  indefinitely for a Secret nobody created.
-
-### Bug Fixes
-
-- None.
 
 ### Breaking Changes
 
@@ -143,13 +107,18 @@ from the matching version entry after CI validates it.
 - The default now stores the Jenkins API token in the Helm release, readable by
   anyone who can run `helm get values` on the namespace. That is an acceptable
   trade for a first install and is documented as such, but `existingSecret` or
-  `externalSecret` remain the right choice for anything longer-lived, and both
-  the chart README and the onboarding guide say so at the point of use.
+  `externalSecret` remain the right choice for anything longer-lived.
+- Existing and ESO-managed credentials remain outside Helm release history;
+  the smoke suite proves that Helm uninstall preserves an existing Secret and
+  that ESO performs the target synchronization.
 
 ### Upgrade Notes
 
 - If you set `existingSecret`, `secretKeyRefs` or `externalSecret`, add
-  `create: { enabled: false }` alongside it. Nothing else changes.
+  `create: { enabled: false }` alongside it. No action is required with the
+  default key names. If a chart-managed Secret uses custom keys, set
+  `create.usernameKey` and `create.tokenKey`. For ESO, use
+  `externalSecret.targetUsernameKey` and `targetTokenKey`.
 
 ## [2.0.0] - 2026-08-08
 

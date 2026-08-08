@@ -230,7 +230,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 3.0.1 \
+  --version 2.1.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -492,7 +492,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=3.0.1
+NEW_VERSION=2.1.0
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 
