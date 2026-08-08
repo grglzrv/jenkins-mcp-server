@@ -70,7 +70,7 @@ so each helper answers for whichever it is.
 {{- else if $c.existingSecret.enabled -}}
 {{- required "jenkins.credentials.existingSecret.usernameKey is required" $c.existingSecret.usernameKey -}}
 {{- else if $c.create.enabled -}}
-{{- required "jenkins.credentials.create.usernameKey is required" $c.create.usernameKey -}}
+{{- default "JENKINS_USERNAME" $c.create.usernameKey -}}
 {{- else -}}
 {{- required "jenkins.credentials.externalSecret.targetUsernameKey is required" $c.externalSecret.targetUsernameKey -}}
 {{- end -}}
@@ -92,7 +92,7 @@ so each helper answers for whichever it is.
 {{- else if $c.existingSecret.enabled -}}
 {{- required "jenkins.credentials.existingSecret.tokenKey is required" $c.existingSecret.tokenKey -}}
 {{- else if $c.create.enabled -}}
-{{- required "jenkins.credentials.create.tokenKey is required" $c.create.tokenKey -}}
+{{- default "JENKINS_TOKEN" $c.create.tokenKey -}}
 {{- else -}}
 {{- required "jenkins.credentials.externalSecret.targetTokenKey is required" $c.externalSecret.targetTokenKey -}}
 {{- end -}}

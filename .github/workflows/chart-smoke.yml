@@ -56,6 +56,11 @@ jobs:
 
       - name: Wait for the node
         run: |
+          for _ in $(seq 1 90); do
+            kubectl get nodes -o name 2>/dev/null | grep -q . && break
+            sleep 2
+          done
+          kubectl get nodes -o name | grep -q .
           kubectl wait --for=condition=Ready node --all --timeout=180s
           kubectl version
           echo "server: $(kubectl version -o json | python3 -c 'import json,sys;print(json.load(sys.stdin)["serverVersion"]["gitVersion"])')"
@@ -205,6 +210,11 @@ jobs:
           sudo chmod 644 /etc/rancher/k3s/k3s.yaml
           export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
           echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> "$GITHUB_ENV"
+          for _ in $(seq 1 90); do
+            kubectl get nodes -o name 2>/dev/null | grep -q . && break
+            sleep 2
+          done
+          kubectl get nodes -o name | grep -q .
           kubectl wait --for=condition=Ready node --all --timeout=180s
 
       - name: Build and import the application image
@@ -402,7 +412,13 @@ jobs:
           echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> "$GITHUB_ENV"
 
       - name: Wait for the node
-        run: kubectl wait --for=condition=Ready node --all --timeout=180s
+        run: |
+          for _ in $(seq 1 90); do
+            kubectl get nodes -o name 2>/dev/null | grep -q . && break
+            sleep 2
+          done
+          kubectl get nodes -o name | grep -q .
+          kubectl wait --for=condition=Ready node --all --timeout=180s
 
       - name: Build the minibridge image and import it
         run: |
@@ -496,6 +512,11 @@ jobs:
           sudo chmod 644 /etc/rancher/k3s/k3s.yaml
           export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
           echo "KUBECONFIG=$KUBECONFIG" >> "$GITHUB_ENV"
+          for _ in $(seq 1 90); do
+            kubectl get nodes -o name 2>/dev/null | grep -q . && break
+            sleep 2
+          done
+          kubectl get nodes -o name | grep -q .
           kubectl wait --for=condition=Ready node --all --timeout=180s
 
       - name: Build Jenkins and Minibridge images

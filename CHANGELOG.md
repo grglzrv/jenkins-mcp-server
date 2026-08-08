@@ -40,6 +40,48 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.1.1] - 2026-08-08
+
+### Highlights
+
+- Chart-managed credentials now expose only the real username and token values
+  in normal configuration; Secret key names are stable implementation details.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- `create.usernameKey` and `create.tokenKey` are removed from default values and
+  deprecated in the schema. Existing 2.x overrides remain supported, while new
+  installs use `JENKINS_USERNAME` and `JENKINS_TOKEN` directly.
+- Every k3s smoke waits for a node object to exist before waiting for readiness,
+  removing a runner startup race that could fail a release before tests began.
+
+### Bug Fixes
+
+- The values file no longer labels the disabled `existingSecret` source as the
+  installation default; it is now described as the production recommendation.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Chart-managed tokens remain stored in Helm release history; use an existing
+  Secret or External Secrets Operator for production credentials.
+
+### Upgrade Notes
+
+- No action is required. Existing custom chart-managed key overrides continue
+  to work in 2.x, but new configurations should omit them.
+
 ## [2.1.0] - 2026-08-08
 
 ### Highlights

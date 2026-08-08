@@ -118,9 +118,10 @@ def test_optional_secret_store_creation_is_templated() -> None:
 
 def test_credential_sources_own_their_key_names() -> None:
     creds = values()["jenkins"]["credentials"]
-    for source in ["existingSecret", "create"]:
-        assert creds[source]["usernameKey"] == "JENKINS_USERNAME"
-        assert creds[source]["tokenKey"] == "JENKINS_TOKEN"
+    assert creds["existingSecret"]["usernameKey"] == "JENKINS_USERNAME"
+    assert creds["existingSecret"]["tokenKey"] == "JENKINS_TOKEN"
+    assert "usernameKey" not in creds["create"]
+    assert "tokenKey" not in creds["create"]
     external = creds["externalSecret"]
     assert external["targetUsernameKey"] == "JENKINS_USERNAME"
     assert external["targetTokenKey"] == "JENKINS_TOKEN"
@@ -128,12 +129,24 @@ def test_credential_sources_own_their_key_names() -> None:
     helpers = (CHART / "templates/_helpers.tpl").read_text()
     secret = (CHART / "templates/secret.yaml").read_text()
     external_template = (CHART / "templates/externalsecret.yaml").read_text()
-    for path in ["create.usernameKey", "create.tokenKey"]:
+    for key, path in [
+        ("JENKINS_USERNAME", "create.usernameKey"),
+        ("JENKINS_TOKEN", "create.tokenKey"),
+    ]:
+        assert f'default "{key}"' in helpers
+        assert f'default "{key}"' in secret
         assert path in helpers and path in secret
     for path in ["externalSecret.targetUsernameKey", "externalSecret.targetTokenKey"]:
         assert path in helpers and path in external_template
     assert "existingSecret.usernameKey" not in secret
     assert "existingSecret.tokenKey" not in secret
+
+    create_schema = schema()["properties"]["jenkins"]["properties"][
+        "credentials"
+    ]["properties"]["create"]
+    assert create_schema["required"] == ["enabled"]
+    assert create_schema["properties"]["usernameKey"]["deprecated"] is True
+    assert create_schema["properties"]["tokenKey"]["deprecated"] is True
 
 
 def test_secret_rotation_contracts_are_explicit_and_smoked() -> None:
@@ -152,6 +165,7 @@ def test_secret_rotation_contracts_are_explicit_and_smoked() -> None:
         "provider.kubernetes.remoteNamespace",
     ]:
         assert marker in workflow
+    assert workflow.count("kubectl get nodes -o name 2>/dev/null") == 4
 
 
 def test_values_and_production_example_still_match_schema() -> None:
@@ -742,7 +756,7 @@ def test_version_bump_updates_every_pin_and_detects_future_unmanaged_files(
         copied,
         ignore=shutil.ignore_patterns(
             ".git", ".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache",
-            "__pycache__", "build", "dist",
+            "pytest-of-root", "__pycache__", "build", "dist",
         ),
     )
     # Model a maintainer completing the fresh Unreleased template before the

@@ -283,9 +283,7 @@
             "create": {
               "type": "object",
               "required": [
-                "enabled",
-                "usernameKey",
-                "tokenKey"
+                "enabled"
               ],
               "properties": {
                 "enabled": {
@@ -299,11 +297,15 @@
                 },
                 "usernameKey": {
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "deprecated": true,
+                  "description": "Deprecated compatibility override; chart-managed Secrets use JENKINS_USERNAME by default."
                 },
                 "tokenKey": {
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "deprecated": true,
+                  "description": "Deprecated compatibility override; chart-managed Secrets use JENKINS_TOKEN by default."
                 }
               }
             },

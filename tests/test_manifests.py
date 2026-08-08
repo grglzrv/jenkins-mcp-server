@@ -199,10 +199,10 @@ def test_raw_network_policy_allows_dynamic_tailscale_proxy_ports():
     assert "ports" not in tailscale_rules[0]
 
 
-def test_credential_secret_uses_configurable_key_names():
+def test_chart_managed_secret_uses_stable_default_key_names():
     template = (ROOT / "charts/jenkins-mcp-server/templates/secret.yaml").read_text()
-    assert ".Values.jenkins.credentials.create.usernameKey" in template
-    assert ".Values.jenkins.credentials.create.tokenKey" in template
+    assert 'default "JENKINS_USERNAME"' in template
+    assert 'default "JENKINS_TOKEN"' in template
     assert ".Values.jenkins.credentials.existingSecret" not in template
 
 
