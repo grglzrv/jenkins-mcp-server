@@ -48,7 +48,7 @@ Notes on the last three:
 
 - If they **do** use External Secrets, ask which provider (GCP Secret Manager,
   AWS Secrets Manager, Vault, ...), the `SecretStore` or `ClusterSecretStore`
-  name, and the remote keys holding the Jenkins username and token. Then use
+  name, and the remote keys holding the Jenkins user ID and API token. Then use
   `jenkins.credentials.externalSecret.*` instead of creating a Secret by hand, and see
   `examples/values/external-secrets-gcp.yaml`.
 - If they **do** want an ingress, ask for the `ingressClassName` and the
@@ -80,16 +80,23 @@ permission each tool needs.
 
 ## Phase 3 — Create the namespace and the credentials Secret
 
-Ask for the username and token, then run this yourself so neither value is
+Ask for the Jenkins user ID and its API token, then run this yourself so neither value is
 echoed. Do not put them in a file.
 
 ```bash
 kubectl create namespace jenkins-mcp
 
 kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
-  --from-literal=JENKINS_USERNAME='<username>' \
+  --from-literal=JENKINS_USERNAME='<actual-jenkins-login-id>' \
   --from-literal=JENKINS_TOKEN='<api-token>'
 ```
+
+The first value is the actual value that replaces `{0}` in Jenkins' configured
+LDAP **User search filter** for the user that generated the API token. With the
+common `uid={0}` filter, use that account's LDAP `uid`; with a custom filter,
+use the matching attribute value. Do not copy the placeholder or use an email
+or display name unless the filter searches that field. The API token must come
+from that same Jenkins user.
 
 Check, without revealing the values:
 

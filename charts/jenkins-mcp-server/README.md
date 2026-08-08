@@ -52,21 +52,19 @@ the chart's declared minimum.
 ## Quick start
 
 The chart assumes nothing about the cluster: no ingress controller, no
-Tailscale, no service mesh. Two things are required — the Jenkins URL and a
-Secret holding the credentials.
+Tailscale, no service mesh. The default `create.enabled=true` path needs only
+the Jenkins URL, the exact LDAP-backed Jenkins user ID, and its API token; Helm
+creates the credentials Secret.
 
 ```bash
-kubectl create namespace jenkins-mcp
-
-kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
-  --from-literal=JENKINS_USERNAME=<jenkins-user> \
-  --from-literal=JENKINS_TOKEN='<jenkins-api-token>'
-
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.2.0 \
+  --version 2.3.0 \
   --namespace jenkins-mcp \
-  --set jenkins.url=https://jenkins.example.com
+  --create-namespace \
+  --set jenkins.url=https://jenkins.example.com \
+  --set-string jenkins.credentials.create.jenkinsUserId='<actual-jenkins-login-id>' \
+  --set-string jenkins.credentials.create.jenkinsApiToken='<jenkins-api-token>'
 ```
 
 That gives a ClusterIP Service reachable in-cluster at
@@ -83,7 +81,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.2.0 \
+  --version 2.3.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -99,7 +97,7 @@ before installing (or use External Secrets):
 ```bash
 kubectl create namespace jenkins-mcp
 kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
-  --from-literal=JENKINS_USERNAME=hermes-jenkins \
+  --from-literal=JENKINS_USERNAME='<actual-jenkins-login-id>' \
   --from-literal=JENKINS_TOKEN='<JENKINS_API_TOKEN>'
 ```
 
@@ -108,9 +106,9 @@ Secrets Operator is available; the store, remote keys and policies are
 configured in the same block.
 
 For a disposable install, the default chart-managed source instead requires
-`jenkins.credentials.create.JENKINS_USERNAME` and
-`jenkins.credentials.create.JENKINS_TOKEN`. These are the exact keys written
-to the generated Secret. Helm stores both values in release history.
+`jenkins.credentials.create.jenkinsUserId` and
+`jenkins.credentials.create.jenkinsApiToken`. Helm stores both values in
+release history.
 
 ## Tailscale integration (optional)
 
@@ -182,13 +180,13 @@ render rather than resolving silently.
 | :--- | :--- | :--- |
 | Chart-managed | `jenkins.credentials.create.enabled: true` *(default)* | Disposable environments only — the token lands in the Helm release |
 | Existing Secret | `jenkins.credentials.existingSecret.enabled: true` | Recommended production default. You create one Secret containing both values. Set `name`, and `usernameKey` / `tokenKey` if they differ from `JENKINS_USERNAME` / `JENKINS_TOKEN` |
-| Advanced split references | `jenkins.credentials.secretKeyRefs.enabled: true` | Only when the username and token come from different Secret objects; for one Secret, use `existingSecret` |
+| Advanced split references | `jenkins.credentials.secretKeyRefs.enabled: true` | Only when the user ID and API token come from different Secret objects; for one Secret, use `existingSecret` |
 | External Secrets | `jenkins.credentials.externalSecret.enabled: true` | External Secrets Operator syncs it from an external store; configure the store under `jenkins.credentials.externalSecret` |
 
-The default is chart-managed, so a first install needs only a username and
-token. That stores the token in the Helm release, where anyone who can run
-`helm get values` can read it, so move to an existing Secret for anything
-longer-lived:
+The default is chart-managed, so a first install needs only a Jenkins user ID
+and its API token. That stores the token in the Helm release, where anyone who
+can run `helm get values` can read it, so move to an existing Secret for
+anything longer-lived:
 
 ```yaml
 jenkins:
@@ -212,16 +210,27 @@ jenkins:
   credentials:
     create:
       enabled: true
-      JENKINS_USERNAME: hermes-jenkins # required
-      JENKINS_TOKEN: ""                # required: supply securely
+      # Set the actual value matching {0} in Jenkins' LDAP User search filter.
+      jenkinsUserId: "" # required
+      # Generate this token from the same Jenkins user ID above.
+      jenkinsApiToken: ""             # required: supply securely
 ```
 
+`jenkinsUserId` is the exact login value Jenkins uses for the account that
+created the token. Check the controller's LDAP **User search filter** under the
+Security Realm configuration (or in JCasC): the real user ID is the value that
+replaces `{0}`. With the common `uid={0}` filter, use the account's LDAP `uid`;
+with a custom filter, use the value of the attribute that filter searches. Do
+not copy a documentation placeholder or use a display name/email unless that
+is the configured search attribute. `jenkinsApiToken` must be generated from
+that same Jenkins user, otherwise Basic authentication fails.
 Both values are required when `create.enabled=true`; empty defaults force an
-install-time error instead of deploying with fake credentials. Existing
-Secrets and ESO targets keep key-name settings because those objects may use
-names the chart does not control. Deprecated `create.username`, `token`,
-`usernameKey`, and `tokenKey` remain accepted for 2.x upgrades, but new values
-should use the uppercase fields. Helm-managed credential changes add a
+install-time error instead of deploying with fake credentials. Existing Secrets
+and ESO targets keep key-name settings because those objects may use names the
+chart does not control. Deprecated
+`create.JENKINS_USERNAME`, `JENKINS_TOKEN`, `username`, `token`, `usernameKey`,
+and `tokenKey` remain accepted for 2.x upgrades, but new values should use
+`jenkinsUserId` and `jenkinsApiToken`. Helm-managed credential changes add a
 pod-template checksum and roll the Deployment automatically. Existing Secrets
 and ESO targets update independently of Helm; restart the Deployment after a
 rotation because environment variables in a running process are immutable.
@@ -371,7 +380,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.2.0
+NEW_VERSION=2.3.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

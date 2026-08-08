@@ -34,7 +34,7 @@ not installed on every controller.
 
 ```bash
 JENKINS_URL=https://jenkins.example.com \
-JENKINS_USERNAME=me \
+JENKINS_USERNAME='<actual-jenkins-login-id>' \
 JENKINS_TOKEN=<api-token> \
   ./scripts/dump_jenkins_plugins.sh > integration/jenkins/plugins-legacy.txt
 
@@ -133,6 +133,13 @@ by this server.
 Username plus **API token**, sent as HTTP basic auth. Use a token, not the
 account password: tokens are revocable individually and are not accepted for
 interactive login.
+
+For an LDAP security realm, `JENKINS_USERNAME` is the actual value that replaces
+`{0}` in the controller's configured **User search filter**. With the common
+`uid={0}` filter, use the account's LDAP `uid`; with a custom filter, use the
+matching attribute value. There is no universal object-ID format. Do not copy a
+documentation placeholder or use a display name/email unless the filter
+searches that field. Generate `JENKINS_TOKEN` from that same Jenkins user.
 
 Create one at *People → your user → Security → API Token → Add new Token*.
 

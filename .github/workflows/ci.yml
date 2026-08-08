@@ -98,8 +98,8 @@ jobs:
         run: |
           helm lint --strict charts/jenkins-mcp-server \
             --set jenkins.url=https://jenkins.example.com \
-            --set jenkins.credentials.create.JENKINS_USERNAME=ci \
-            --set jenkins.credentials.create.JENKINS_TOKEN=ci-placeholder
+            --set jenkins.credentials.create.jenkinsUserId=ci \
+            --set jenkins.credentials.create.jenkinsApiToken=ci-placeholder
       - name: Defaults require jenkins.url
         # The chart makes no assumption about the target Jenkins, so an install
         # with no values must fail with a clear message rather than render.
@@ -112,16 +112,16 @@ jobs:
         run: |
           helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
             --set jenkins.url=https://jenkins.example.com \
-            --set jenkins.credentials.create.JENKINS_USERNAME=ci \
-            --set jenkins.credentials.create.JENKINS_TOKEN=ci-placeholder > /tmp/default.yaml
+            --set jenkins.credentials.create.jenkinsUserId=ci \
+            --set jenkins.credentials.create.jenkinsApiToken=ci-placeholder > /tmp/default.yaml
       - name: Render production example
         run: helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/production.yaml
       - name: Render Minibridge Streamable HTTP with a custom endpoint
         run: |
           helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
             --set jenkins.url=https://jenkins.example.com \
-            --set jenkins.credentials.create.JENKINS_USERNAME=ci \
-            --set jenkins.credentials.create.JENKINS_TOKEN=ci-placeholder \
+            --set jenkins.credentials.create.jenkinsUserId=ci \
+            --set jenkins.credentials.create.jenkinsApiToken=ci-placeholder \
             --set minibridge.enabled=true \
             --set minibridge.mode=http \
             --set mcp.path=/custom-mcp > /tmp/minibridge-custom-path.yaml
@@ -139,7 +139,7 @@ jobs:
           for f in examples/values/*.yaml; do
             echo "rendering $f"
             helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
-              -f "$f" --set jenkins.credentials.create.JENKINS_TOKEN=ci-placeholder > /dev/null
+              -f "$f" --set jenkins.credentials.create.jenkinsApiToken=ci-placeholder > /dev/null
           done
       - name: Build the kustomize targets
         run: |
