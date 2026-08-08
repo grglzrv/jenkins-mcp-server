@@ -40,6 +40,54 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.3.1] - 2026-08-08
+
+### Highlights
+
+- Existing-Secret examples now show the complete Secret reference contract:
+  Secret name, Jenkins user ID key, and API token key.
+
+### New Features
+
+- None. This patch changes examples, documentation, and regression coverage.
+
+### Improvements
+
+- Made `usernameKey` and `tokenKey` explicit in every enabled
+  `existingSecret` example, including Argo CD, production, Minibridge,
+  onboarding, and CI smoke values.
+- Clarified across the main README, chart README, examples guide, and security
+  guide that production values should state all three existing-Secret fields.
+
+### Bug Fixes
+
+- Removed inconsistent reliance on implicit existing-Secret key defaults from
+  shipped examples.
+- Documented that raw Kubernetes manifests use the fixed environment keys
+  `JENKINS_USERNAME` and `JENKINS_TOKEN`; Helm key overrides do not apply to
+  those manifests.
+
+### Breaking Changes
+
+- None. Chart defaults and runtime Secret keys are unchanged.
+
+### Known Issues
+
+- Raw-manifest users must retain the fixed `JENKINS_USERNAME` and
+  `JENKINS_TOKEN` keys, while Helm users may reference custom key names through
+  `existingSecret.usernameKey` and `existingSecret.tokenKey`.
+
+### Security
+
+- No secret values were added. Examples continue to contain placeholders and
+  reference Kubernetes Secrets rather than embedding credentials in workloads.
+
+### Upgrade Notes
+
+- No values migration is required from 2.3.0. Existing installations keep the
+  same defaults; copying a refreshed example simply makes both key names
+  explicit.
+
 ## [2.3.0] - 2026-08-08
 
 ### Highlights

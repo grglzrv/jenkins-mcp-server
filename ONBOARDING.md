@@ -125,6 +125,8 @@ jenkins:
     existingSecret:
       enabled: true
       name: jenkins-mcp-secrets
+      usernameKey: JENKINS_USERNAME
+      tokenKey: JENKINS_TOKEN
 
 mcp:
   allowedJobs: "*"                     # narrow to the folders they named

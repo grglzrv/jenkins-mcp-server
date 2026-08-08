@@ -206,6 +206,33 @@ def test_chart_managed_secret_uses_stable_default_key_names():
     assert ".Values.jenkins.credentials.existingSecret" not in template
 
 
+def test_raw_deploy_credentials_use_the_fixed_environment_key_contract():
+    secret = load("deploy/kubernetes/secret.example.yaml")[0]
+    assert set(secret["stringData"]) == {"JENKINS_USERNAME", "JENKINS_TOKEN"}
+
+    external = load("deploy/kubernetes/external-secret-gcp.example.yaml")[0]
+    target_keys = {entry["secretKey"] for entry in external["spec"]["data"]}
+    assert target_keys == {"JENKINS_USERNAME", "JENKINS_TOKEN"}
+
+    deployment = load("deploy/kubernetes/base/deployment.yaml")[0]
+    env_from = deployment["spec"]["template"]["spec"]["containers"][0]["envFrom"]
+    assert {item["secretRef"]["name"] for item in env_from if "secretRef" in item} == {
+        "jenkins-mcp-secrets"
+    }
+
+    standalone = load("deploy/kubernetes/minibridge/standalone-deployment.yaml")
+    standalone_secret = next(
+        document
+        for document in standalone
+        if document["kind"] == "Secret"
+        and document["metadata"]["name"] == "jenkins-mcp-secrets"
+    )
+    assert set(standalone_secret["stringData"]) == {
+        "JENKINS_USERNAME",
+        "JENKINS_TOKEN",
+    }
+
+
 def test_base_manifests_are_environment_neutral():
     """The base must not carry an ingress tied to one controller."""
     base = ROOT / "deploy/kubernetes/base"
