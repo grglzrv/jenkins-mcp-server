@@ -100,6 +100,10 @@ Use the `ADDRESS` value and append `/mcp`. Configure that URL in your MCP
 client using its documented schema; there is no universal
 `mcp_servers.jenkins` configuration block.
 
+For Hermes Agent specifically, `mcp_servers` is the correct top-level key. Use
+the `url` and optional `timeout` fields shown in
+`deploy/hermes/mcp-config.yaml`; Hermes infers HTTP transport from `url`.
+
 | Field | Value |
 | --- | --- |
 | Name | `jenkins` |

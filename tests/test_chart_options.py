@@ -144,11 +144,10 @@ def test_credential_sources_own_their_key_names() -> None:
     create_schema = schema()["properties"]["jenkins"]["properties"][
         "credentials"
     ]["properties"]["create"]
-    assert create_schema["required"] == [
-        "enabled",
-        "JENKINS_USERNAME",
-        "JENKINS_TOKEN",
-    ]
+    # The template conditionally requires one complete current/legacy pair.
+    # Keeping only enabled at schema level lets --reuse-values upgrades from
+    # 2.1 and 2.2 reach that compatibility logic.
+    assert create_schema["required"] == ["enabled"]
     assert create_schema["properties"]["usernameKey"]["deprecated"] is True
     assert create_schema["properties"]["tokenKey"]["deprecated"] is True
 
@@ -299,7 +298,7 @@ def test_secret_examples_cover_all_four_credential_paths() -> None:
     # Must be empty or the chart references that Secret instead of creating one.
     assert managed["jenkins"]["credentials"]["existingSecret"]["enabled"] is False
     # A real token must never be committed in an example.
-    assert not managed["jenkins"]["credentials"]["create"]["JENKINS_TOKEN"]
+    assert not managed["jenkins"]["credentials"]["create"]["jenkinsApiToken"]
 
     per_field = yaml.safe_load((EXAMPLES / "per-field-secret-refs.yaml").read_text())
     refs = per_field["jenkins"]["credentials"]["secretKeyRefs"]
@@ -307,23 +306,71 @@ def test_secret_examples_cover_all_four_credential_paths() -> None:
     assert refs["username"]["name"] != refs["token"]["name"]
 
 
-def test_chart_managed_credentials_use_real_secret_keys() -> None:
+def test_chart_managed_credentials_name_the_user_id_and_api_token() -> None:
     create = values()["jenkins"]["credentials"]["create"]
-    assert "JENKINS_USERNAME" in create
-    assert "JENKINS_TOKEN" in create
+    assert "jenkinsUserId" in create
+    assert "jenkinsApiToken" in create
+    assert "JENKINS_USERNAME" not in create
+    assert "JENKINS_TOKEN" not in create
     assert "username" not in create
     assert "token" not in create
 
     secret = (CHART / "templates/secret.yaml").read_text()
-    assert 'index $create "JENKINS_USERNAME"' in secret
-    assert 'index $create "JENKINS_TOKEN"' in secret
+    assert "$create.jenkinsUserId" in secret
+    assert "$create.jenkinsApiToken" in secret
 
 
 def test_legacy_chart_managed_fields_remain_accepted_for_v2() -> None:
     credentials_schema = schema()["properties"]["jenkins"]["properties"]["credentials"]
     create_schema = credentials_schema["properties"]["create"]
-    for field in ["username", "token", "usernameKey", "tokenKey"]:
+    for field in [
+        "JENKINS_USERNAME",
+        "JENKINS_TOKEN",
+        "username",
+        "token",
+        "usernameKey",
+        "tokenKey",
+    ]:
         assert create_schema["properties"][field]["deprecated"] is True
+    jsonschema.validate(
+        {
+            "enabled": True,
+            "JENKINS_USERNAME": "2.2-user-id",
+            "JENKINS_TOKEN": "2.2-api-token",
+        },
+        create_schema,
+    )
+    jsonschema.validate(
+        {"enabled": True, "username": "2.1-user-id", "token": "2.1-api-token"},
+        create_schema,
+    )
+
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    for field in [
+        "jenkinsUserId",
+        "jenkinsApiToken",
+        "JENKINS_USERNAME",
+        "JENKINS_TOKEN",
+        "username",
+        "token",
+    ]:
+        assert f"jenkins.credentials.create.{field}" in workflow
+    assert 'cmp "$render_dir/current.yaml" "$render_dir/v2.2.yaml"' in workflow
+    assert 'cmp "$render_dir/current.yaml" "$render_dir/v2.1.yaml"' in workflow
+
+
+def test_ldap_user_id_semantics_are_explicit() -> None:
+    docs = "\n".join(
+        path.read_text()
+        for path in [
+            ROOT / "README.md",
+            ROOT / "ONBOARDING.md",
+            CHART / "README.md",
+            CHART / "values.yaml",
+        ]
+    )
+    for phrase in ["LDAP", "User search filter", "{0}", "display name", "same Jenkins user"]:
+        assert phrase in docs
 
 
 def test_per_field_credential_refs_are_wired_and_validated() -> None:
@@ -515,6 +562,18 @@ def test_client_docs_do_not_invent_a_universal_config_schema() -> None:
         text = path.read_text()
         assert "mcp_servers:" not in text, path
         assert "Streamable HTTP" in text, path
+
+
+def test_hermes_examples_use_the_current_http_mcp_schema() -> None:
+    for path in [
+        ROOT / "deploy/hermes/mcp-config.yaml",
+        ROOT / "deploy/hermes/mcp-config-in-cluster.yaml",
+    ]:
+        config = yaml.safe_load(path.read_text())
+        jenkins = config["mcp_servers"]["jenkins"]
+        assert set(jenkins) == {"url", "timeout"}, path
+        assert jenkins["url"].endswith("/mcp"), path
+        assert jenkins["timeout"] == 60, path
 
 
 

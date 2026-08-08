@@ -4,6 +4,7 @@
 # jenkins-mcp. The Helm chart names it <release>-jenkins-mcp-server.
 mcp_servers:
   jenkins:
-    transport: streamable_http
     url: http://jenkins-mcp.jenkins-mcp.svc.cluster.local:8000/mcp
-    timeout_seconds: 60
+    # Hermes detects HTTP transport from url. "transport" is not a supported
+    # key here; timeout is the per-tool-call timeout in seconds.
+    timeout: 60

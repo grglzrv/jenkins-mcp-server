@@ -228,8 +228,8 @@ jobs:
           helm install managed charts/jenkins-mcp-server \
             --namespace credentials-managed \
             --set jenkins.url=https://jenkins.smoke.invalid \
-            --set jenkins.credentials.create.JENKINS_USERNAME=managed-user \
-            --set jenkins.credentials.create.JENKINS_TOKEN=managed-v1 \
+            --set jenkins.credentials.create.jenkinsUserId=managed-user \
+            --set jenkins.credentials.create.jenkinsApiToken=managed-v1 \
             --set image.repository=jenkins-mcp-server \
             --set image.tag=credentials-smoke \
             --set image.pullPolicy=Never \
@@ -242,7 +242,7 @@ jobs:
           old_pod=$(kubectl -n credentials-managed get pod -l app.kubernetes.io/instance=managed -o jsonpath='{.items[0].metadata.name}')
           helm upgrade managed charts/jenkins-mcp-server \
             --namespace credentials-managed --reuse-values \
-            --set jenkins.credentials.create.JENKINS_TOKEN=managed-v2 \
+            --set jenkins.credentials.create.jenkinsApiToken=managed-v2 \
             --wait --timeout 5m
           kubectl -n credentials-managed rollout status deployment/$deployment --timeout=180s
           kubectl -n credentials-managed wait --for=delete pod/$old_pod --timeout=120s

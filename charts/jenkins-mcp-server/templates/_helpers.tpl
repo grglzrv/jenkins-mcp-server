@@ -70,9 +70,11 @@ so each helper answers for whichever it is.
 {{- else if $c.existingSecret.enabled -}}
 {{- required "jenkins.credentials.existingSecret.usernameKey is required" $c.existingSecret.usernameKey -}}
 {{- else if $c.create.enabled -}}
-{{- $canonicalUsername := default "" (index $c.create "JENKINS_USERNAME") -}}
-{{- $canonicalToken := default "" (index $c.create "JENKINS_TOKEN") -}}
-{{- if or $canonicalUsername $canonicalToken -}}JENKINS_USERNAME{{- else -}}
+{{- $userId := default "" $c.create.jenkinsUserId -}}
+{{- $apiToken := default "" $c.create.jenkinsApiToken -}}
+{{- $uppercaseUserId := default "" (index $c.create "JENKINS_USERNAME") -}}
+{{- $uppercaseApiToken := default "" (index $c.create "JENKINS_TOKEN") -}}
+{{- if or $userId $apiToken $uppercaseUserId $uppercaseApiToken -}}JENKINS_USERNAME{{- else -}}
 {{- default "JENKINS_USERNAME" $c.create.usernameKey -}}
 {{- end -}}
 {{- else -}}
@@ -96,9 +98,11 @@ so each helper answers for whichever it is.
 {{- else if $c.existingSecret.enabled -}}
 {{- required "jenkins.credentials.existingSecret.tokenKey is required" $c.existingSecret.tokenKey -}}
 {{- else if $c.create.enabled -}}
-{{- $canonicalUsername := default "" (index $c.create "JENKINS_USERNAME") -}}
-{{- $canonicalToken := default "" (index $c.create "JENKINS_TOKEN") -}}
-{{- if or $canonicalUsername $canonicalToken -}}JENKINS_TOKEN{{- else -}}
+{{- $userId := default "" $c.create.jenkinsUserId -}}
+{{- $apiToken := default "" $c.create.jenkinsApiToken -}}
+{{- $uppercaseUserId := default "" (index $c.create "JENKINS_USERNAME") -}}
+{{- $uppercaseApiToken := default "" (index $c.create "JENKINS_TOKEN") -}}
+{{- if or $userId $apiToken $uppercaseUserId $uppercaseApiToken -}}JENKINS_TOKEN{{- else -}}
 {{- default "JENKINS_TOKEN" $c.create.tokenKey -}}
 {{- end -}}
 {{- else -}}

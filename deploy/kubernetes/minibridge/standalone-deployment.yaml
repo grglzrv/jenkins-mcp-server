@@ -29,7 +29,9 @@ metadata:
     app.kubernetes.io/part-of: jenkins-mcp
 type: Opaque
 stringData:
-  JENKINS_USERNAME: replace-with-jenkins-user
+  # Actual value matching {0} in Jenkins' LDAP User search filter (often uid).
+  JENKINS_USERNAME: replace-with-actual-jenkins-login-id
+  # Generate the API token from that same Jenkins user.
   JENKINS_TOKEN: replace-with-jenkins-api-token
 ---
 apiVersion: v1
@@ -104,7 +106,7 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:2.2.0-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.3.0-minibridge
           imagePullPolicy: IfNotPresent
           # No args: the entrypoint follows Acuvity's single-container pattern:
           # public Streamable HTTP in Minibridge, private stdio to Jenkins.

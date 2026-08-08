@@ -24,9 +24,9 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 
 ## Secret handling
 
-For Kubernetes, prefer an existing Secret, the chart's per-field
-`jenkins.credentials.secretKeyRefs` references, or External Secrets Operator. The
-per-field form allows the username and token to be rotated independently. The
+For Kubernetes production deployments, prefer one existing Secret or External
+Secrets Operator. Use `jenkins.credentials.secretKeyRefs` only when the Jenkins
+user ID and API token are intentionally stored in different Secret objects. The
 chart-managed `jenkins.credentials.create` path puts secret material in Helm
 values and release history and is only for disposable environments. Its Secret
 checksum rolls pods when values change. Existing and ESO-managed Secret
