@@ -203,6 +203,7 @@ jobs:
             INSTALL_K3S_EXEC='--disable traefik --disable metrics-server' \
             sh -
           sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
           echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> "$GITHUB_ENV"
           kubectl wait --for=condition=Ready node --all --timeout=180s
 
