@@ -48,7 +48,7 @@ Notes on the last three:
 - If they **do** use External Secrets, ask which provider (GCP Secret Manager,
   AWS Secrets Manager, Vault, ...), the `SecretStore` or `ClusterSecretStore`
   name, and the remote keys holding the Jenkins username and token. Then use
-  `externalSecret.*` instead of creating a Secret by hand, and see
+  `jenkins.credentials.externalSecret.*` instead of creating a Secret by hand, and see
   `examples/values/external-secrets-gcp.yaml`.
 - If they **do** want an ingress, ask for the `ingressClassName` and the
   hostname. Do not guess the class; a wrong one produces an Ingress no
@@ -98,7 +98,7 @@ kubectl -n jenkins-mcp get secret jenkins-mcp-secrets \
 ```
 
 A non-zero length means the key is present. If the person uses External Secrets,
-skip this phase and configure `externalSecret.*` instead.
+skip this phase and configure `jenkins.credentials.externalSecret.*` instead.
 
 ## Phase 4 — Install
 
@@ -111,8 +111,9 @@ ingress, no External Secrets.
 jenkins:
   url: https://jenkins.example.com     # exact host on the certificate
   credentials:
-    existingSecret: jenkins-mcp-secrets
-    create: false
+    existingSecret:
+      enabled: true
+      name: jenkins-mcp-secrets
 
 mcp:
   allowedJobs: "*"                     # narrow to the folders they named

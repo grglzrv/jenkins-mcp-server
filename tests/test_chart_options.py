@@ -1194,3 +1194,34 @@ def test_edge_and_release_images_cover_the_same_platforms() -> None:
     # Both workflows must build the minibridge variant, not only the default.
     for name, text in (("publish-edge", edge), ("release", release)):
         assert "docker/Dockerfile.minibridge" in text, name
+
+
+def test_documented_values_blocks_match_the_current_schema() -> None:
+    """A values example in prose is as breaking as one in examples/.
+
+    The 3.0.0 restructure changed the shape of jenkins.credentials, and a
+    documented block that still shows the old form sends people to a render
+    failure.
+    """
+    import re
+
+    for doc in ["ONBOARDING.md", "README.md", "charts/jenkins-mcp-server/README.md"]:
+        text = (ROOT / doc).read_text()
+        for block in re.findall(r"```yaml\n(.*?)```", text, re.S):
+            parsed = yaml.safe_load(block)
+            if not isinstance(parsed, dict):
+                continue
+            creds = (parsed.get("jenkins") or {}).get("credentials")
+            if not creds:
+                continue
+            # Every source is an object with an enabled flag as of 3.0.0.
+            for name, value in creds.items():
+                assert isinstance(value, dict), (
+                    f"{doc}: jenkins.credentials.{name} must be an object, got {value!r}"
+                )
+                assert "enabled" in value, (
+                    f"{doc}: jenkins.credentials.{name} is missing 'enabled'"
+                )
+            assert "externalSecret" not in parsed, (
+                f"{doc}: externalSecret moved under jenkins.credentials in 3.0.0"
+            )

@@ -131,7 +131,7 @@ jobs:
           for f in examples/values/*.yaml; do
             echo "rendering $f"
             helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
-              -f "$f" --set jenkins.credentials.token=ci-placeholder > /dev/null
+              -f "$f" --set jenkins.credentials.create.token=ci-placeholder > /dev/null
           done
       - name: Build the kustomize targets
         run: |
