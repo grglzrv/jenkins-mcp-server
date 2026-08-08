@@ -149,12 +149,18 @@ def check_release_bump(base: str, root: Path = ROOT) -> tuple[str, str, list[str
     if not version_file.is_file():
         raise ReleaseBumpError("HEAD has no VERSION file")
     head_version = version_file.read_text(encoding="utf-8").strip()
-    if compare_semver(head_version, base_version) <= 0:
+    # VERSION must change, not necessarily increase. Ordering is enforced at
+    # publish time by --assert-newer against the latest published release, which
+    # is the value that actually matters: a version already on the registry must
+    # never be republished. Requiring a local increase additionally forbids
+    # withdrawing a version that was tagged but pulled, which is a legitimate
+    # correction and was not expressible before.
+    if head_version == base_version:
         files = "\n".join(f"  {path}" for path in release_paths)
         raise ReleaseBumpError(
             "these files change deployable behavior:\n"
             f"{files}\n\n"
-            f"VERSION must increase: base={base_version}, head={head_version}\n"
+            f"VERSION must change: it is {head_version} on both sides\n"
             "Run: make version VERSION=X.Y.Z"
         )
     return base_version, head_version, release_paths

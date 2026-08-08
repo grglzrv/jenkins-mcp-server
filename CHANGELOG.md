@@ -40,79 +40,12 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
-## [3.0.0] - 2026-08-05
-
-### Highlights
-
-- Completes the credential restructure begun in 2.0.0. Every credential source,
-  including the whole External Secrets configuration, now lives under
-  `jenkins.credentials`.
-
-### New Features
-
-- None.
-
-### Improvements
-
-- The External Secrets store, remote keys, policies and template move from the
-  top-level `externalSecret` block to `jenkins.credentials.externalSecret`. In
-  2.0.0 only the `enabled` flag moved, which left the switch in one place and
-  the sixteen settings it governs in another. All four credential sources are
-  now configured in one place.
-
-### Bug Fixes
-
-- None.
-
-### Breaking Changes
-
-- The top-level `externalSecret` key no longer exists. Every field beneath it
-  moves under `jenkins.credentials.externalSecret`, unchanged.
-
-### Known Issues
-
-- None.
-
-### Security
-
-- None.
-
-### Upgrade Notes
-
-- Indent the existing block under `jenkins.credentials`; no field is renamed:
-
-  ```yaml
-  # before
-  externalSecret:
-    enabled: true
-    secretStoreRef:
-      name: gcp-secret-store
-      kind: ClusterSecretStore
-    usernameRemoteKey: jenkins-mcp-username
-
-  # after
-  jenkins:
-    credentials:
-      existingSecret:
-        enabled: false
-      externalSecret:
-        enabled: true
-        secretStoreRef:
-          name: gcp-secret-store
-          kind: ClusterSecretStore
-        usernameRemoteKey: jenkins-mcp-username
-  ```
-
-- Upgrading from 1.x: go straight to 3.0.0 and apply the 2.0.0 credential and
-  NetworkPolicy notes together with this one. 2.0.0 was released the same day
-  and its intermediate shape is not worth adopting.
-
 ## [2.0.0] - 2026-08-08
 
 ### Highlights
 
 - The credential and NetworkPolicy values are restructured for production use.
-  Both changes are breaking; see Upgrade Notes.
+  Both are breaking; see Upgrade Notes.
 
 ### New Features
 
@@ -121,13 +54,17 @@ from the matching version entry after CI validates it.
 
 ### Improvements
 
-- Each credential source is now an explicit `enabled` flag under
+- Each credential source is an explicit `enabled` flag under
   `jenkins.credentials`: `existingSecret`, `secretKeyRefs`, `create` and
   `externalSecret`. Exactly one may be enabled. Enabling none fails with the
   list of options; enabling several fails naming the count and the conflict,
   replacing six pairwise checks that each described one arbitrary pair.
 - `existingSecret` carries its own `name`, `usernameKey` and `tokenKey`, so the
   key names sit with the Secret they belong to.
+- The whole External Secrets configuration — store reference, optional store
+  creation, remote keys and properties, version pin, policies, extra data,
+  `dataFrom` and `template` — moves under `jenkins.credentials.externalSecret`.
+  All four sources are now configured in one place.
 
 ### Bug Fixes
 
@@ -141,8 +78,8 @@ from the matching version entry after CI validates it.
 - `jenkins.credentials.usernameKey` and `tokenKey` moved under `existingSecret`.
 - `jenkins.credentials.valueFrom` is now `jenkins.credentials.secretKeyRefs`
   with an `enabled` flag.
-- `externalSecret.enabled` moved to `jenkins.credentials.externalSecret.enabled`.
-  The store configuration stays under `externalSecret`.
+- The top-level `externalSecret` key no longer exists. Every field beneath it
+  moves under `jenkins.credentials.externalSecret`, unrenamed.
 - `networkPolicy.enabled` defaults to `false`.
 - `networkPolicy.tailscaleNamespace`, `hermesNamespace` and
   `allowDirectHermesAccess` are replaced by `networkPolicy.allowedNamespaces`,
@@ -183,10 +120,29 @@ from the matching version entry after CI validates it.
         tokenKey: JENKINS_TOKEN
   ```
 
-- If you set `externalSecret.enabled: true`, move that one flag to
-  `jenkins.credentials.externalSecret.enabled` and set
-  `jenkins.credentials.existingSecret.enabled: false`. Everything else under
-  `externalSecret` is unchanged.
+- External Secrets: indent the existing block under `jenkins.credentials` and
+  disable the default source. No field is renamed.
+
+  ```yaml
+  # before
+  externalSecret:
+    enabled: true
+    secretStoreRef:
+      name: gcp-secret-store
+      kind: ClusterSecretStore
+
+  # after
+  jenkins:
+    credentials:
+      existingSecret:
+        enabled: false
+      externalSecret:
+        enabled: true
+        secretStoreRef:
+          name: gcp-secret-store
+          kind: ClusterSecretStore
+  ```
+
 - If you relied on the NetworkPolicy, set `networkPolicy.enabled: true` and list
   the namespaces that may reach the server in `networkPolicy.allowedNamespaces`.
 

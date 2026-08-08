@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 3.0.0 \
+  --version 2.0.0 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 3.0.0 \
+  --version 2.0.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -328,7 +328,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=3.0.0
+NEW_VERSION=2.0.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

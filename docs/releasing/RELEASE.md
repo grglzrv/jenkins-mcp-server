@@ -82,7 +82,7 @@ to the tool that produced it.
 | `scripts/changelog.py` | `validate` \| `prepare X.Y.Z` \| `render X.Y.Z [--output FILE]` | Validate the `[Unreleased]` template and one complete release entry; promote `[Unreleased]` to a dated release and recreate the template; render an entry as GitHub Release notes. |
 | `scripts/set_version.py` | `X.Y.Z` | Rewrite every declared version pin. Refuses when release notes for that version are missing. |
 | `scripts/check_version.py` | no arguments | Assert every declared pin equals `VERSION`, then scan the repository for pins nobody declared. |
-| `scripts/check_release_bump.py` | `BASE_COMMIT` \| `--assert-newer CANDIDATE BASELINE` | Fail when release-impacting paths changed without a strictly newer `VERSION`. Used by the `Shipped changes bump VERSION` check. |
+| `scripts/check_release_bump.py` | `BASE_COMMIT` \| `--assert-newer CANDIDATE BASELINE` | With a commit: fail when release-impacting paths changed without `VERSION` changing. With `--assert-newer`: fail when the candidate is not newer than the baseline. The first runs in CI as `Shipped changes bump VERSION`; the second runs at publish time against the latest published release, so a version already on the registry is never republished. |
 | `scripts/validate_manifests.py` | no arguments | Parse every raw Kubernetes, Argo CD and Compose file and assert each document has `apiVersion` and `kind`. Run by `make validate-manifests`. |
 | `scripts/version_pins.py` | imported, not run | The canonical inventory of every version pin. A new pinned file must be added here or `check_version.py` reports it as unmanaged. |
 
@@ -125,7 +125,7 @@ python scripts/check_version.py              # confirm every pin moved
 ## Prepare a release
 
 ```bash
-NEW_VERSION=3.0.0
+NEW_VERSION=2.0.0
 git checkout -b "release/v$NEW_VERSION"
 # Complete every [Unreleased] category in CHANGELOG.md first.
 make version VERSION="$NEW_VERSION"

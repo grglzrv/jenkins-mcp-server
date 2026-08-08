@@ -82,7 +82,7 @@ def test_runtime_change_without_bump_fails(tmp_path: Path) -> None:
     repo, base = _repository(tmp_path)
     (repo / "src/server.py").write_text("value = 2\n", encoding="utf-8")
 
-    with pytest.raises(ReleaseBumpError, match=r"base=1\.20\.0, head=1\.20\.0"):
+    with pytest.raises(ReleaseBumpError, match="VERSION must change"):
         check_release_bump(base, repo)
 
 
@@ -98,13 +98,26 @@ def test_strictly_newer_version_passes(tmp_path: Path) -> None:
     )
 
 
-def test_downgrade_fails_even_when_version_changed(tmp_path: Path) -> None:
+def test_lowering_the_version_is_allowed_locally(tmp_path: Path) -> None:
+    """Withdrawing a tagged-then-pulled version is a legitimate correction.
+
+    Ordering is enforced at publish time against the latest published release,
+    which is what must never be republished. Requiring a local increase made a
+    retraction impossible to express.
+    """
     repo, base = _repository(tmp_path)
     (repo / "src/server.py").write_text("value = 2\n", encoding="utf-8")
     (repo / "VERSION").write_text("1.19.0\n", encoding="utf-8")
 
-    with pytest.raises(ReleaseBumpError, match="VERSION must increase"):
-        check_release_bump(base, repo)
+    base_version, head_version, paths = check_release_bump(base, repo)
+    assert (base_version, head_version) == ("1.20.0", "1.19.0")
+    assert paths == ["src/server.py"]
+
+
+def test_publish_time_check_still_refuses_a_lower_version() -> None:
+    """The guarantee that matters: never republish over what is released."""
+    with pytest.raises(ReleaseBumpError, match="must be newer"):
+        require_newer_version("1.19.0", "1.20.0")
 
 
 def test_documentation_only_change_needs_no_bump(tmp_path: Path) -> None:
