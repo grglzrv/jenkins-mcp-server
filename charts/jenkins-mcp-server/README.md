@@ -59,7 +59,7 @@ creates the credentials Secret.
 ```bash
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.3.1 \
+  --version 2.3.2 \
   --namespace jenkins-mcp \
   --create-namespace \
   --set jenkins.url=https://jenkins.example.com \
@@ -81,7 +81,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.3.1 \
+  --version 2.3.2 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -103,7 +103,9 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 Prefer `jenkins.credentials.externalSecret.enabled=true` when the External
 Secrets Operator is available; the store, remote keys and policies are
-configured in the same block.
+configured in the same block. State `targetUsernameKey`, `targetTokenKey`,
+`usernameRemoteKey`, and `tokenRemoteKey` explicitly so the provider-to-Pod
+contract remains visible in copied values.
 
 For a disposable install, the default chart-managed source instead requires
 `jenkins.credentials.create.jenkinsUserId` and
@@ -181,7 +183,7 @@ render rather than resolving silently.
 | Chart-managed | `jenkins.credentials.create.enabled: true` *(default)* | Disposable environments only — the token lands in the Helm release |
 | Existing Secret | `jenkins.credentials.existingSecret.enabled: true` | Recommended production default. You create one Secret containing both values. Set `name`, `usernameKey`, and `tokenKey` explicitly; the defaults are `JENKINS_USERNAME` and `JENKINS_TOKEN` |
 | Advanced split references | `jenkins.credentials.secretKeyRefs.enabled: true` | Only when the user ID and API token come from different Secret objects; for one Secret, use `existingSecret` |
-| External Secrets | `jenkins.credentials.externalSecret.enabled: true` | External Secrets Operator syncs it from an external store; configure the store under `jenkins.credentials.externalSecret` |
+| External Secrets | `jenkins.credentials.externalSecret.enabled: true` | External Secrets Operator syncs it from an external store. Explicitly set both target keys and both remote keys under `jenkins.credentials.externalSecret` |
 
 The default is chart-managed, so a first install needs only a Jenkins user ID
 and its API token. That stores the token in the Helm release, where anyone who
@@ -239,7 +241,25 @@ rotation because environment variables in a running process are immutable.
 
 `externalSecret.dataFrom` and `extraData` are mutually exclusive. With
 `dataFrom`, the synchronized Secret must still contain the two configured
-target key names.
+target key names. `targetUsernameKey` and `targetTokenKey` must differ. The two
+remote keys may match only when `usernameRemoteProperty` and
+`tokenRemoteProperty` select different fields from one structured remote
+secret. For the normal explicit-data form, keep the complete contract visible:
+
+```yaml
+jenkins:
+  credentials:
+    create:
+      enabled: false
+    externalSecret:
+      enabled: true
+      targetUsernameKey: JENKINS_USERNAME
+      targetTokenKey: JENKINS_TOKEN
+      # External-provider object containing the real Jenkins login/User filter ID.
+      usernameRemoteKey: jenkins-mcp-user-id
+      # External-provider object containing that user's Jenkins API token.
+      tokenRemoteKey: jenkins-mcp-token
+```
 
 ### Server policy, always enforced
 
@@ -382,7 +402,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.3.1
+NEW_VERSION=2.3.2
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

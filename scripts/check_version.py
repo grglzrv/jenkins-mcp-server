@@ -51,10 +51,11 @@ def fail(message: str) -> None:
 def repository_text_files(root: Path):
     """Yield every small UTF-8 repository file, regardless of extension."""
     for path in sorted(root.rglob("*")):
+        relative_parts = path.relative_to(root).parts
         if (
             not path.is_file()
             or path.name in EXCLUDED_FILES
-            or any(part in EXCLUDED_PARTS for part in path.parts)
+            or any(part in EXCLUDED_PARTS for part in relative_parts)
         ):
             continue
         try:

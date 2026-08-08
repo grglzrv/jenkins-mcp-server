@@ -274,10 +274,16 @@ jenkins:
       creationPolicy: Owner
       deletionPolicy: Retain
       annotations: {}
-      # Keys ESO writes into the target Secret and the workload reads. When
-      # dataFrom is used, the remote data must still produce these two keys.
+      # REQUIRED target keys ESO writes and the workload reads. Keep them
+      # different. When dataFrom is used, the remote data must still produce
+      # both configured keys.
       targetUsernameKey: JENKINS_USERNAME
       targetTokenKey: JENKINS_TOKEN
+      # REQUIRED external-provider object names. Set both explicitly in copied
+      # values; they may be the same only when the properties below select two
+      # different fields from one structured remote secret. The value fetched
+      # by usernameRemoteKey must be the Jenkins login/User search-filter ID;
+      # the token value must belong to that same Jenkins account.
       usernameRemoteKey: jenkins-mcp-username
       tokenRemoteKey: jenkins-mcp-token
       # Set when the remote secret stores JSON and the credential lives under a

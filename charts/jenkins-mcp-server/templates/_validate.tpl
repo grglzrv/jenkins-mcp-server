@@ -67,6 +67,12 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- $_ := required "jenkins.credentials.create.jenkinsApiToken is required when create.enabled=true (deprecated token is still accepted for 2.x compatibility)" $legacyToken -}}
 {{- end }}
 {{- end }}
+{{- if and $creds.existingSecret.enabled (eq $creds.existingSecret.usernameKey $creds.existingSecret.tokenKey) }}
+{{- fail "jenkins.credentials.existingSecret.usernameKey and tokenKey must be different. Pointing both environment variables at one Secret key makes Jenkins receive the same value as the user ID and API token." }}
+{{- end }}
+{{- if and $creds.externalSecret.enabled (eq $creds.externalSecret.targetUsernameKey $creds.externalSecret.targetTokenKey) }}
+{{- fail "jenkins.credentials.externalSecret.targetUsernameKey and targetTokenKey must be different. ESO must write the Jenkins user ID and API token to separate target Secret keys." }}
+{{- end }}
 {{- if and $creds.externalSecret.enabled $creds.externalSecret.dataFrom $creds.externalSecret.extraData }}
 {{- fail "jenkins.credentials.externalSecret.dataFrom and extraData cannot be combined. dataFrom replaces the explicit data list, so extraData would be ignored; choose one source shape." }}
 {{- end }}
