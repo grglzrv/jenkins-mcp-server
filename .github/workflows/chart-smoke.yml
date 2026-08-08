@@ -235,6 +235,7 @@ jobs:
             --set jenkins.credentials.create.token=managed-v2 \
             --wait --timeout 5m
           kubectl -n credentials-managed rollout status deployment/$deployment --timeout=180s
+          kubectl -n credentials-managed wait --for=delete pod/$old_pod --timeout=120s
           new_pod=$(kubectl -n credentials-managed get pod -l app.kubernetes.io/instance=managed -o jsonpath='{.items[0].metadata.name}')
           [ "$old_pod" != "$new_pod" ]
           [ "$(kubectl -n credentials-managed exec deployment/$deployment -- python -c 'import os; print(os.environ["JENKINS_TOKEN"])')" = managed-v2 ]
