@@ -45,7 +45,7 @@ spec:
               app.kubernetes.io/name: jenkins-mcp
       containers:
         - name: server
-          image: ghcr.io/grglzrv/jenkins-mcp-server:2.1.1
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.2.0
           imagePullPolicy: IfNotPresent
           args: ["--transport", "streamable-http"]
           envFrom:

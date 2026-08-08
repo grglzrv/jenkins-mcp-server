@@ -199,7 +199,20 @@ jenkins:
   # more than one fails the render rather than picking silently.
   credentials:
 
-    # 1. Reference a Secret you already created. Recommended for production.
+    # 1. Let the chart create the Secret from these values.
+    #
+    #    REQUIRED when create.enabled=true: replace both empty values below.
+    #    They deliberately have no placeholder defaults because a plausible
+    #    fake credential would let the Pod deploy and then fail at runtime.
+    #
+    #    Disposable environments only: Helm stores these values in release
+    #    history, visible to anyone who can run `helm get values`.
+    create:
+      enabled: true
+      JENKINS_USERNAME: ""
+      JENKINS_TOKEN: ""
+
+    # 2. Reference one Secret you already created. Recommended for production.
     #
     #      kubectl create secret generic jenkins-mcp-secrets \
     #        --from-literal=JENKINS_USERNAME=<user> \
@@ -210,9 +223,10 @@ jenkins:
       usernameKey: JENKINS_USERNAME
       tokenKey: JENKINS_TOKEN
 
-    # 2. Take each value from a different Secret or key. Use when the username
-    #    and token are managed separately, or already live in Secrets you do
-    #    not control.
+    # 3. Advanced: take each value from a separate Secret reference. This is
+    #    not a second way to configure one existing Secret; use existingSecret
+    #    above for that. Use this only when username and token are split across
+    #    different Secret objects (or separately managed references).
     secretKeyRefs:
       enabled: false
       username:
@@ -221,16 +235,6 @@ jenkins:
       token:
         name: ""
         key: ""
-
-    # 3. Let the chart create the Secret from these values.
-    #    Disposable environments only: the token is stored in the Helm release
-    #    and visible to anyone who can run `helm get values`.
-    create:
-      enabled: true
-      username: ""
-      token: ""
-      # The chart writes these values to one Secret under the fixed
-      # JENKINS_USERNAME and JENKINS_TOKEN keys.
 
     # 4. Have the External Secrets Operator create the Secret from an external
     #    store. Configure the store and remote keys under externalSecret below.

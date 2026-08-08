@@ -230,7 +230,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.1.1 \
+  --version 2.2.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -243,10 +243,12 @@ External Secrets Operator. See
 [`per-field-secret-refs.yaml`](examples/values/per-field-secret-refs.yaml) for
 the split-secret form.
 
-The chart-managed source is enabled by default so a disposable install can pass
-`jenkins.credentials.create.username` and `jenkins.credentials.create.token`
-directly. Helm records both values in release history. For production, disable
-`create` and select `existingSecret`, `secretKeyRefs`, or `externalSecret`.
+The chart-managed source is enabled by default so a disposable install can set
+the actual generated Secret keys, `jenkins.credentials.create.JENKINS_USERNAME`
+and `jenkins.credentials.create.JENKINS_TOKEN`. Both are required and Helm
+records both values in release history. For production, disable `create` and
+prefer `existingSecret`; use `secretKeyRefs` only when the two values really
+come from different Secret objects, or select `externalSecret`.
 Changing chart-managed credentials rolls the pods automatically; Kubernetes
 does not update environment variables in running pods, so rotate existing or
 ESO-managed credentials with a workload restart.
@@ -492,7 +494,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.1.1
+NEW_VERSION=2.2.0
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 

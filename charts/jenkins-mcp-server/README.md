@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.1.1 \
+  --version 2.2.0 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.1.1 \
+  --version 2.2.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -108,8 +108,9 @@ Secrets Operator is available; the store, remote keys and policies are
 configured in the same block.
 
 For a disposable install, the default chart-managed source instead requires
-`jenkins.credentials.create.username` and
-`jenkins.credentials.create.token`. Helm stores them in release history.
+`jenkins.credentials.create.JENKINS_USERNAME` and
+`jenkins.credentials.create.JENKINS_TOKEN`. These are the exact keys written
+to the generated Secret. Helm stores both values in release history.
 
 ## Tailscale integration (optional)
 
@@ -179,9 +180,9 @@ render rather than resolving silently.
 
 | Source | Enable with | Use when |
 | :--- | :--- | :--- |
-| Existing Secret | `jenkins.credentials.existingSecret.enabled: true` | Recommended production default. You create the Secret. Set `name`, and `usernameKey` / `tokenKey` if they differ from `JENKINS_USERNAME` / `JENKINS_TOKEN` |
-| Per-field references | `jenkins.credentials.secretKeyRefs.enabled: true` | The username and token live in different Secrets or keys you do not control |
 | Chart-managed | `jenkins.credentials.create.enabled: true` *(default)* | Disposable environments only — the token lands in the Helm release |
+| Existing Secret | `jenkins.credentials.existingSecret.enabled: true` | Recommended production default. You create one Secret containing both values. Set `name`, and `usernameKey` / `tokenKey` if they differ from `JENKINS_USERNAME` / `JENKINS_TOKEN` |
+| Advanced split references | `jenkins.credentials.secretKeyRefs.enabled: true` | Only when the username and token come from different Secret objects; for one Secret, use `existingSecret` |
 | External Secrets | `jenkins.credentials.externalSecret.enabled: true` | External Secrets Operator syncs it from an external store; configure the store under `jenkins.credentials.externalSecret` |
 
 The default is chart-managed, so a first install needs only a username and
@@ -204,12 +205,23 @@ jenkins:
 Selecting any source other than `create` means disabling `create`, since
 exactly one may be enabled.
 
-The chart-managed source accepts only the real `username` and `token` values in
-normal configuration and writes them under `JENKINS_USERNAME` and
-`JENKINS_TOKEN` in one Secret. Existing Secrets and ESO targets keep their own
-key-name settings because those objects may use names the chart does not
-control. Legacy `create.usernameKey` / `tokenKey` overrides remain accepted for
-2.x compatibility but are deprecated. Helm-managed credential changes add a
+The chart-managed source exposes the real Secret keys directly:
+
+```yaml
+jenkins:
+  credentials:
+    create:
+      enabled: true
+      JENKINS_USERNAME: hermes-jenkins # required
+      JENKINS_TOKEN: ""                # required: supply securely
+```
+
+Both values are required when `create.enabled=true`; empty defaults force an
+install-time error instead of deploying with fake credentials. Existing
+Secrets and ESO targets keep key-name settings because those objects may use
+names the chart does not control. Deprecated `create.username`, `token`,
+`usernameKey`, and `tokenKey` remain accepted for 2.x upgrades, but new values
+should use the uppercase fields. Helm-managed credential changes add a
 pod-template checksum and roll the Deployment automatically. Existing Secrets
 and ESO targets update independently of Helm; restart the Deployment after a
 rotation because environment variables in a running process are immutable.
@@ -331,14 +343,16 @@ loss; it does not migrate a pod's in-memory sessions during restart or eviction.
 
 ## Client endpoint
 
-In-cluster, with no ingress:
+Configure the following connection in your MCP client. Client configuration
+keys are not standardized, so use the schema documented by that client rather
+than a guessed `mcp_servers.jenkins` block.
 
-```yaml
-mcp_servers:
-  jenkins:
-    transport: streamable_http
-    url: http://jenkins-mcp-jenkins-mcp-server.jenkins-mcp.svc.cluster.local:8000/mcp
-```
+| Field | Value |
+| --- | --- |
+| Name | `jenkins` |
+| Transport | Streamable HTTP |
+| In-cluster URL | `http://jenkins-mcp-jenkins-mcp-server.jenkins-mcp.svc.cluster.local:8000/mcp` |
+| Ingress URL | `https://<ingress-host>/mcp` |
 
 With an ingress, use the hostname the controller assigns. Tailscale populates it
 asynchronously, so read it back rather than assuming:
@@ -357,7 +371,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.1.1
+NEW_VERSION=2.2.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

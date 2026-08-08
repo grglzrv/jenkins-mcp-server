@@ -11,15 +11,18 @@ always injected with `secretKeyRef` and never written into the pod spec.
 
 | Example | Who creates the Secret | Use when |
 | --- | --- | --- |
-| `values/existing-secret.yaml` | You, out of band | Recommended production choice. The chart only references it. |
-| `values/per-field-secret-refs.yaml` | You or a secret operator, out of band | Username and token are rotated in separate existing Secrets. |
 | `values/chart-managed-secret.yaml` | The chart, from values | Disposable environments only — the token lands in the Helm release. |
+| `values/existing-secret.yaml` | You, out of band | Recommended production choice. One Secret contains both credentials and the chart only references it. |
+| `values/per-field-secret-refs.yaml` | You or a secret operator, out of band | Advanced case only: username and token are stored in different Secret objects. |
 | `values/external-secrets-gcp.yaml` | External Secrets Operator | An existing `SecretStore` is already provisioned. |
 | `values/external-secrets-gcp-workload-identity.yaml` | External Secrets Operator | The chart should create the `ClusterSecretStore` too, via GCP Workload Identity. |
 
 The chart-managed source is the installation default, but only for disposable
-use because Helm retains supplied values in release history. Each mode has its
-own key-name settings. After rotating an existing or ESO-managed Secret,
+use because Helm retains supplied values in release history. Its values use the
+actual `JENKINS_USERNAME` and `JENKINS_TOKEN` Secret keys. `existingSecret`
+handles the normal one-Secret production case; per-field references exist only
+for credentials split across different Secret objects. After rotating an
+existing or ESO-managed Secret,
 restart the Deployment so the process receives the new environment variables;
 chart-managed changes trigger that rollout automatically.
 
