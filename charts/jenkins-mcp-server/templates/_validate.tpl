@@ -41,6 +41,24 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if eq (len $enabled) 0 }}
 {{- fail "no jenkins.credentials source is enabled. The server cannot start without a username and API token. Enable one of: existingSecret (reference a Secret you created), secretKeyRefs (a different Secret or key per field), create (chart-managed, disposable environments only), externalSecret (External Secrets Operator)." }}
 {{- end }}
+{{- if $creds.create.enabled }}
+{{- $canonicalUsername := default "" (index $creds.create "JENKINS_USERNAME") -}}
+{{- $canonicalToken := default "" (index $creds.create "JENKINS_TOKEN") -}}
+{{- $legacyUsername := default "" $creds.create.username -}}
+{{- $legacyToken := default "" $creds.create.token -}}
+{{- $legacyUsernameKey := default "" $creds.create.usernameKey -}}
+{{- $legacyTokenKey := default "" $creds.create.tokenKey -}}
+{{- if and (or $canonicalUsername $canonicalToken) (or $legacyUsername $legacyToken $legacyUsernameKey $legacyTokenKey) }}
+{{- fail "jenkins.credentials.create mixes JENKINS_USERNAME/JENKINS_TOKEN with deprecated username/token/usernameKey/tokenKey values. Use only the uppercase Secret-key fields." }}
+{{- end }}
+{{- if or $canonicalUsername $canonicalToken }}
+{{- $_ := required "jenkins.credentials.create.JENKINS_USERNAME is required when create.enabled=true" $canonicalUsername -}}
+{{- $_ := required "jenkins.credentials.create.JENKINS_TOKEN is required when create.enabled=true" $canonicalToken -}}
+{{- else }}
+{{- $_ := required "jenkins.credentials.create.JENKINS_USERNAME is required when create.enabled=true (deprecated create.username is still accepted for 2.x compatibility)" $legacyUsername -}}
+{{- $_ := required "jenkins.credentials.create.JENKINS_TOKEN is required when create.enabled=true (deprecated create.token is still accepted for 2.x compatibility)" $legacyToken -}}
+{{- end }}
+{{- end }}
 {{- if and $creds.externalSecret.enabled $creds.externalSecret.dataFrom $creds.externalSecret.extraData }}
 {{- fail "jenkins.credentials.externalSecret.dataFrom and extraData cannot be combined. dataFrom replaces the explicit data list, so extraData would be ignored; choose one source shape." }}
 {{- end }}

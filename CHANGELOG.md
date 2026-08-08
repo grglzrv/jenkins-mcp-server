@@ -40,6 +40,55 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.2.0] - 2026-08-08
+
+### Highlights
+
+- Helm's chart-created credential values now use the exact Kubernetes Secret
+  keys `JENKINS_USERNAME` and `JENKINS_TOKEN`, while the normal production path
+  is clearly the single `existingSecret` reference.
+
+### New Features
+
+- Added first-class `create.JENKINS_USERNAME` and `create.JENKINS_TOKEN` values
+  with render-time validation that both are supplied.
+
+### Improvements
+
+- Moved `create` to the top of the credential values and documented its required
+  fields at the point of use.
+- Clarified that `existingSecret` handles one Secret containing both values,
+  while `secretKeyRefs` is an advanced option for values split across different
+  Secret objects.
+- Replaced the unsupported `mcp_servers.jenkins` examples with portable client
+  connection details: name, Streamable HTTP transport, and `/mcp` URL.
+
+### Bug Fixes
+
+- Helm notes and deployment documentation no longer imply that all MCP clients
+  accept a repository-defined configuration schema.
+
+### Breaking Changes
+
+- None. Deprecated 2.1.x `create.username`, `create.token`, `usernameKey`, and
+  `tokenKey` values remain accepted throughout major version 2.
+
+### Known Issues
+
+- Client configuration key names remain client-specific; use the chosen MCP
+  client's documentation around the supplied transport and endpoint.
+
+### Security
+
+- Empty chart-managed credentials fail rendering instead of allowing a
+  plausible placeholder credential to deploy.
+
+### Upgrade Notes
+
+- New configurations should use `create.JENKINS_USERNAME` and
+  `create.JENKINS_TOKEN`. Existing 2.1.x chart-managed values continue to work
+  and can be migrated without changing the Secret consumed by the workload.
+
 ## [2.1.1] - 2026-08-08
 
 ### Highlights

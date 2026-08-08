@@ -283,17 +283,31 @@
             "create": {
               "type": "object",
               "required": [
-                "enabled"
+                "enabled",
+                "JENKINS_USERNAME",
+                "JENKINS_TOKEN"
               ],
               "properties": {
                 "enabled": {
                   "type": "boolean"
                 },
+                "JENKINS_USERNAME": {
+                  "type": "string",
+                  "description": "Required when create.enabled is true. Written to the chart-managed Secret under this exact key."
+                },
+                "JENKINS_TOKEN": {
+                  "type": "string",
+                  "description": "Required when create.enabled is true. Written to the chart-managed Secret under this exact key."
+                },
                 "username": {
-                  "type": "string"
+                  "type": "string",
+                  "deprecated": true,
+                  "description": "Deprecated 2.x compatibility field. Use JENKINS_USERNAME."
                 },
                 "token": {
-                  "type": "string"
+                  "type": "string",
+                  "deprecated": true,
+                  "description": "Deprecated 2.x compatibility field. Use JENKINS_TOKEN."
                 },
                 "usernameKey": {
                   "type": "string",

@@ -144,7 +144,11 @@ def test_credential_sources_own_their_key_names() -> None:
     create_schema = schema()["properties"]["jenkins"]["properties"][
         "credentials"
     ]["properties"]["create"]
-    assert create_schema["required"] == ["enabled"]
+    assert create_schema["required"] == [
+        "enabled",
+        "JENKINS_USERNAME",
+        "JENKINS_TOKEN",
+    ]
     assert create_schema["properties"]["usernameKey"]["deprecated"] is True
     assert create_schema["properties"]["tokenKey"]["deprecated"] is True
 
@@ -295,12 +299,31 @@ def test_secret_examples_cover_all_four_credential_paths() -> None:
     # Must be empty or the chart references that Secret instead of creating one.
     assert managed["jenkins"]["credentials"]["existingSecret"]["enabled"] is False
     # A real token must never be committed in an example.
-    assert not managed["jenkins"]["credentials"]["create"]["token"]
+    assert not managed["jenkins"]["credentials"]["create"]["JENKINS_TOKEN"]
 
     per_field = yaml.safe_load((EXAMPLES / "per-field-secret-refs.yaml").read_text())
     refs = per_field["jenkins"]["credentials"]["secretKeyRefs"]
     assert per_field["jenkins"]["credentials"]["existingSecret"]["enabled"] is False
     assert refs["username"]["name"] != refs["token"]["name"]
+
+
+def test_chart_managed_credentials_use_real_secret_keys() -> None:
+    create = values()["jenkins"]["credentials"]["create"]
+    assert "JENKINS_USERNAME" in create
+    assert "JENKINS_TOKEN" in create
+    assert "username" not in create
+    assert "token" not in create
+
+    secret = (CHART / "templates/secret.yaml").read_text()
+    assert 'index $create "JENKINS_USERNAME"' in secret
+    assert 'index $create "JENKINS_TOKEN"' in secret
+
+
+def test_legacy_chart_managed_fields_remain_accepted_for_v2() -> None:
+    credentials_schema = schema()["properties"]["jenkins"]["properties"]["credentials"]
+    create_schema = credentials_schema["properties"]["create"]
+    for field in ["username", "token", "usernameKey", "tokenKey"]:
+        assert create_schema["properties"][field]["deprecated"] is True
 
 
 def test_per_field_credential_refs_are_wired_and_validated() -> None:
@@ -478,6 +501,20 @@ def test_tailscale_guide_exists_and_is_linked() -> None:
     assert "machine name" in text
     assert "docs/TAILSCALE.md" in (ROOT / "README.md").read_text()
     assert "TAILSCALE.md" in (ROOT / "examples/README.md").read_text()
+
+
+def test_client_docs_do_not_invent_a_universal_config_schema() -> None:
+    active_docs = [
+        ROOT / "README.md",
+        ROOT / "ONBOARDING.md",
+        ROOT / "docs/KUBERNETES_TAILSCALE_ARGOCD.md",
+        CHART / "README.md",
+        CHART / "templates/NOTES.txt",
+    ]
+    for path in active_docs:
+        text = path.read_text()
+        assert "mcp_servers:" not in text, path
+        assert "Streamable HTTP" in text, path
 
 
 

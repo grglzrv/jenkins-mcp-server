@@ -96,14 +96,15 @@ chart and pin its chart version.
 kubectl get ingress jenkins-mcp -n jenkins-mcp
 ```
 
-Use the `ADDRESS` value and append `/mcp`, then update Hermes:
+Use the `ADDRESS` value and append `/mcp`. Configure that URL in your MCP
+client using its documented schema; there is no universal
+`mcp_servers.jenkins` configuration block.
 
-```yaml
-mcp_servers:
-  jenkins:
-    transport: streamable_http
-    url: https://jenkins-mcp.<tailnet>.ts.net/mcp
-```
+| Field | Value |
+| --- | --- |
+| Name | `jenkins` |
+| Transport | Streamable HTTP |
+| URL | `https://jenkins-mcp.<tailnet>.ts.net/mcp` |
 
 ## Verification
 

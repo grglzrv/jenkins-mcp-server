@@ -35,10 +35,10 @@ version:
 	$(MAKE) verify-version
 
 helm-lint:
-	helm lint --strict $(CHART) --set jenkins.url=https://jenkins.example.com --set jenkins.credentials.create.username=local --set jenkins.credentials.create.token=local-placeholder
+	helm lint --strict $(CHART) --set jenkins.url=https://jenkins.example.com --set jenkins.credentials.create.JENKINS_USERNAME=local --set jenkins.credentials.create.JENKINS_TOKEN=local-placeholder
 
 helm-template:
-	helm template jenkins-mcp $(CHART) --namespace jenkins-mcp --set jenkins.url=https://jenkins.example.com --set jenkins.credentials.create.username=local --set jenkins.credentials.create.token=local-placeholder > /tmp/jenkins-mcp.yaml
+	helm template jenkins-mcp $(CHART) --namespace jenkins-mcp --set jenkins.url=https://jenkins.example.com --set jenkins.credentials.create.JENKINS_USERNAME=local --set jenkins.credentials.create.JENKINS_TOKEN=local-placeholder > /tmp/jenkins-mcp.yaml
 	helm template jenkins-mcp $(CHART) --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/jenkins-mcp-production.yaml
 
 helm-package:
