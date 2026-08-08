@@ -29,6 +29,11 @@ different Secret objects.
 Every example that enables `existingSecret` spells out `name`, `usernameKey`,
 and `tokenKey`, even when the key names match the chart defaults. This keeps the
 Secret-to-workload contract visible when values are copied into another system.
+The External Secrets examples likewise state `targetUsernameKey`,
+`targetTokenKey`, `usernameRemoteKey`, and `tokenRemoteKey`. Target keys must be
+different; remote keys may match when two properties are read from one
+structured provider secret. The username remote value is the real Jenkins
+login/User search-filter ID, and the API token must belong to the same account.
 After rotating an existing or ESO-managed Secret,
 restart the Deployment so the process receives the new environment variables;
 chart-managed changes trigger that rollout automatically.

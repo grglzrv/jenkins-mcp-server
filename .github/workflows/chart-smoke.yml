@@ -328,6 +328,8 @@ jobs:
             --set jenkins.credentials.create.enabled=false \
             --set jenkins.credentials.externalSecret.enabled=true \
             --set jenkins.credentials.externalSecret.refreshInterval=5s \
+            --set jenkins.credentials.externalSecret.targetUsernameKey=JENKINS_USERNAME \
+            --set jenkins.credentials.externalSecret.targetTokenKey=JENKINS_TOKEN \
             --set jenkins.credentials.externalSecret.secretStoreRef.name=kubernetes-store \
             --set jenkins.credentials.externalSecret.secretStoreRef.kind=SecretStore \
             --set jenkins.credentials.externalSecret.secretStore.create=true \

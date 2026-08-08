@@ -40,6 +40,57 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.3.2] - 2026-08-09
+
+### Highlights
+
+- Credential source contracts are now explicit and guarded consistently across
+  chart-managed, existing-Secret, and External Secrets deployments.
+
+### New Features
+
+- None. This patch hardens and documents existing credential sources.
+
+### Improvements
+
+- Made both External Secrets target keys explicit in the live ESO rotation
+  smoke test, matching the shipped values examples.
+- Added regression coverage requiring all enabled chart-managed and External
+  Secrets examples to state their complete credential field set.
+- Documented the four-field External Secrets mapping in the main README, chart
+  README, examples guide, values reference, and JSON schema.
+- Quoted user-controlled target and remote key names in rendered Secret and
+  ExternalSecret manifests.
+
+### Bug Fixes
+
+- Reject existing-Secret or External Secrets configurations that map the
+  Jenkins user ID and API token to the same target Secret key.
+- Require both remote object names while rendering the explicit ExternalSecret
+  data mapping, in addition to schema validation.
+
+### Breaking Changes
+
+- None. Valid 2.x credential configurations and existing defaults are
+  unchanged.
+
+### Known Issues
+
+- The historical default `externalSecret.usernameRemoteKey` remains
+  `jenkins-mcp-username` for 2.x compatibility. Copied values should set both
+  remote object names explicitly; shipped examples use
+  `jenkins-mcp-user-id`.
+
+### Security
+
+- No credential values were added. Earlier validation now prevents one Secret
+  value from being wired into both authentication fields accidentally.
+
+### Upgrade Notes
+
+- No values migration is required from 2.3.1. A release using the same target
+  key for both fields must correct that invalid mapping before upgrading.
+
 ## [2.3.1] - 2026-08-08
 
 ### Highlights

@@ -100,12 +100,26 @@ def test_external_secret_exposes_creation_options() -> None:
         "secretStore",
         "targetUsernameKey",
         "targetTokenKey",
+        "usernameRemoteKey",
+        "tokenRemoteKey",
         "usernameRemoteProperty",
         "tokenRemoteProperty",
     ]:
         assert key in es, f"{key} missing from externalSecret values"
     assert es["secretStore"]["create"] is False
     assert es["enabled"] is False
+
+    external_schema = schema()["properties"]["jenkins"]["properties"][
+        "credentials"
+    ]["properties"]["externalSecret"]
+    for key in [
+        "targetUsernameKey",
+        "targetTokenKey",
+        "usernameRemoteKey",
+        "tokenRemoteKey",
+    ]:
+        assert key in external_schema["required"]
+        assert external_schema["properties"][key]["description"]
 
 
 def test_optional_secret_store_creation_is_templated() -> None:
@@ -166,6 +180,8 @@ def test_secret_rotation_contracts_are_explicit_and_smoked() -> None:
         "ESO Kubernetes provider syncs and rotates credentials",
         "external-secrets/external-secrets",
         "provider.kubernetes.remoteNamespace",
+        "externalSecret.targetUsernameKey=JENKINS_USERNAME",
+        "externalSecret.targetTokenKey=JENKINS_TOKEN",
     ]:
         assert marker in workflow
     assert workflow.count("kubectl get nodes -o name 2>/dev/null") == 4
@@ -320,6 +336,68 @@ def test_enabled_existing_secret_values_are_explicit() -> None:
             f"{path.relative_to(ROOT)}: missing usernameKey"
         )
         assert existing.get("tokenKey"), f"{path.relative_to(ROOT)}: missing tokenKey"
+
+
+def test_enabled_managed_and_external_secret_values_are_explicit() -> None:
+    for path in sorted(EXAMPLES.glob("*.yaml")):
+        document = yaml.safe_load(path.read_text())
+        credentials = document["jenkins"]["credentials"]
+
+        create = credentials.get("create", {})
+        if create.get("enabled"):
+            for key in ["jenkinsUserId", "jenkinsApiToken"]:
+                assert key in create, f"{path.relative_to(ROOT)}: missing create.{key}"
+
+        external = credentials.get("externalSecret", {})
+        if external.get("enabled"):
+            for key in [
+                "targetUsernameKey",
+                "targetTokenKey",
+                "usernameRemoteKey",
+                "tokenRemoteKey",
+            ]:
+                assert external.get(key), (
+                    f"{path.relative_to(ROOT)}: missing externalSecret.{key}"
+                )
+            assert external["targetUsernameKey"] != external["targetTokenKey"], (
+                f"{path.relative_to(ROOT)}: External Secret target keys must differ"
+            )
+
+
+def test_single_target_key_is_rejected_for_existing_and_external_secrets() -> None:
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    for source, username_key, token_key in [
+        ("existingSecret", "usernameKey", "tokenKey"),
+        ("externalSecret", "targetUsernameKey", "targetTokenKey"),
+    ]:
+        assert f"$creds.{source}.{username_key}" in validate
+        assert f"$creds.{source}.{token_key}" in validate
+        assert f"jenkins.credentials.{source}.{username_key}" in validate
+
+
+def test_external_secret_quotes_and_requires_all_key_names() -> None:
+    template = (CHART / "templates/externalsecret.yaml").read_text()
+    for key in [
+        "targetUsernameKey",
+        "targetTokenKey",
+        "usernameRemoteKey",
+        "tokenRemoteKey",
+    ]:
+        line = next(line for line in template.splitlines() if f".{key}" in line)
+        assert "required" in line
+        assert "| quote" in line
+
+
+def test_workload_quotes_credential_secret_names_and_keys() -> None:
+    deployment = (CHART / "templates/deployment.yaml").read_text()
+    for helper in [
+        "usernameSecretName",
+        "usernameSecretKey",
+        "tokenSecretName",
+        "tokenSecretKey",
+    ]:
+        line = next(line for line in deployment.splitlines() if helper in line)
+        assert "| quote" in line
 
 
 def test_chart_managed_credentials_name_the_user_id_and_api_token() -> None:

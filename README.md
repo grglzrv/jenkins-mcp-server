@@ -231,7 +231,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.3.1 \
+  --version 2.3.2 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -257,6 +257,12 @@ values in release history. For production, disable `create` and prefer
 different Secret objects, or select `externalSecret`.
 When `existingSecret` is enabled, set its `name`, `usernameKey`, and `tokenKey`
 explicitly; the shipped examples use `JENKINS_USERNAME` and `JENKINS_TOKEN`.
+When `externalSecret` is enabled, explicitly set `targetUsernameKey`,
+`targetTokenKey`, `usernameRemoteKey`, and `tokenRemoteKey`. The two target keys
+must be different; the two remote keys may be the same when properties select
+different fields from one structured secret. The username remote value is the
+same Jenkins login/User search-filter ID described above, and the API token must
+belong to that account.
 Changing chart-managed credentials rolls the pods automatically; Kubernetes
 does not update environment variables in running pods, so rotate existing or
 ESO-managed credentials with a workload restart.
@@ -508,7 +514,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.3.1
+NEW_VERSION=2.3.2
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 
