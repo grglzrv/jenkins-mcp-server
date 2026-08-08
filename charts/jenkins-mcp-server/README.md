@@ -59,7 +59,7 @@ creates the credentials Secret.
 ```bash
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.3.0 \
+  --version 2.3.1 \
   --namespace jenkins-mcp \
   --create-namespace \
   --set jenkins.url=https://jenkins.example.com \
@@ -81,7 +81,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.3.0 \
+  --version 2.3.1 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -179,7 +179,7 @@ render rather than resolving silently.
 | Source | Enable with | Use when |
 | :--- | :--- | :--- |
 | Chart-managed | `jenkins.credentials.create.enabled: true` *(default)* | Disposable environments only — the token lands in the Helm release |
-| Existing Secret | `jenkins.credentials.existingSecret.enabled: true` | Recommended production default. You create one Secret containing both values. Set `name`, and `usernameKey` / `tokenKey` if they differ from `JENKINS_USERNAME` / `JENKINS_TOKEN` |
+| Existing Secret | `jenkins.credentials.existingSecret.enabled: true` | Recommended production default. You create one Secret containing both values. Set `name`, `usernameKey`, and `tokenKey` explicitly; the defaults are `JENKINS_USERNAME` and `JENKINS_TOKEN` |
 | Advanced split references | `jenkins.credentials.secretKeyRefs.enabled: true` | Only when the user ID and API token come from different Secret objects; for one Secret, use `existingSecret` |
 | External Secrets | `jenkins.credentials.externalSecret.enabled: true` | External Secrets Operator syncs it from an external store; configure the store under `jenkins.credentials.externalSecret` |
 
@@ -382,7 +382,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.3.0
+NEW_VERSION=2.3.1
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

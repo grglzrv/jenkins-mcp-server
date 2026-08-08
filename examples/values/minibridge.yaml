@@ -18,6 +18,8 @@ jenkins:
     existingSecret:
       enabled: true
       name: jenkins-mcp-secrets
+      usernameKey: JENKINS_USERNAME
+      tokenKey: JENKINS_TOKEN
 
 # Server-side policy still applies underneath minibridge and cannot be bypassed.
 mcp:

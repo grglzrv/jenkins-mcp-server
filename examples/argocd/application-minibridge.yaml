@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 2.3.0
+    targetRevision: 2.3.1
     helm:
       releaseName: jenkins-mcp
       valuesObject:
@@ -30,6 +30,8 @@ spec:
             existingSecret:
               enabled: true
               name: jenkins-mcp-secrets
+              usernameKey: JENKINS_USERNAME
+              tokenKey: JENKINS_TOKEN
 
         # Server-side policy still applies underneath the proxy and cannot be
         # bypassed by a client.

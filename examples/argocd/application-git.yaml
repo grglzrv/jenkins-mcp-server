@@ -45,6 +45,8 @@ spec:
             existingSecret:
               enabled: true
               name: jenkins-mcp-secrets
+              usernameKey: JENKINS_USERNAME
+              tokenKey: JENKINS_TOKEN
         mcp:
           allowedJobs: "AI/*,Platform/*"
         service:

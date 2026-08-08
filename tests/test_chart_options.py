@@ -306,6 +306,22 @@ def test_secret_examples_cover_all_four_credential_paths() -> None:
     assert refs["username"]["name"] != refs["token"]["name"]
 
 
+def test_enabled_existing_secret_values_are_explicit() -> None:
+    files = sorted(EXAMPLES.glob("*.yaml")) + sorted(
+        (ROOT / ".github").glob("smoke-values*.yaml")
+    )
+    for path in files:
+        document = yaml.safe_load(path.read_text())
+        existing = document["jenkins"]["credentials"].get("existingSecret", {})
+        if not existing.get("enabled"):
+            continue
+        assert existing.get("name"), f"{path.relative_to(ROOT)}: missing name"
+        assert existing.get("usernameKey"), (
+            f"{path.relative_to(ROOT)}: missing usernameKey"
+        )
+        assert existing.get("tokenKey"), f"{path.relative_to(ROOT)}: missing tokenKey"
+
+
 def test_chart_managed_credentials_name_the_user_id_and_api_token() -> None:
     create = values()["jenkins"]["credentials"]["create"]
     assert "jenkinsUserId" in create
@@ -519,8 +535,11 @@ def test_argocd_applications_make_session_affinity_explicit() -> None:
 def test_argocd_applications_never_create_the_credentials_secret() -> None:
     for f, app in applications():
         creds = app["spec"]["source"]["helm"]["valuesObject"]["jenkins"]["credentials"]
-        assert creds["existingSecret"]["enabled"] is True, f"{f.name} must reference a Secret"
-        assert creds["existingSecret"]["name"], f"{f.name} does not name a Secret"
+        existing = creds["existingSecret"]
+        assert existing["enabled"] is True, f"{f.name} must reference a Secret"
+        assert existing["name"], f"{f.name} does not name a Secret"
+        assert existing["usernameKey"], f"{f.name} does not name the user ID key"
+        assert existing["tokenKey"], f"{f.name} does not name the API token key"
 
 
 def test_argocd_applications_ignore_the_operator_rewritten_ingress_host() -> None:
@@ -1377,3 +1396,9 @@ def test_documented_values_blocks_match_the_current_schema() -> None:
             assert "externalSecret" not in parsed, (
                 f"{doc}: externalSecret moved under jenkins.credentials in 2.0.0"
             )
+            existing = creds.get("existingSecret", {})
+            if existing.get("enabled"):
+                for key in ["name", "usernameKey", "tokenKey"]:
+                    assert existing.get(key), (
+                        f"{doc}: enabled existingSecret must explicitly set {key}"
+                    )

@@ -2,7 +2,7 @@ replicaCount: 2
 
 image:
   repository: ghcr.io/grglzrv/jenkins-mcp-server
-  tag: "2.3.0"
+  tag: "2.3.1"
 
 service:
   # Streamable HTTP session state is process-local; keep requests on one pod.
@@ -29,6 +29,8 @@ jenkins:
     existingSecret:
       enabled: true
       name: jenkins-mcp-secrets
+      usernameKey: JENKINS_USERNAME
+      tokenKey: JENKINS_TOKEN
   # No CA bundle here on purpose. Tailscale issues certificates that chain to a
   # public root, so the container's default trust store validates
   # jenkins.<tailnet>.ts.net already. Add caBundle.existingSecret only if your

@@ -43,7 +43,7 @@ spec:
     chart: jenkins-mcp-server
     # Pin an exact version. A range or "*" would let a sync move you between
     # releases without review.
-    targetRevision: 2.3.0
+    targetRevision: 2.3.1
     helm:
       releaseName: jenkins-mcp
       # valuesObject is inline and easy to read. For larger setups, keep values
@@ -66,6 +66,8 @@ spec:
             existingSecret:
               enabled: true
               name: jenkins-mcp-secrets
+              usernameKey: JENKINS_USERNAME
+              tokenKey: JENKINS_TOKEN
 
         mcp:
           # Restrict the agent to the folders it legitimately needs.

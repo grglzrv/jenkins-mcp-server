@@ -10,6 +10,8 @@ jenkins:
     existingSecret:
       enabled: true
       name: jenkins-mcp-secrets
+      usernameKey: JENKINS_USERNAME
+      tokenKey: JENKINS_TOKEN
 
 # Single replica: the runner has two cores, and the PodDisruptionBudget default
 # of minAvailable 1 would then block eviction, which the chart rejects.
