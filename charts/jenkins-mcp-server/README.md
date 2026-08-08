@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 3.0.0 \
+  --version 3.0.1 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 3.0.0 \
+  --version 3.0.1 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -93,7 +93,8 @@ For a public package, registry login is not needed for pulls.
 
 ## Required Jenkins credentials
 
-Create the Kubernetes Secret before installing:
+Exactly one credential source must be enabled. For production, create a Secret
+before installing (or use External Secrets):
 
 ```bash
 kubectl create namespace jenkins-mcp
@@ -105,6 +106,10 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 Prefer `jenkins.credentials.externalSecret.enabled=true` when the External
 Secrets Operator is available; the store, remote keys and policies are
 configured in the same block.
+
+For a disposable install, the default chart-managed source instead requires
+`jenkins.credentials.create.username` and
+`jenkins.credentials.create.token`. Helm stores them in release history.
 
 ## Tailscale integration (optional)
 
@@ -174,7 +179,7 @@ render rather than resolving silently.
 
 | Source | Enable with | Use when |
 | :--- | :--- | :--- |
-| Existing Secret | `jenkins.credentials.existingSecret.enabled: true` | You create the Secret. Set `name`, and `usernameKey` / `tokenKey` if they differ from `JENKINS_USERNAME` / `JENKINS_TOKEN` |
+| Existing Secret | `jenkins.credentials.existingSecret.enabled: true` | Recommended production default. You create the Secret. Set `name`, and `usernameKey` / `tokenKey` if they differ from `JENKINS_USERNAME` / `JENKINS_TOKEN` |
 | Per-field references | `jenkins.credentials.secretKeyRefs.enabled: true` | The username and token live in different Secrets or keys you do not control |
 | Chart-managed | `jenkins.credentials.create.enabled: true` *(default)* | Disposable environments only — the token lands in the Helm release |
 | External Secrets | `jenkins.credentials.externalSecret.enabled: true` | External Secrets Operator syncs it from an external store; configure the store under `jenkins.credentials.externalSecret` |
@@ -198,6 +203,18 @@ jenkins:
 
 Selecting any source other than `create` means disabling `create`, since
 exactly one may be enabled.
+
+Each source owns its own key names: `existingSecret.usernameKey` / `tokenKey`,
+`create.usernameKey` / `tokenKey`, and
+`externalSecret.targetUsernameKey` / `targetTokenKey`. Changing one source can
+therefore never silently change another. Helm-managed credential changes add a
+pod-template checksum and roll the Deployment automatically. Existing Secrets
+and ESO targets update independently of Helm; restart the Deployment after a
+rotation because environment variables in a running process are immutable.
+
+`externalSecret.dataFrom` and `extraData` are mutually exclusive. With
+`dataFrom`, the synchronized Secret must still contain the two configured
+target key names.
 
 ### Server policy, always enforced
 
@@ -301,7 +318,7 @@ loss; it does not migrate a pod's in-memory sessions during restart or eviction.
 
 | File | Shows |
 | --- | --- |
-| `examples/values/existing-secret.yaml` | The default credentials path |
+| `examples/values/existing-secret.yaml` | Recommended production credentials path |
 | `examples/values/per-field-secret-refs.yaml` | Username and token from separate existing Secrets |
 | `examples/values/chart-managed-secret.yaml` | Chart-created Secret, disposable environments |
 | `examples/values/external-secrets-gcp-workload-identity.yaml` | GCP Secret Manager with Workload Identity |
@@ -338,7 +355,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=3.0.0
+NEW_VERSION=3.0.1
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

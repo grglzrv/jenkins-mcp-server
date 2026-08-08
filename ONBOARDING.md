@@ -18,9 +18,10 @@ Follow these for the whole install.
    and wait.
 3. **Never print a token back.** Read secrets from the person's input straight
    into `kubectl create secret`, and never echo them into logs or a summary.
-4. **Do not write secrets into values files.** `values.yaml` and anything
-   committed to git are the wrong place. The chart reads credentials from a
-   Kubernetes Secret by design.
+4. **Do not write secrets into values files for production.** The chart-managed
+   source is the installation default for disposable evaluation only; Helm
+   stores those values in release history. Use an existing Secret or External
+   Secrets for a durable installation.
 5. **Do not disable TLS verification** to get past a certificate error. Ask
    whether Jenkins uses a private CA and mount it instead. See
    [docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
@@ -102,24 +103,21 @@ skip this phase and configure `jenkins.credentials.externalSecret.*` instead.
 
 ## Phase 4 — Install
 
-Write the values to a file so the install is reproducible and reviewable. This
-is the default shape: minibridge enforcing, destructive tools denied, no
-ingress, no External Secrets.
+Write the non-secret values to a file so the install is reproducible and
+reviewable. This is the recommended production shape: minibridge enforcing,
+destructive tools denied, no ingress, and the Secret from phase 3 referenced by
+name.
 
 ```yaml
 # values.yaml
 jenkins:
   url: https://jenkins.example.com     # exact host on the certificate
   credentials:
-    # The chart creates the Secret from these values, which is the default.
-    # The token is then stored in the Helm release, so for anything beyond a
-    # first install prefer existingSecret and phase 3 above:
-    #   create: { enabled: false }
-    #   existingSecret: { enabled: true, name: jenkins-mcp-secrets }
     create:
+      enabled: false
+    existingSecret:
       enabled: true
-      username: "<jenkins-user>"
-      token: "<api-token>"
+      name: jenkins-mcp-secrets
 
 mcp:
   allowedJobs: "*"                     # narrow to the folders they named

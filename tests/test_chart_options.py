@@ -98,6 +98,8 @@ def test_external_secret_exposes_creation_options() -> None:
         "creationPolicy",
         "deletionPolicy",
         "secretStore",
+        "targetUsernameKey",
+        "targetTokenKey",
         "usernameRemoteProperty",
         "tokenRemoteProperty",
     ]:
@@ -112,6 +114,44 @@ def test_optional_secret_store_creation_is_templated() -> None:
     assert "provider" in template
     # The provider must be required when creating a store, or ESO gets a no-op.
     assert "required" in template
+
+
+def test_credential_sources_own_their_key_names() -> None:
+    creds = values()["jenkins"]["credentials"]
+    for source in ["existingSecret", "create"]:
+        assert creds[source]["usernameKey"] == "JENKINS_USERNAME"
+        assert creds[source]["tokenKey"] == "JENKINS_TOKEN"
+    external = creds["externalSecret"]
+    assert external["targetUsernameKey"] == "JENKINS_USERNAME"
+    assert external["targetTokenKey"] == "JENKINS_TOKEN"
+
+    helpers = (CHART / "templates/_helpers.tpl").read_text()
+    secret = (CHART / "templates/secret.yaml").read_text()
+    external_template = (CHART / "templates/externalsecret.yaml").read_text()
+    for path in ["create.usernameKey", "create.tokenKey"]:
+        assert path in helpers and path in secret
+    for path in ["externalSecret.targetUsernameKey", "externalSecret.targetTokenKey"]:
+        assert path in helpers and path in external_template
+    assert "existingSecret.usernameKey" not in secret
+    assert "existingSecret.tokenKey" not in secret
+
+
+def test_secret_rotation_contracts_are_explicit_and_smoked() -> None:
+    deployment = (CHART / "templates/deployment.yaml").read_text()
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    workflow = (ROOT / ".github/workflows/chart-smoke.yml").read_text()
+    assert "checksum/credentials" in deployment
+    assert "jenkins.credentials.create.enabled" in deployment
+    assert "dataFrom and extraData cannot be combined" in validate
+    for marker in [
+        "credential-sources:",
+        "Helm-managed Secret is owned, rotated, and deleted",
+        "Existing Secret is read but never owned or deleted",
+        "ESO Kubernetes provider syncs and rotates credentials",
+        "external-secrets/external-secrets",
+        "provider.kubernetes.remoteNamespace",
+    ]:
+        assert marker in workflow
 
 
 def test_values_and_production_example_still_match_schema() -> None:
@@ -812,7 +852,9 @@ def test_release_backfill_is_ordered_and_uses_exact_sources() -> None:
 def test_historical_release_smoke_checks_out_release_source() -> None:
     text = (ROOT / ".github/workflows/chart-smoke.yml").read_text()
     assert "source_ref:" in text
-    assert text.count("ref: ${{ inputs.source_ref || github.ref }}") == 3
+    # Every reusable smoke job, including credential-source reconciliation,
+    # must test the requested historical release rather than current main.
+    assert text.count("ref: ${{ inputs.source_ref || github.ref }}") == 4
 
 
 def test_smoke_values_disable_what_the_cluster_lacks() -> None:

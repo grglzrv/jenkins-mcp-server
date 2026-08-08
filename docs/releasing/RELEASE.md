@@ -125,7 +125,7 @@ python scripts/check_version.py              # confirm every pin moved
 ## Prepare a release
 
 ```bash
-NEW_VERSION=3.0.0
+NEW_VERSION=3.0.1
 git checkout -b "release/v$NEW_VERSION"
 # Complete every [Unreleased] category in CHANGELOG.md first.
 make version VERSION="$NEW_VERSION"

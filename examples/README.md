@@ -11,11 +11,17 @@ always injected with `secretKeyRef` and never written into the pod spec.
 
 | Example | Who creates the Secret | Use when |
 | --- | --- | --- |
-| `values/existing-secret.yaml` | You, out of band | Default choice. The chart only references it. |
+| `values/existing-secret.yaml` | You, out of band | Recommended production choice. The chart only references it. |
 | `values/per-field-secret-refs.yaml` | You or a secret operator, out of band | Username and token are rotated in separate existing Secrets. |
 | `values/chart-managed-secret.yaml` | The chart, from values | Disposable environments only — the token lands in the Helm release. |
 | `values/external-secrets-gcp.yaml` | External Secrets Operator | An existing `SecretStore` is already provisioned. |
 | `values/external-secrets-gcp-workload-identity.yaml` | External Secrets Operator | The chart should create the `ClusterSecretStore` too, via GCP Workload Identity. |
+
+The chart-managed source is the installation default, but only for disposable
+use because Helm retains supplied values in release history. Each mode has its
+own key-name settings. After rotating an existing or ESO-managed Secret,
+restart the Deployment so the process receives the new environment variables;
+chart-managed changes trigger that rollout automatically.
 
 ## Networking and scaling
 

@@ -10,19 +10,67 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None.
+- None yet.
 
 ### New Features
 
-- None.
+- None yet.
 
 ### Improvements
 
-- None.
+- None yet.
 
 ### Bug Fixes
 
-- None.
+- None yet.
+
+### Breaking Changes
+
+- None yet.
+
+### Known Issues
+
+- None yet.
+
+### Security
+
+- None yet.
+
+### Upgrade Notes
+
+- None yet.
+
+## [3.0.1] - 2026-08-08
+
+### Highlights
+
+- Credential delivery is now verified end to end for Helm-managed, existing
+  Secret, and External Secrets Operator modes.
+
+### New Features
+
+- CI installs External Secrets Operator 2.8.0 and exercises its Kubernetes
+  provider against an isolated source namespace, including credential
+  rotation.
+
+### Improvements
+
+- Each credential source now owns its target key names instead of reusing the
+  disabled `existingSecret` source's settings.
+- Helm-managed credential changes add a pod-template checksum and roll the
+  Deployment so the process receives rotated values.
+- Credential ownership, rotation, and restart behavior is documented in the
+  project README, chart README, onboarding, security guide, examples, and raw
+  deployment manifests.
+
+### Bug Fixes
+
+- CI and release renders now supply both values required by the default
+  chart-managed source.
+- The two ESO examples no longer contain duplicate `enabled` keys, and the
+  chart-managed example uses the current nested token path.
+- `externalSecret.extraData` can no longer be silently ignored when `dataFrom`
+  is configured; the chart rejects the ambiguous combination.
 
 ### Breaking Changes
 
@@ -34,11 +82,15 @@ from the matching version entry after CI validates it.
 
 ### Security
 
-- None.
+- Existing and ESO-managed credentials remain outside Helm release history;
+  the smoke suite proves that Helm uninstall preserves an existing Secret and
+  that ESO performs the target synchronization.
 
 ### Upgrade Notes
 
-- No action required.
+- No action is required with the default key names. If a chart-managed Secret
+  uses custom keys, set `create.usernameKey` and `create.tokenKey`. For ESO,
+  use `externalSecret.targetUsernameKey` and `targetTokenKey`.
 
 ## [3.0.0] - 2026-08-08
 

@@ -28,7 +28,10 @@ For Kubernetes, prefer an existing Secret, the chart's per-field
 `jenkins.credentials.secretKeyRefs` references, or External Secrets Operator. The
 per-field form allows the username and token to be rotated independently. The
 chart-managed `jenkins.credentials.create` path puts secret material in Helm
-values and release history and is only for disposable environments.
+values and release history and is only for disposable environments. Its Secret
+checksum rolls pods when values change. Existing and ESO-managed Secret
+rotation requires a Deployment restart because Kubernetes does not mutate a
+running process's environment.
 
 Minibridge authentication, remote-policer bearer tokens, TLS private keys, and
 encrypted-key passphrases are always referenced from Kubernetes Secrets. A TLS
