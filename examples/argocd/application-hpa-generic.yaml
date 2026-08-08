@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 1.27.1
+    targetRevision: 2.0.0
     helm:
       releaseName: jenkins-mcp
       valuesObject:
@@ -29,8 +29,9 @@ spec:
           # container's default trust store. Add caBundle.existingSecret only
           # for a private or self-signed issuer.
           credentials:
-            existingSecret: jenkins-mcp-secrets
-            create: false
+            existingSecret:
+              enabled: true
+              name: jenkins-mcp-secrets
 
         mcp:
           allowedJobs: "AI/*,Platform/*"

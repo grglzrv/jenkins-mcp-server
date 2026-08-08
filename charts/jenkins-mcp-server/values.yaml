@@ -140,11 +140,20 @@ podDisruptionBudget:
   maxUnavailable: null
 
 networkPolicy:
-  enabled: true
-  tailscaleNamespace: tailscale
-  hermesNamespace: hermes
-  allowDirectHermesAccess: true
+  # Off by default. A NetworkPolicy selects peers by namespace label, and those
+  # labels differ per cluster, so a policy written for someone else's cluster
+  # silently blocks traffic rather than failing loudly. Enable it once the
+  # namespaces below match yours.
+  enabled: false
+  # Namespaces allowed to reach the MCP port, by their
+  # kubernetes.io/metadata.name label. Empty allows no namespace, which with
+  # enabled: true means only the chart's own health and test traffic.
+  #   allowedNamespaces: ["agents", "tailscale"]
+  allowedNamespaces: []
+  # Allow egress to the public internet. Not needed when Jenkins is in-cluster
+  # or reached over a private network.
   allowInternetEgress: false
+  # Raw rules appended verbatim, for anything the fields above cannot express.
   additionalIngress: []
   additionalEgress: []
 
@@ -186,25 +195,46 @@ jenkins:
   caBundlePath: ""
   timeoutSeconds: 30
   maxRetries: 3
+  # Jenkins credentials. Exactly one source must be enabled; enabling none or
+  # more than one fails the render rather than picking silently.
   credentials:
-    existingSecret: jenkins-mcp-secrets
-    usernameKey: JENKINS_USERNAME
-    tokenKey: JENKINS_TOKEN
-    # Optional per-field Secret references. Use these when the Jenkins username
-    # and token live in different Secrets. Set both names and clear
-    # existingSecret; an empty key falls back to usernameKey/tokenKey above.
-    valueFrom:
+
+    # 1. Reference a Secret you already created. The default.
+    #
+    #      kubectl create secret generic jenkins-mcp-secrets \
+    #        --from-literal=JENKINS_USERNAME=<user> \
+    #        --from-literal=JENKINS_TOKEN=<api-token>
+    existingSecret:
+      enabled: true
+      name: jenkins-mcp-secrets
+      usernameKey: JENKINS_USERNAME
+      tokenKey: JENKINS_TOKEN
+
+    # 2. Take each value from a different Secret or key. Use when the username
+    #    and token are managed separately, or already live in Secrets you do
+    #    not control.
+    secretKeyRefs:
+      enabled: false
       username:
         name: ""
         key: ""
       token:
         name: ""
         key: ""
-    # Only for disposable development environments. Prefer existingSecret or
-    # External Secrets in production.
-    create: false
-    username: ""
-    token: ""
+
+    # 3. Let the chart create the Secret from these values.
+    #    Disposable environments only: the token is stored in the Helm release
+    #    and visible to anyone who can run `helm get values`.
+    create:
+      enabled: false
+      username: ""
+      token: ""
+
+    # 4. Have the External Secrets Operator create the Secret from an external
+    #    store. Configure the store and remote keys under externalSecret below.
+    externalSecret:
+      enabled: false
+
   # Mount a CA certificate from a Secret. The chart mounts it read-only and
   # points the server at it, so no other wiring is needed.
   #
@@ -262,6 +292,9 @@ audit:
     #   claimName: jenkins-mcp-audit
 
 tailscale:
+  # Namespace the Tailscale Operator runs in. Used by the NetworkPolicy to allow
+  # egress through the proxy.
+  namespace: tailscale
   # The whole Tailscale integration is optional and off by default. Nothing
   # under this key renders unless enabled is true, and configuring a
   # sub-feature while this is false fails the render rather than being ignored.

@@ -18,21 +18,16 @@ spec:
       ports:
         - protocol: TCP
           port: {{ include "jenkins-mcp-server.healthPort" . }}
+    {{- with .Values.networkPolicy.allowedNamespaces }}
     - from:
+        {{- range . }}
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.networkPolicy.tailscaleNamespace }}
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
       ports:
         - protocol: TCP
-          port: {{ include "jenkins-mcp-server.mcpPort" . }}
-    {{- if .Values.networkPolicy.allowDirectHermesAccess }}
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.networkPolicy.hermesNamespace }}
-      ports:
-        - protocol: TCP
-          port: {{ include "jenkins-mcp-server.mcpPort" . }}
+          port: {{ include "jenkins-mcp-server.mcpPort" $ }}
     {{- end }}
     {{- with .Values.networkPolicy.additionalIngress }}
     {{- toYaml . | nindent 4 }}
@@ -47,12 +42,14 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # ProxyGroup egress maps service ports to dynamic proxy ports, so allow
-    # traffic to the Tailscale namespace without a destination-port filter.
+    {{- if and .Values.tailscale.enabled .Values.tailscale.egress.enabled }}
+    # A Tailscale ProxyGroup maps service ports to dynamic proxy ports, so
+    # egress to its namespace cannot be filtered by destination port.
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.networkPolicy.tailscaleNamespace }}
+              kubernetes.io/metadata.name: {{ .Values.tailscale.namespace }}
+    {{- end }}
     {{- if .Values.networkPolicy.allowInternetEgress }}
     - {}
     {{- end }}

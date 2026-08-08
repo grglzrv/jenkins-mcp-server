@@ -26,34 +26,22 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- end }}
 {{- end }}
 
-{{- /* Credential sources are mutually exclusive: configuring more than one
-       would leave the chart reading from a Secret the operator did not
-       intend. */ -}}
+{{- /* Exactly one credential source. Four booleans replace what used to be a
+       matrix of pairwise exclusions, so the failure names the count rather than
+       one arbitrary conflict. */ -}}
 {{- $creds := .Values.jenkins.credentials -}}
-{{- $usernameRef := $creds.valueFrom.username.name -}}
-{{- $tokenRef := $creds.valueFrom.token.name -}}
-{{- $fieldRefs := or $usernameRef $tokenRef $creds.valueFrom.username.key $creds.valueFrom.token.key -}}
-{{- if and $fieldRefs (not (and $usernameRef $tokenRef)) }}
-{{- fail "jenkins.credentials.valueFrom must set both username.name and token.name. Use per-field references for both credentials, or clear valueFrom and use one shared existingSecret." }}
+{{- $enabled := list -}}
+{{- if $creds.existingSecret.enabled }}{{- $enabled = append $enabled "existingSecret" }}{{- end }}
+{{- if $creds.secretKeyRefs.enabled }}{{- $enabled = append $enabled "secretKeyRefs" }}{{- end }}
+{{- if $creds.create.enabled }}{{- $enabled = append $enabled "create" }}{{- end }}
+{{- if $creds.externalSecret.enabled }}{{- $enabled = append $enabled "externalSecret" }}{{- end }}
+{{- if gt (len $enabled) 1 }}
+{{- fail (printf "exactly one jenkins.credentials source may be enabled, found %d: %s. Each resolves the username and token from a different place, so enabling several leaves the chart reading from a Secret you did not intend." (len $enabled) (join ", " $enabled)) }}
 {{- end }}
-{{- if and $fieldRefs $creds.existingSecret }}
-{{- fail "jenkins.credentials.valueFrom and jenkins.credentials.existingSecret are mutually exclusive. Clear existingSecret when using per-field Secret references." }}
+{{- if eq (len $enabled) 0 }}
+{{- fail "no jenkins.credentials source is enabled. The server cannot start without a username and API token. Enable one of: existingSecret (reference a Secret you created), secretKeyRefs (a different Secret or key per field), create (chart-managed, disposable environments only), externalSecret (External Secrets Operator)." }}
 {{- end }}
-{{- if and $fieldRefs $creds.create }}
-{{- fail "jenkins.credentials.valueFrom and jenkins.credentials.create are mutually exclusive. Per-field references read existing Secrets; they do not create one." }}
-{{- end }}
-{{- if and $fieldRefs .Values.externalSecret.enabled }}
-{{- fail "jenkins.credentials.valueFrom and externalSecret.enabled are mutually exclusive. Point valueFrom at Secrets already managed by your operator, or let this chart create one ExternalSecret target." }}
-{{- end }}
-{{- if and .Values.externalSecret.enabled $creds.create }}
-{{- fail "externalSecret.enabled and jenkins.credentials.create are mutually exclusive: both produce a Secret named <fullname>-credentials and External Secrets would fight Helm for ownership. Pick one." }}
-{{- end }}
-{{- if and .Values.externalSecret.enabled $creds.existingSecret }}
-{{- fail (printf "externalSecret.enabled is true but jenkins.credentials.existingSecret is set to %q. The ExternalSecret creates its own Secret, so existingSecret would be ignored. Clear it (existingSecret: \"\") to use External Secrets, or disable externalSecret to use your own Secret." $creds.existingSecret) }}
-{{- end }}
-{{- if and $creds.create $creds.existingSecret }}
-{{- fail (printf "jenkins.credentials.create is true but existingSecret is set to %q. The chart would create a Secret and then read from a different one. Clear existingSecret to have the chart create it, or set create: false to use yours." $creds.existingSecret) }}
-{{- end }}
+
 {{- /* TLS trust settings. A CA bundle is only meaningful when verification is
        on, and only needed when the issuer is not publicly trusted. A publicly
        issued certificate (Let's Encrypt, Tailscale) needs no bundle at all. */ -}}
@@ -135,9 +123,9 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- end }}
 {{- if and .Values.minibridge.enabled .Values.minibridge.basicAuth.enabled }}
 {{- $credName := include "jenkins-mcp-server.credentialsSecretName" . }}
-{{- if and .Values.externalSecret.enabled (eq .Values.minibridge.basicAuth.existingSecret $credName) }}
+{{- if and .Values.jenkins.credentials.externalSecret.enabled (eq .Values.minibridge.basicAuth.existingSecret $credName) }}
 {{- $key := .Values.minibridge.basicAuth.secretKey }}
-{{- $provided := list .Values.jenkins.credentials.usernameKey .Values.jenkins.credentials.tokenKey }}
+{{- $provided := list .Values.jenkins.credentials.existingSecret.usernameKey .Values.jenkins.credentials.existingSecret.tokenKey }}
 {{- range .Values.externalSecret.extraData }}{{- $provided = append $provided .secretKey }}{{- end }}
 {{- if and (not .Values.externalSecret.dataFrom) (not (has $key $provided)) }}
 {{- fail (printf "minibridge.basicAuth points at the ExternalSecret target %q for key %q, but the ExternalSecret only creates keys %v. The pod would fail with CreateContainerConfigError. Add the key via externalSecret.extraData, or point basicAuth.existingSecret at a different Secret." $credName $key $provided) }}

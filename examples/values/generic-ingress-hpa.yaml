@@ -10,8 +10,9 @@
 jenkins:
   url: https://jenkins.internal.example.com
   credentials:
-    existingSecret: jenkins-mcp-secrets
-    create: false
+    existingSecret:
+      enabled: true
+      name: jenkins-mcp-secrets
 
 service:
   # Streamable HTTP session state is process-local; keep requests on one pod.
@@ -46,7 +47,6 @@ tailscale:
     createDNSConfig: false
   proxyGroups:
     create: false
-
 autoscaling:
   enabled: true
   minReplicas: 2

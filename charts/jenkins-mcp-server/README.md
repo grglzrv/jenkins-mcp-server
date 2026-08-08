@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.27.1 \
+  --version 2.0.0 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 1.27.1 \
+  --version 2.0.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -102,7 +102,8 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
   --from-literal=JENKINS_TOKEN='<JENKINS_API_TOKEN>'
 ```
 
-Prefer `externalSecret.enabled=true` when External Secrets Operator is available.
+Prefer `jenkins.credentials.externalSecret.enabled=true` when the External
+Secrets Operator is available.
 
 ## Tailscale integration (optional)
 
@@ -165,19 +166,27 @@ than setting `verifyTls: false` — the latter accepts any certificate on a
 connection carrying a Jenkins API token. Setting `verifyTls: false` together
 with a CA bundle fails the render, since the two contradict each other.
 
-### Credentials — pick exactly one
+### Credentials — enable exactly one
 
-Credentials are **required**: the server cannot start without a username and API
-token. Choose one source.
+Credentials are **required**. Enabling none, or more than one source, fails the
+render rather than resolving silently.
 
-| Key | Default | Use when |
+| Source | Enable with | Use when |
 | :--- | :--- | :--- |
-| `jenkins.credentials.existingSecret` | `jenkins-mcp-secrets` | You create one Secret. The default path |
-| `jenkins.credentials.valueFrom` | empty | Username and token are keys in separate existing Secrets |
-| `jenkins.credentials.create` | `false` | Disposable environments only; the token lands in the Helm release |
-| `externalSecret.enabled` | `false` | External Secrets Operator manages it |
+| Existing Secret | `jenkins.credentials.existingSecret.enabled: true` *(default)* | You create the Secret. Set `name`, and `usernameKey` / `tokenKey` if they differ from `JENKINS_USERNAME` / `JENKINS_TOKEN` |
+| Per-field references | `jenkins.credentials.secretKeyRefs.enabled: true` | The username and token live in different Secrets or keys you do not control |
+| Chart-managed | `jenkins.credentials.create.enabled: true` | Disposable environments only — the token lands in the Helm release |
+| External Secrets | `jenkins.credentials.externalSecret.enabled: true` | External Secrets Operator syncs it from an external store; configure the store under `externalSecret` |
 
-Enabling more than one fails the render, naming which value to clear.
+```yaml
+jenkins:
+  credentials:
+    existingSecret:
+      enabled: true
+      name: jenkins-mcp-secrets
+      usernameKey: JENKINS_USERNAME
+      tokenKey: JENKINS_TOKEN
+```
 
 ### Server policy, always enforced
 
@@ -261,7 +270,7 @@ does not render direct-listener variables into the ConfigMap.
 | `ingress.annotations` | `{}` | Controller-specific; see `values.yaml` for examples |
 | `ingress.hostRule` | `null` | `null` decides from the class: Tailscale omits `rules[].host`, others need it |
 | `ingress.tls` / `tlsSecretName` | `true` / `""` | Tailscale issues its own certificate |
-| `networkPolicy.enabled` | `true` | |
+| `networkPolicy.enabled` | `false` | Off by default: it selects peers by namespace label, and those differ per cluster | |
 | `tailscale.enabled` | `false` | The whole integration is opt-in. Configuring a sub-feature while it is false fails the render |
 | `tailscale.egress`, `magicDNS`, `proxyGroups` | disabled | See `values.yaml` |
 
@@ -318,7 +327,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=1.27.1
+NEW_VERSION=2.0.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

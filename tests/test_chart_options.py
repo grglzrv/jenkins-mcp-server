@@ -77,13 +77,11 @@ def test_chart_env_names_match_the_settings_aliases() -> None:
 def test_credential_sources_are_mutually_exclusive() -> None:
     """All three pairings must fail the render, not resolve silently."""
     validate = (CHART / "templates/_validate.tpl").read_text()
-    assert validate.count("fail") >= 3
-    for pair in [
-        "externalSecret.enabled and jenkins.credentials.create",
-        "externalSecret.enabled is true but jenkins.credentials.existingSecret",
-        "jenkins.credentials.create is true but existingSecret",
-    ]:
-        assert pair in validate, f"missing guard: {pair}"
+    # One count check replaces the old matrix of pairwise exclusions.
+    assert "exactly one jenkins.credentials source may be enabled" in validate
+    assert "no jenkins.credentials source is enabled" in validate
+    for source in ["existingSecret", "secretKeyRefs", "create", "externalSecret"]:
+        assert f'"{source}"' in validate, f"{source} not counted as a source"
 
 
 def test_validation_runs_before_the_secret_templates() -> None:
@@ -192,8 +190,9 @@ def test_gcp_example_service_account_name_is_deterministic() -> None:
 
 def test_gcp_example_does_not_also_create_a_helm_secret() -> None:
     creds = gcp_example()["jenkins"]["credentials"]
-    assert creds["create"] is False
-    assert gcp_example()["externalSecret"]["enabled"] is True
+    # External Secrets owns the Secret, so no other source may be enabled.
+    assert creds["existingSecret"]["enabled"] is False
+    assert creds["externalSecret"]["enabled"] is True
 
 
 def test_template_guards_cluster_store_namespace_requirements() -> None:
@@ -233,19 +232,19 @@ def test_examples_readme_references_every_values_file() -> None:
 
 def test_secret_examples_cover_all_four_credential_paths() -> None:
     existing = yaml.safe_load((EXAMPLES / "existing-secret.yaml").read_text())
-    assert existing["jenkins"]["credentials"]["create"] is False
-    assert existing["jenkins"]["credentials"]["existingSecret"]
+    assert existing["jenkins"]["credentials"]["existingSecret"]["enabled"] is True
+    assert existing["jenkins"]["credentials"]["existingSecret"]["name"]
 
     managed = yaml.safe_load((EXAMPLES / "chart-managed-secret.yaml").read_text())
-    assert managed["jenkins"]["credentials"]["create"] is True
+    assert managed["jenkins"]["credentials"]["create"]["enabled"] is True
     # Must be empty or the chart references that Secret instead of creating one.
-    assert managed["jenkins"]["credentials"]["existingSecret"] == ""
+    assert managed["jenkins"]["credentials"]["existingSecret"]["enabled"] is False
     # A real token must never be committed in an example.
-    assert not managed["jenkins"]["credentials"]["token"]
+    assert not managed["jenkins"]["credentials"]["create"]["token"]
 
     per_field = yaml.safe_load((EXAMPLES / "per-field-secret-refs.yaml").read_text())
-    refs = per_field["jenkins"]["credentials"]["valueFrom"]
-    assert per_field["jenkins"]["credentials"]["existingSecret"] == ""
+    refs = per_field["jenkins"]["credentials"]["secretKeyRefs"]
+    assert per_field["jenkins"]["credentials"]["existingSecret"]["enabled"] is False
     assert refs["username"]["name"] != refs["token"]["name"]
 
 
@@ -257,9 +256,9 @@ def test_per_field_credential_refs_are_wired_and_validated() -> None:
                    "tokenSecretName", "tokenSecretKey"]:
         assert helper in helpers
         assert helper in deployment
-    assert "valueFrom must set both username.name and token.name" in validate
-    for conflict in ["existingSecret", "credentials.create", "externalSecret.enabled"]:
-        assert "credentials.valueFrom" in validate and conflict in validate
+    assert "exactly one jenkins.credentials source may be enabled" in validate
+    for conflict in ["existingSecret", "secretKeyRefs", "create", "externalSecret"]:
+        assert conflict in validate
 
 
 def test_minibridge_examples_demonstrate_both_policy_shapes() -> None:
@@ -395,8 +394,8 @@ def test_argocd_applications_make_session_affinity_explicit() -> None:
 def test_argocd_applications_never_create_the_credentials_secret() -> None:
     for f, app in applications():
         creds = app["spec"]["source"]["helm"]["valuesObject"]["jenkins"]["credentials"]
-        assert creds.get("create") is False, f"{f.name} would create a Secret from values"
-        assert creds.get("existingSecret"), f"{f.name} does not reference a Secret"
+        assert creds["existingSecret"]["enabled"] is True, f"{f.name} must reference a Secret"
+        assert creds["existingSecret"]["name"], f"{f.name} does not name a Secret"
 
 
 def test_argocd_applications_ignore_the_operator_rewritten_ingress_host() -> None:

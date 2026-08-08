@@ -16,8 +16,9 @@
 jenkins:
   url: https://jenkins.example-tailnet.ts.net
   credentials:
-    existingSecret: jenkins-mcp-secrets
-    create: false
+    existingSecret:
+      enabled: true
+      name: jenkins-mcp-secrets
 
 mcp:
   readOnly: true

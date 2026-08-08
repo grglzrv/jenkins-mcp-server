@@ -4,8 +4,9 @@
 jenkins:
   url: https://jenkins.smoke.invalid
   credentials:
-    existingSecret: jenkins-mcp-secrets
-    create: false
+    existingSecret:
+      enabled: true
+      name: jenkins-mcp-secrets
 
 # Single replica: the runner has two cores, and the PodDisruptionBudget default
 # of minAvailable 1 would then block eviction, which the chart rejects.
@@ -21,7 +22,6 @@ tailscale:
     createDNSConfig: false
   proxyGroups:
     create: false
-
 # Kept on deliberately: the helm test pod reaching the Service through it is
 # the point, and a policy that blocks legitimate traffic should fail here.
 networkPolicy:

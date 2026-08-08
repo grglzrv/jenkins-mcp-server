@@ -40,6 +40,89 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.0.0] - 2026-08-08
+
+### Highlights
+
+- The credential and NetworkPolicy values are restructured for production use.
+  Both changes are breaking; see Upgrade Notes.
+
+### New Features
+
+- `jenkins.credentials.secretKeyRefs` reads the username and token from
+  different Secrets or keys, replacing the unlabelled `valueFrom` block.
+
+### Improvements
+
+- Each credential source is now an explicit `enabled` flag under
+  `jenkins.credentials`: `existingSecret`, `secretKeyRefs`, `create` and
+  `externalSecret`. Exactly one may be enabled. Enabling none fails with the
+  list of options; enabling several fails naming the count and the conflict,
+  replacing six pairwise checks that each described one arbitrary pair.
+- `existingSecret` carries its own `name`, `usernameKey` and `tokenKey`, so the
+  key names sit with the Secret they belong to.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- `jenkins.credentials.existingSecret` is an object, not a string.
+- `jenkins.credentials.create` is an object with `enabled`, `username` and
+  `token`, not a boolean beside two sibling fields.
+- `jenkins.credentials.usernameKey` and `tokenKey` moved under `existingSecret`.
+- `jenkins.credentials.valueFrom` is now `jenkins.credentials.secretKeyRefs`
+  with an `enabled` flag.
+- `externalSecret.enabled` moved to `jenkins.credentials.externalSecret.enabled`.
+  The store configuration stays under `externalSecret`.
+- `networkPolicy.enabled` defaults to `false`.
+- `networkPolicy.tailscaleNamespace`, `hermesNamespace` and
+  `allowDirectHermesAccess` are replaced by `networkPolicy.allowedNamespaces`,
+  a list. The policy no longer assumes a Tailscale or agent namespace exists.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- The NetworkPolicy previously defaulted to enabled while selecting peers by
+  namespace labels that differ per cluster. A policy that does not match the
+  cluster silently blocks traffic instead of failing, which is a poor default
+  for a control people rely on. It is now opt-in, and the namespaces it admits
+  are stated explicitly rather than assumed.
+
+### Upgrade Notes
+
+- Credentials, from the most common form:
+
+  ```yaml
+  # before
+  jenkins:
+    credentials:
+      existingSecret: jenkins-mcp-secrets
+      usernameKey: JENKINS_USERNAME
+      tokenKey: JENKINS_TOKEN
+      create: false
+
+  # after
+  jenkins:
+    credentials:
+      existingSecret:
+        enabled: true
+        name: jenkins-mcp-secrets
+        usernameKey: JENKINS_USERNAME
+        tokenKey: JENKINS_TOKEN
+  ```
+
+- If you set `externalSecret.enabled: true`, move that one flag to
+  `jenkins.credentials.externalSecret.enabled` and set
+  `jenkins.credentials.existingSecret.enabled: false`. Everything else under
+  `externalSecret` is unchanged.
+- If you relied on the NetworkPolicy, set `networkPolicy.enabled: true` and list
+  the namespaces that may reach the server in `networkPolicy.allowedNamespaces`.
+
 ## [1.27.1] - 2026-08-07
 
 ### Highlights

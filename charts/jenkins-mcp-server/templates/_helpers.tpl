@@ -41,38 +41,53 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- end }}
 
+{{/*
+Credential resolution. Exactly one source is enabled, enforced in _validate.tpl,
+so each helper answers for whichever it is.
+*/}}
 {{- define "jenkins-mcp-server.credentialsSecretName" -}}
-{{- if .Values.externalSecret.enabled }}
+{{- $c := .Values.jenkins.credentials -}}
+{{- if or $c.externalSecret.enabled $c.create.enabled -}}
 {{- include "jenkins-mcp-server.fullname" . }}-credentials
-{{- else if .Values.jenkins.credentials.create }}
-{{- include "jenkins-mcp-server.fullname" . }}-credentials
-{{- else }}
-{{- required "jenkins.credentials.existingSecret is required unless credential creation or ExternalSecret is enabled" .Values.jenkins.credentials.existingSecret }}
-{{- end }}
+{{- else -}}
+{{- required "jenkins.credentials.existingSecret.name is required" $c.existingSecret.name -}}
+{{- end -}}
 {{- end }}
 
 {{- define "jenkins-mcp-server.usernameSecretName" -}}
-{{- if .Values.jenkins.credentials.valueFrom.username.name -}}
-{{- .Values.jenkins.credentials.valueFrom.username.name -}}
+{{- $c := .Values.jenkins.credentials -}}
+{{- if $c.secretKeyRefs.enabled -}}
+{{- required "jenkins.credentials.secretKeyRefs.username.name is required" $c.secretKeyRefs.username.name -}}
 {{- else -}}
 {{- include "jenkins-mcp-server.credentialsSecretName" . -}}
 {{- end -}}
 {{- end }}
 
 {{- define "jenkins-mcp-server.usernameSecretKey" -}}
-{{- default .Values.jenkins.credentials.usernameKey .Values.jenkins.credentials.valueFrom.username.key -}}
+{{- $c := .Values.jenkins.credentials -}}
+{{- if $c.secretKeyRefs.enabled -}}
+{{- required "jenkins.credentials.secretKeyRefs.username.key is required" $c.secretKeyRefs.username.key -}}
+{{- else -}}
+{{- $c.existingSecret.usernameKey | default "JENKINS_USERNAME" -}}
+{{- end -}}
 {{- end }}
 
 {{- define "jenkins-mcp-server.tokenSecretName" -}}
-{{- if .Values.jenkins.credentials.valueFrom.token.name -}}
-{{- .Values.jenkins.credentials.valueFrom.token.name -}}
+{{- $c := .Values.jenkins.credentials -}}
+{{- if $c.secretKeyRefs.enabled -}}
+{{- required "jenkins.credentials.secretKeyRefs.token.name is required" $c.secretKeyRefs.token.name -}}
 {{- else -}}
 {{- include "jenkins-mcp-server.credentialsSecretName" . -}}
 {{- end -}}
 {{- end }}
 
 {{- define "jenkins-mcp-server.tokenSecretKey" -}}
-{{- default .Values.jenkins.credentials.tokenKey .Values.jenkins.credentials.valueFrom.token.key -}}
+{{- $c := .Values.jenkins.credentials -}}
+{{- if $c.secretKeyRefs.enabled -}}
+{{- required "jenkins.credentials.secretKeyRefs.token.key is required" $c.secretKeyRefs.token.key -}}
+{{- else -}}
+{{- $c.existingSecret.tokenKey | default "JENKINS_TOKEN" -}}
+{{- end -}}
 {{- end }}
 
 {{/* Image to run: the minibridge variant when the proxy is enabled. */}}

@@ -214,52 +214,99 @@
           "type": "object",
           "required": [
             "existingSecret",
-            "usernameKey",
-            "tokenKey",
-            "create"
+            "secretKeyRefs",
+            "create",
+            "externalSecret"
           ],
           "properties": {
             "existingSecret": {
-              "type": "string"
-            },
-            "usernameKey": {
-              "type": "string",
-              "minLength": 1
-            },
-            "tokenKey": {
-              "type": "string",
-              "minLength": 1
-            },
-            "valueFrom": {
               "type": "object",
-              "required": ["username", "token"],
+              "required": [
+                "enabled"
+              ],
               "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "usernameKey": {
+                  "type": "string"
+                },
+                "tokenKey": {
+                  "type": "string"
+                }
+              }
+            },
+            "secretKeyRefs": {
+              "type": "object",
+              "required": [
+                "enabled"
+              ],
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
                 "username": {
                   "type": "object",
-                  "required": ["name", "key"],
+                  "required": [
+                    "name",
+                    "key"
+                  ],
                   "properties": {
-                    "name": {"type": "string"},
-                    "key": {"type": "string"}
+                    "name": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    }
                   }
                 },
                 "token": {
                   "type": "object",
-                  "required": ["name", "key"],
+                  "required": [
+                    "name",
+                    "key"
+                  ],
                   "properties": {
-                    "name": {"type": "string"},
-                    "key": {"type": "string"}
+                    "name": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    }
                   }
                 }
               }
             },
             "create": {
-              "type": "boolean"
+              "type": "object",
+              "required": [
+                "enabled"
+              ],
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "username": {
+                  "type": "string"
+                },
+                "token": {
+                  "type": "string"
+                }
+              }
             },
-            "username": {
-              "type": "string"
-            },
-            "token": {
-              "type": "string"
+            "externalSecret": {
+              "type": "object",
+              "required": [
+                "enabled"
+              ],
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              }
             }
           }
         },
@@ -399,24 +446,10 @@
       "type": "object",
       "required": [
         "enabled",
-        "tailscaleNamespace",
-        "hermesNamespace",
-        "allowDirectHermesAccess",
         "allowInternetEgress"
       ],
       "properties": {
         "enabled": {
-          "type": "boolean"
-        },
-        "tailscaleNamespace": {
-          "type": "string",
-          "minLength": 1
-        },
-        "hermesNamespace": {
-          "type": "string",
-          "minLength": 1
-        },
-        "allowDirectHermesAccess": {
           "type": "boolean"
         },
         "allowInternetEgress": {
@@ -427,6 +460,12 @@
         },
         "additionalEgress": {
           "type": "array"
+        },
+        "allowedNamespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -545,6 +584,9 @@
         },
         "enabled": {
           "type": "boolean"
+        },
+        "namespace": {
+          "type": "string"
         }
       }
     },
@@ -789,9 +831,13 @@
         },
         "mcp": {
           "type": "object",
-          "required": ["useTempDir"],
+          "required": [
+            "useTempDir"
+          ],
           "properties": {
-            "useTempDir": {"type": "boolean"}
+            "useTempDir": {
+              "type": "boolean"
+            }
           }
         },
         "tls": {
@@ -817,14 +863,23 @@
             },
             "pass": {
               "type": "object",
-              "required": ["valueFrom"],
+              "required": [
+                "valueFrom"
+              ],
               "properties": {
                 "valueFrom": {
                   "type": "object",
-                  "required": ["name", "key"],
+                  "required": [
+                    "name",
+                    "key"
+                  ],
                   "properties": {
-                    "name": {"type": "string"},
-                    "key": {"type": "string"}
+                    "name": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    }
                   }
                 }
               }

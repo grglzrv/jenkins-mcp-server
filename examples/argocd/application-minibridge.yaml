@@ -18,15 +18,16 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 1.27.1
+    targetRevision: 2.0.0
     helm:
       releaseName: jenkins-mcp
       valuesObject:
         jenkins:
           url: https://jenkins.example-tailnet.ts.net
           credentials:
-            existingSecret: jenkins-mcp-secrets
-            create: false
+            existingSecret:
+              enabled: true
+              name: jenkins-mcp-secrets
 
         # Server-side policy still applies underneath the proxy and cannot be
         # bypassed by a client.
