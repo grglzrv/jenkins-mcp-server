@@ -3,6 +3,9 @@
 jenkins:
   url: http://jenkins:8080
   credentials:
+    # The chart creates the Secret by default; this deployment supplies its own.
+    create:
+      enabled: false
     existingSecret:
       enabled: true
       name: jenkins-mcp-secrets

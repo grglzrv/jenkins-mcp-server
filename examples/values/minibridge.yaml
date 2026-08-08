@@ -12,6 +12,9 @@
 jenkins:
   url: https://jenkins.example-tailnet.ts.net
   credentials:
+    # The chart creates the Secret by default; this deployment supplies its own.
+    create:
+      enabled: false
     existingSecret:
       enabled: true
       name: jenkins-mcp-secrets

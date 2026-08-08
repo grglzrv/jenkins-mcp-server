@@ -40,6 +40,8 @@ spec:
         jenkins:
           url: https://jenkins.example-tailnet.ts.net
           credentials:
+            create:
+              enabled: false
             existingSecret:
               enabled: true
               name: jenkins-mcp-secrets

@@ -40,6 +40,65 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [3.0.0] - 2026-08-08
+
+### Highlights
+
+- The chart creates the credentials Secret by default, so a first install needs
+  only a Jenkins URL, username and token.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- `jenkins.credentials.create.enabled` defaults to `true` and
+  `existingSecret.enabled` to `false`. Installing without credentials now fails
+  at render naming the missing value, instead of deploying a pod that waits
+  indefinitely for a Secret nobody created.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- Any values file selecting a source other than `create` must now disable it,
+  because exactly one source may be enabled:
+
+  ```yaml
+  jenkins:
+    credentials:
+      create:
+        enabled: false
+      existingSecret:
+        enabled: true
+        name: jenkins-mcp-secrets
+  ```
+
+  Every shipped example and Argo CD application is updated accordingly.
+
+### Known Issues
+
+- Enabling any non-default source requires explicitly disabling `create`, which
+  is noisier than it should be. A single `jenkins.credentials.source` enum would
+  express the choice in one value and is worth considering before the next
+  major.
+
+### Security
+
+- The default now stores the Jenkins API token in the Helm release, readable by
+  anyone who can run `helm get values` on the namespace. That is an acceptable
+  trade for a first install and is documented as such, but `existingSecret` or
+  `externalSecret` remain the right choice for anything longer-lived, and both
+  the chart README and the onboarding guide say so at the point of use.
+
+### Upgrade Notes
+
+- If you set `existingSecret`, `secretKeyRefs` or `externalSecret`, add
+  `create: { enabled: false }` alongside it. Nothing else changes.
+
 ## [2.0.0] - 2026-08-08
 
 ### Highlights

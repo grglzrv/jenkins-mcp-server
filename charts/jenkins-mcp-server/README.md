@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.0.0 \
+  --version 3.0.0 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.0.0 \
+  --version 3.0.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -174,20 +174,30 @@ render rather than resolving silently.
 
 | Source | Enable with | Use when |
 | :--- | :--- | :--- |
-| Existing Secret | `jenkins.credentials.existingSecret.enabled: true` *(default)* | You create the Secret. Set `name`, and `usernameKey` / `tokenKey` if they differ from `JENKINS_USERNAME` / `JENKINS_TOKEN` |
+| Existing Secret | `jenkins.credentials.existingSecret.enabled: true` | You create the Secret. Set `name`, and `usernameKey` / `tokenKey` if they differ from `JENKINS_USERNAME` / `JENKINS_TOKEN` |
 | Per-field references | `jenkins.credentials.secretKeyRefs.enabled: true` | The username and token live in different Secrets or keys you do not control |
-| Chart-managed | `jenkins.credentials.create.enabled: true` | Disposable environments only — the token lands in the Helm release |
+| Chart-managed | `jenkins.credentials.create.enabled: true` *(default)* | Disposable environments only — the token lands in the Helm release |
 | External Secrets | `jenkins.credentials.externalSecret.enabled: true` | External Secrets Operator syncs it from an external store; configure the store under `jenkins.credentials.externalSecret` |
+
+The default is chart-managed, so a first install needs only a username and
+token. That stores the token in the Helm release, where anyone who can run
+`helm get values` can read it, so move to an existing Secret for anything
+longer-lived:
 
 ```yaml
 jenkins:
   credentials:
+    create:
+      enabled: false
     existingSecret:
       enabled: true
       name: jenkins-mcp-secrets
       usernameKey: JENKINS_USERNAME
       tokenKey: JENKINS_TOKEN
 ```
+
+Selecting any source other than `create` means disabling `create`, since
+exactly one may be enabled.
 
 ### Server policy, always enforced
 
@@ -328,7 +338,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.0.0
+NEW_VERSION=3.0.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

@@ -111,9 +111,15 @@ ingress, no External Secrets.
 jenkins:
   url: https://jenkins.example.com     # exact host on the certificate
   credentials:
-    existingSecret:
+    # The chart creates the Secret from these values, which is the default.
+    # The token is then stored in the Helm release, so for anything beyond a
+    # first install prefer existingSecret and phase 3 above:
+    #   create: { enabled: false }
+    #   existingSecret: { enabled: true, name: jenkins-mcp-secrets }
+    create:
       enabled: true
-      name: jenkins-mcp-secrets
+      username: "<jenkins-user>"
+      token: "<api-token>"
 
 mcp:
   allowedJobs: "*"                     # narrow to the folders they named

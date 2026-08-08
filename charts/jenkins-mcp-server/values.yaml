@@ -205,7 +205,7 @@ jenkins:
     #        --from-literal=JENKINS_USERNAME=<user> \
     #        --from-literal=JENKINS_TOKEN=<api-token>
     existingSecret:
-      enabled: true
+      enabled: false
       name: jenkins-mcp-secrets
       usernameKey: JENKINS_USERNAME
       tokenKey: JENKINS_TOKEN
@@ -226,7 +226,7 @@ jenkins:
     #    Disposable environments only: the token is stored in the Helm release
     #    and visible to anyone who can run `helm get values`.
     create:
-      enabled: false
+      enabled: true
       username: ""
       token: ""
 
