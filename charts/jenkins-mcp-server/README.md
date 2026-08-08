@@ -64,7 +64,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.1.0 \
+  --version 2.1.1 \
   --namespace jenkins-mcp \
   --set jenkins.url=https://jenkins.example.com
 ```
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.1.0 \
+  --version 2.1.1 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -204,10 +204,12 @@ jenkins:
 Selecting any source other than `create` means disabling `create`, since
 exactly one may be enabled.
 
-Each source owns its own key names: `existingSecret.usernameKey` / `tokenKey`,
-`create.usernameKey` / `tokenKey`, and
-`externalSecret.targetUsernameKey` / `targetTokenKey`. Changing one source can
-therefore never silently change another. Helm-managed credential changes add a
+The chart-managed source accepts only the real `username` and `token` values in
+normal configuration and writes them under `JENKINS_USERNAME` and
+`JENKINS_TOKEN` in one Secret. Existing Secrets and ESO targets keep their own
+key-name settings because those objects may use names the chart does not
+control. Legacy `create.usernameKey` / `tokenKey` overrides remain accepted for
+2.x compatibility but are deprecated. Helm-managed credential changes add a
 pod-template checksum and roll the Deployment automatically. Existing Secrets
 and ESO targets update independently of Helm; restart the Deployment after a
 rotation because environment variables in a running process are immutable.
@@ -355,7 +357,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.1.0
+NEW_VERSION=2.1.1
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

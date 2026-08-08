@@ -13,6 +13,7 @@ EXCLUDED_PARTS = {
     ".venv",
     ".mypy_cache",
     ".pytest_cache",
+    "pytest-of-root",
     ".ruff_cache",
     "__pycache__",
     "build",
