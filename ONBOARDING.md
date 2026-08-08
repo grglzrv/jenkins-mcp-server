@@ -196,6 +196,11 @@ Ask which harness they use, and configure it on that side. The server speaks
 **Streamable HTTP** at the `/mcp` path; the surrounding configuration keys
 differ per harness, so use its own documentation rather than assuming a shape.
 
+For Hermes Agent, use the current `mcp_servers.<name>.url` HTTP form in
+`deploy/hermes/mcp-config.yaml`; Hermes detects the transport from `url`. Do not
+add `transport: streamable_http` or `timeout_seconds`. The supported timeout key
+is `timeout`.
+
 The endpoint is:
 
 | Exposure | URL |

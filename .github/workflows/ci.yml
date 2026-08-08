@@ -114,6 +114,30 @@ jobs:
             --set jenkins.url=https://jenkins.example.com \
             --set jenkins.credentials.create.jenkinsUserId=ci \
             --set jenkins.credentials.create.jenkinsApiToken=ci-placeholder > /tmp/default.yaml
+      - name: Render major-version-2 credential compatibility
+        run: |
+          render_dir=$(mktemp -d)
+          helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
+            --set jenkins.url=https://jenkins.example.com \
+            --set-string jenkins.credentials.create.jenkinsUserId=ci \
+            --set-string jenkins.credentials.create.jenkinsApiToken=ci-placeholder > "$render_dir/current.yaml"
+          helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
+            --set jenkins.url=https://jenkins.example.com \
+            --set-string jenkins.credentials.create.JENKINS_USERNAME=ci \
+            --set-string jenkins.credentials.create.JENKINS_TOKEN=ci-placeholder > "$render_dir/v2.2.yaml"
+          helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
+            --set jenkins.url=https://jenkins.example.com \
+            --set-string jenkins.credentials.create.username=ci \
+            --set-string jenkins.credentials.create.token=ci-placeholder > "$render_dir/v2.1.yaml"
+          cmp "$render_dir/current.yaml" "$render_dir/v2.2.yaml"
+          cmp "$render_dir/current.yaml" "$render_dir/v2.1.yaml"
+          if helm template jenkins-mcp charts/jenkins-mcp-server \
+            --set jenkins.url=https://jenkins.example.com \
+            --set-string jenkins.credentials.create.jenkinsUserId=ci \
+            --set-string jenkins.credentials.create.JENKINS_TOKEN=ci-placeholder; then
+            echo "expected mixed current and deprecated credentials to fail"
+            exit 1
+          fi
       - name: Render production example
         run: helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/production.yaml
       - name: Render Minibridge Streamable HTTP with a custom endpoint

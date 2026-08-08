@@ -14,6 +14,7 @@
 # rather than assuming the name.
 mcp_servers:
   jenkins:
-    transport: streamable_http
     url: http://jenkins-mcp-jenkins-mcp-server.jenkins-mcp.svc.cluster.local:8000/mcp
-    timeout_seconds: 60
+    # Hermes detects HTTP transport from url. "transport" is not a supported
+    # key here; timeout is the per-tool-call timeout in seconds.
+    timeout: 60

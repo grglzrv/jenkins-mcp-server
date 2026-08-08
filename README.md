@@ -339,6 +339,12 @@ kubectl -n <namespace> get ingress -l app.kubernetes.io/name=jenkins-mcp-server 
 Whichever client you use, it never receives the Jenkins API token. The token
 stays in a Kubernetes Secret and is used only by this server.
 
+For Hermes Agent specifically, `mcp_servers` is the correct top-level key and
+an HTTP server is selected by `url`; do not add a `transport` field. Start from
+[`deploy/hermes/mcp-config.yaml`](deploy/hermes/mcp-config.yaml), or use
+[`mcp-config-in-cluster.yaml`](deploy/hermes/mcp-config-in-cluster.yaml) with
+the raw Kubernetes manifests. The optional `timeout` value is in seconds.
+
 ## 🛡️ Security and guardrails
 
 Two independent layers. The server's own policy always applies; the minibridge

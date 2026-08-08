@@ -203,7 +203,8 @@ jenkins:
 Selecting any source other than `create` means disabling `create`, since
 exactly one may be enabled.
 
-The chart-managed source exposes the real Secret keys directly:
+The chart-managed source exposes purpose-based credential values and writes
+them to the stable runtime Secret keys `JENKINS_USERNAME` and `JENKINS_TOKEN`:
 
 ```yaml
 jenkins:
@@ -228,8 +229,9 @@ Both values are required when `create.enabled=true`; empty defaults force an
 install-time error instead of deploying with fake credentials. Existing Secrets
 and ESO targets keep key-name settings because those objects may use names the
 chart does not control. Deprecated
-`create.JENKINS_USERNAME`, `JENKINS_TOKEN`, `username`, `token`, `usernameKey`,
-and `tokenKey` remain accepted for 2.x upgrades, but new values should use
+`create.JENKINS_USERNAME`, `create.JENKINS_TOKEN`, `create.username`,
+`create.token`, `create.usernameKey`, and `create.tokenKey` remain accepted for
+2.x upgrades, but new values should use
 `jenkinsUserId` and `jenkinsApiToken`. Helm-managed credential changes add a
 pod-template checksum and roll the Deployment automatically. Existing Secrets
 and ESO targets update independently of Helm; restart the Deployment after a

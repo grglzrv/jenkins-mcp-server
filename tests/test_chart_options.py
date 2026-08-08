@@ -345,6 +345,19 @@ def test_legacy_chart_managed_fields_remain_accepted_for_v2() -> None:
         create_schema,
     )
 
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    for field in [
+        "jenkinsUserId",
+        "jenkinsApiToken",
+        "JENKINS_USERNAME",
+        "JENKINS_TOKEN",
+        "username",
+        "token",
+    ]:
+        assert f"jenkins.credentials.create.{field}" in workflow
+    assert 'cmp "$render_dir/current.yaml" "$render_dir/v2.2.yaml"' in workflow
+    assert 'cmp "$render_dir/current.yaml" "$render_dir/v2.1.yaml"' in workflow
+
 
 def test_ldap_user_id_semantics_are_explicit() -> None:
     docs = "\n".join(
@@ -549,6 +562,18 @@ def test_client_docs_do_not_invent_a_universal_config_schema() -> None:
         text = path.read_text()
         assert "mcp_servers:" not in text, path
         assert "Streamable HTTP" in text, path
+
+
+def test_hermes_examples_use_the_current_http_mcp_schema() -> None:
+    for path in [
+        ROOT / "deploy/hermes/mcp-config.yaml",
+        ROOT / "deploy/hermes/mcp-config-in-cluster.yaml",
+    ]:
+        config = yaml.safe_load(path.read_text())
+        jenkins = config["mcp_servers"]["jenkins"]
+        assert set(jenkins) == {"url", "timeout"}, path
+        assert jenkins["url"].endswith("/mcp"), path
+        assert jenkins["timeout"] == 60, path
 
 
 

@@ -7,7 +7,7 @@
 # per-line update centre that served them has since been retired.
 #
 #   JENKINS_URL=https://jenkins.example.com \
-#   JENKINS_USERNAME='<jenkins-ldap-user-id>' \
+#   JENKINS_USERNAME='<actual-jenkins-login-id>' \
 #   JENKINS_TOKEN=<api-token> \
 #     ./scripts/dump_jenkins_plugins.sh > integration/jenkins/plugins.txt
 #
