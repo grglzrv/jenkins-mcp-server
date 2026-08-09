@@ -1,6 +1,7 @@
 """Chart wiring tests for destructive-action flags and ExternalSecret options."""
 
 import json
+import re
 from pathlib import Path
 
 import jsonschema
@@ -169,7 +170,13 @@ def test_extra_env_cannot_override_credentials_or_chart_policy() -> None:
         'hasPrefix "JENKINS_"',
         'hasPrefix "MCP_"',
         'hasPrefix "MINIBRIDGE_"',
-        'eq $name "OTEL_EXPORTER_OTLP_ENDPOINT"',
+        'has $upper $extraEnvExact',
+        '"OTEL_EXPORTER_OTLP_ENDPOINT"',
+        '"TOOLS_DENY"',
+        '"TOOLS_ALLOW"',
+        '"METHODS_DENY"',
+        '"GUARDRAILS"',
+        '"BASIC_AUTH_SECRET"',
     ]:
         assert reserved in validate
     assert "duplicates another extraEnv entry" in validate
@@ -1707,3 +1714,74 @@ def test_documented_values_blocks_match_the_current_schema() -> None:
                     assert existing.get(key), (
                         f"{doc}: enabled existingSecret must explicitly set {key}"
                     )
+
+
+def test_extra_env_guard_rejects_chart_owned_names_in_any_case() -> None:
+    """The server reads settings case-sensitively, so a lowercase spelling of a
+    chart-owned name would be accepted here and then do nothing at runtime.
+    Rejecting it reports the mistake instead of shipping an inert value.
+    """
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    assert "upper $name" in validate
+    assert "in any capitalisation" in validate
+
+
+def test_extra_env_guard_covers_every_app_and_minibridge_variable() -> None:
+    """A new chart-owned env name must not silently escape the extraEnv guard.
+
+    The chart templates define ownership: an entrypoint-only variable remains a
+    valid ``mcp.extraEnv`` extension until the chart also emits it.  Keep the
+    exact guard in lockstep with unprefixed variables emitted by the chart, and
+    separately prove that chart-owned policy inputs reach the entrypoint
+    translation layer.
+    """
+    config = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
+    helpers = (CHART / "templates/_helpers.tpl").read_text()
+    validate = (CHART / "templates/_validate.tpl").read_text()
+
+    aliases = set(re.findall(r'alias="([A-Z][A-Z0-9_]*)"', config))
+    minibridge_names = set(
+        re.findall(r"^- name: ([A-Z][A-Z0-9_]*)$", helpers, flags=re.MULTILINE)
+    )
+    exact_match = re.search(r"\$extraEnvExact := list ([^\n]+)", validate)
+    assert exact_match, "the exact chart-owned environment list is missing"
+    exact = set(re.findall(r'"([A-Z][A-Z0-9_]*)"', exact_match.group(1)))
+
+    def guarded(name: str) -> bool:
+        return name.startswith(("JENKINS_", "MCP_", "MINIBRIDGE_")) or name in exact
+
+    owned = aliases | minibridge_names
+    unguarded = sorted(name for name in owned if not guarded(name))
+    assert not unguarded, f"chart-owned environment names escape mcp.extraEnv: {unguarded}"
+
+    unprefixed_chart_names = {
+        name
+        for name in minibridge_names
+        if not name.startswith(("JENKINS_", "MCP_", "MINIBRIDGE_"))
+    }
+    assert exact == unprefixed_chart_names, (
+        "the exact extraEnv guard must equal the chart's unprefixed environment names; "
+        f"missing={sorted(unprefixed_chart_names - exact)}, "
+        f"stale={sorted(exact - unprefixed_chart_names)}"
+    )
+
+    entrypoint = (ROOT / "docker/entrypoint.sh").read_text()
+    translated_policy_inputs = set(
+        re.findall(
+            r'export REGO_POLICY_RUNTIME_[A-Z0-9_]+="\$\{([A-Z][A-Z0-9_]*):-\}"',
+            entrypoint,
+        )
+    )
+    # Minibridge consumes OTEL_EXPORTER_OTLP_ENDPOINT directly. The other
+    # unprefixed chart values are compatibility inputs translated for Rego.
+    expected_translations = unprefixed_chart_names - {"OTEL_EXPORTER_OTLP_ENDPOINT"}
+    assert expected_translations <= translated_policy_inputs, (
+        "chart-owned policy values are not translated by docker/entrypoint.sh: "
+        f"{sorted(expected_translations - translated_policy_inputs)}"
+    )
+
+
+def test_settings_are_case_sensitive() -> None:
+    """Guards the source-side half of the same defence."""
+    config = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
+    assert "case_sensitive=True" in config

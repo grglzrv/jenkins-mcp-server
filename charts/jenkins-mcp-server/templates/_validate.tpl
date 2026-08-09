@@ -65,13 +65,21 @@ Cross-field validation that would otherwise only surface at runtime.
        runtime. Keep extraEnv genuinely extra instead of letting it bypass the
        validated values and credential-source selection above. */ -}}
 {{- $extraEnvNames := list -}}
+{{- $extraEnvExact := list "OTEL_EXPORTER_OTLP_ENDPOINT" "TOOLS_DENY" "TOOLS_ALLOW" "METHODS_DENY" "GUARDRAILS" "BASIC_AUTH_SECRET" -}}
 {{- range $i, $entry := .Values.mcp.extraEnv }}
 {{- $name := required (printf "mcp.extraEnv[%d].name is required" $i) $entry.name -}}
 {{- if has $name $extraEnvNames }}
 {{- fail (printf "mcp.extraEnv[%d].name (%s) duplicates another extraEnv entry; environment variable names must be unique." $i $name) }}
 {{- end }}
-{{- if or (hasPrefix "JENKINS_" $name) (hasPrefix "MCP_" $name) (hasPrefix "MINIBRIDGE_" $name) (eq $name "OTEL_EXPORTER_OTLP_ENDPOINT") }}
-{{- fail (printf "mcp.extraEnv[%d].name (%s) is managed by the chart and cannot be overridden through extraEnv. Use the corresponding jenkins.*, mcp.*, audit.*, or minibridge.* value instead." $i $name) }}
+{{- /* Compare upper-cased so mixed-case spellings cannot evade this boundary.
+       Server aliases use the JENKINS_/MCP_ prefixes. Minibridge owns both its
+       prefixed variables and the exact policy/auth names above. The canonical
+       uppercase spelling would replace the chart value; any other spelling is
+       inert in the case-sensitive runtimes and should fail instead of silently
+       suggesting that the requested policy was applied. */ -}}
+{{- $upper := upper $name -}}
+{{- if or (hasPrefix "JENKINS_" $upper) (hasPrefix "MCP_" $upper) (hasPrefix "MINIBRIDGE_" $upper) (has $upper $extraEnvExact) }}
+{{- fail (printf "mcp.extraEnv[%d].name (%s) is managed by the chart and cannot be set through extraEnv, in any capitalisation. Use the corresponding jenkins.*, mcp.*, audit.*, or minibridge.* value instead." $i $name) }}
 {{- end }}
 {{- $extraEnvNames = append $extraEnvNames $name -}}
 {{- end }}

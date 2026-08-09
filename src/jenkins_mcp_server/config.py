@@ -10,7 +10,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")
+    # case_sensitive is deliberate. pydantic-settings matches environment
+    # variables case-insensitively by default, so `jenkins_token` would be read
+    # as JENKINS_TOKEN. The chart blocks chart-owned names in mcp.extraEnv, but
+    # it can only reject the spellings it knows, and a lowercase duplicate would
+    # then override the credential and policy values the chart validated.
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="",
+        extra="ignore",
+        case_sensitive=True,
+    )
 
     jenkins_url: str = Field(alias="JENKINS_URL")
     jenkins_username: str = Field(alias="JENKINS_USERNAME")

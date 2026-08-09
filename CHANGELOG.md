@@ -10,35 +10,96 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.6.2] - 2026-08-09
+
+### Highlights
+
+- `mcp.extraEnv` can no longer override the server credentials/policy or
+  Minibridge tool policy and authentication that the chart validated.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- `mcp.extraEnv` rejects chart-owned names in any capitalisation, so a spelling
+  that would have had no effect is reported instead of shipped.
+- Regression coverage derives the protected surface from every application
+  alias and Minibridge variable emitted by the chart, preventing future names
+  from silently falling outside the guard.
+
+### Bug Fixes
+
+- Settings were read case-insensitively, which is the pydantic-settings default.
+  `mcp.extraEnv` blocked only the uppercase spellings, so an entry named
+  `jenkins_token` passed the chart guard and then replaced the token supplied by
+  the Secret. Settings are now matched case-sensitively. Documented uppercase
+  names are unaffected.
+- Minibridge's unprefixed `TOOLS_DENY`, `TOOLS_ALLOW`, `METHODS_DENY`,
+  `GUARDRAILS`, and `BASIC_AUTH_SECRET` variables were not covered by the
+  prefix-based chart guard. Because `mcp.extraEnv` renders last, their canonical
+  spellings could replace the chart-owned tool policy, guardrails, or basic-auth
+  secret. They are now reserved explicitly in any capitalisation.
+
+### Breaking Changes
+
+- None for documented configuration. A deployment that relied on a lowercase
+  environment variable being read must rename it to the documented uppercase
+  spelling.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Closes a bypass of the 2.6.0 control that prevents Helm values replacing
+  Jenkins credentials or security policy. `mcp.extraEnv` entries such as
+  `jenkins_token`, `mcp_read_only` and `mcp_allowed_jobs` were accepted and took
+  effect at runtime, so an operator with values access could substitute
+  credentials or disable the job allowlist without touching the Secret. The fix
+  is applied in the server, which decides, and in the chart, which reports.
+- Closes the equivalent Minibridge bypass that could weaken proxy tool policy or
+  replace its basic-auth secret through a later `mcp.extraEnv` entry.
+
+### Upgrade Notes
+
+- If a values file sets a lowercase chart-owned name in `mcp.extraEnv`, the
+  render now fails and names the entry. Remove it and use the corresponding
+  `jenkins.*`, `mcp.*`, `audit.*` or `minibridge.*` value.
+- Direct Docker and raw-manifest users must use the documented uppercase
+  application setting names; lowercase or mixed-case spellings are ignored.
 
 ## [2.6.1] - 2026-08-09
 
@@ -522,10 +583,15 @@ from the matching version entry after CI validates it.
 
 ### Upgrade Notes
 
-- No values migration is required from 2.3.1. A release using the same target
-  key for both fields must correct that invalid mapping before upgrading.
+- No values migration is required from 2.3.0. Version 2.3.1 was not published;
+  its documented example updates first shipped in 2.3.2. A release using the
+  same target key for both fields must correct that invalid mapping before
+  upgrading.
 
 ## [2.3.1] - 2026-08-08
+
+> This version was not published or tagged. The changes below first shipped in
+> 2.3.2.
 
 ### Highlights
 
