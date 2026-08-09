@@ -1727,7 +1727,14 @@ def test_extra_env_guard_rejects_chart_owned_names_in_any_case() -> None:
 
 
 def test_extra_env_guard_covers_every_app_and_minibridge_variable() -> None:
-    """A new chart-owned env name must not silently escape the extraEnv guard."""
+    """A new chart-owned env name must not silently escape the extraEnv guard.
+
+    The chart templates define ownership: an entrypoint-only variable remains a
+    valid ``mcp.extraEnv`` extension until the chart also emits it.  Keep the
+    exact guard in lockstep with unprefixed variables emitted by the chart, and
+    separately prove that chart-owned policy inputs reach the entrypoint
+    translation layer.
+    """
     config = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
     helpers = (CHART / "templates/_helpers.tpl").read_text()
     validate = (CHART / "templates/_validate.tpl").read_text()
@@ -1736,19 +1743,6 @@ def test_extra_env_guard_covers_every_app_and_minibridge_variable() -> None:
     minibridge_names = set(
         re.findall(r"^- name: ([A-Z][A-Z0-9_]*)$", helpers, flags=re.MULTILINE)
     )
-    # The entrypoint is the other consumer of unprefixed names. minibridge
-    # itself reads only MINIBRIDGE_* (viper.SetEnvPrefix("minibridge")), so
-    # TOOLS_DENY and its siblings exist because entrypoint.sh translates them.
-    # Deriving the list from the chart alone misses one added there first.
-    entrypoint = (ROOT / "docker/entrypoint.sh").read_text()
-    shell_builtins = {
-        "HOME", "HOSTNAME", "IFS", "PATH", "PWD", "SHELL", "SHLVL", "TERM", "USER",
-    }
-    entrypoint_names = {
-        name
-        for name in re.findall(r"\$\{?([A-Z][A-Z0-9_]{2,})", entrypoint)
-        if name not in shell_builtins
-    }
     exact_match = re.search(r"\$extraEnvExact := list ([^\n]+)", validate)
     assert exact_match, "the exact chart-owned environment list is missing"
     exact = set(re.findall(r'"([A-Z][A-Z0-9_]*)"', exact_match.group(1)))
@@ -1756,9 +1750,35 @@ def test_extra_env_guard_covers_every_app_and_minibridge_variable() -> None:
     def guarded(name: str) -> bool:
         return name.startswith(("JENKINS_", "MCP_", "MINIBRIDGE_")) or name in exact
 
-    owned = aliases | minibridge_names | entrypoint_names
+    owned = aliases | minibridge_names
     unguarded = sorted(name for name in owned if not guarded(name))
     assert not unguarded, f"chart-owned environment names escape mcp.extraEnv: {unguarded}"
+
+    unprefixed_chart_names = {
+        name
+        for name in minibridge_names
+        if not name.startswith(("JENKINS_", "MCP_", "MINIBRIDGE_"))
+    }
+    assert exact == unprefixed_chart_names, (
+        "the exact extraEnv guard must equal the chart's unprefixed environment names; "
+        f"missing={sorted(unprefixed_chart_names - exact)}, "
+        f"stale={sorted(exact - unprefixed_chart_names)}"
+    )
+
+    entrypoint = (ROOT / "docker/entrypoint.sh").read_text()
+    translated_policy_inputs = set(
+        re.findall(
+            r'export REGO_POLICY_RUNTIME_[A-Z0-9_]+="\$\{([A-Z][A-Z0-9_]*):-\}"',
+            entrypoint,
+        )
+    )
+    # Minibridge consumes OTEL_EXPORTER_OTLP_ENDPOINT directly. The other
+    # unprefixed chart values are compatibility inputs translated for Rego.
+    expected_translations = unprefixed_chart_names - {"OTEL_EXPORTER_OTLP_ENDPOINT"}
+    assert expected_translations <= translated_policy_inputs, (
+        "chart-owned policy values are not translated by docker/entrypoint.sh: "
+        f"{sorted(expected_translations - translated_policy_inputs)}"
+    )
 
 
 def test_settings_are_case_sensitive() -> None:
