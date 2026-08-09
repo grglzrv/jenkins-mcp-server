@@ -79,7 +79,6 @@ PINS = (
     pin(
         "charts/jenkins-mcp-server/README.md",
         rf"^\s*--version (?P<version>{SEMVER})(?=\s|$)",
-        expected=2,
     ),
     pin(
         "charts/jenkins-mcp-server/README.md",

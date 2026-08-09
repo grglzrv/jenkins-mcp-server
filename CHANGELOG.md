@@ -40,6 +40,49 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.6.1] - 2026-08-09
+
+### Highlights
+
+- Helm installation now leads with the production existing-Secret path and a
+  normal external Jenkins URL, while detailed operations stay in focused docs.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- The main README now keeps Helm installation and troubleshooting concise and
+  links to the chart and troubleshooting guides as their authoritative sources.
+- Health responses are explicitly non-cacheable JSON and carry
+  `X-Content-Type-Options: nosniff`.
+
+### Bug Fixes
+
+- A Jenkins permission 403 no longer suggests CSRF crumb or proxy changes unless
+  the controller response actually mentions a crumb.
+- The main Helm command no longer combines an external-Jenkins Secret with the
+  Tailscale production values, and non-Tailscale values examples no longer use
+  misleading MagicDNS hostnames.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Readiness state cannot be cached by an intermediary or MIME-sniffed as a
+  different content type.
+
+### Upgrade Notes
+
+- No action is required. Existing installations and values remain compatible.
+
 ## [2.6.0] - 2026-08-09
 
 ### Highlights

@@ -1,6 +1,7 @@
 # Deployment examples
 
-Replace every `example-tailnet.ts.net` value before deploying.
+Replace every `jenkins.example.com`, `internal.example.com`, and
+`example-tailnet.ts.net` value before deploying.
 [docs/TAILSCALE.md](../docs/TAILSCALE.md) explains what that value is, where to
 find yours, and which fields take the full FQDN rather than the machine name.
 

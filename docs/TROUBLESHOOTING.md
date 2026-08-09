@@ -24,7 +24,8 @@ instead. Do not paste Jenkins tokens or Secret output into an issue.
 | `Jenkins request failed` with DNS, connection, or timeout details | The pod cannot reach the Jenkins URL | Verify the URL and context path, cluster DNS, the Jenkins firewall allowlist, and any egress policy/gateway |
 | An external Jenkins URL worked until NetworkPolicy was enabled | A standard Kubernetes NetworkPolicy selects IP blocks, namespaces, or pods—not an FQDN such as `jenkins.example.com` | Keep the chart policy disabled, or model Jenkins egress with stable CIDRs, an egress gateway, or a network plugin that supports FQDN policy |
 | Every Jenkins call returns 401 | The username/token pair is invalid, revoked, or mismatched | Rotate the API token and update the Secret. The token must belong to `JENKINS_USERNAME` |
-| Reads work but writes return 403 mentioning a crumb | Jenkins rejected the CSRF crumb | Ensure the proxy preserves the crumb header. With Strict Crumb Issuer, disable *check client IP* when SNAT or an egress proxy changes the source address |
+| A call returns 403 without mentioning a crumb | Jenkins authenticated the account but denied the operation | Grant the permission required by that tool for the allowed job scope; do not change proxy or crumb settings for a normal permission failure |
+| Writes return 403 mentioning a crumb | Jenkins rejected the CSRF crumb | Ensure the proxy preserves the crumb header. With Strict Crumb Issuer, disable *check client IP* when SNAT or an egress proxy changes the source address |
 | A call returns an unexpected 302/303 redirect | The Jenkins base URL is missing its context path, or a reverse proxy/SSO sent API traffic to a login flow | Put the complete prefix in `JENKINS_URL` and configure the proxy/SSO to accept Jenkins API-token authentication |
 | `get_job_config` alone returns 403 | The account lacks `Job/ExtendedRead` | Grant `Job/ExtendedRead` for the allowed job scope |
 | A parameterised build is rejected | `trigger_build` was called without the `parameters` field and therefore used `/build` | Pass `parameters`; `{}` selects the job's configured defaults through `/buildWithParameters` |
@@ -51,6 +52,15 @@ kubectl -n jenkins-mcp get networkpolicy
 kubectl -n jenkins-mcp get endpointslice \
   -l kubernetes.io/service-name=jenkins-mcp-jenkins-mcp-server
 kubectl -n jenkins-mcp get events --sort-by=.lastTimestamp
+```
+
+If an existing or ESO-managed credentials Secret was rotated, restart the
+workload before retesting; environment variables in running containers do not
+change with the Secret:
+
+```bash
+kubectl -n jenkins-mcp rollout restart deployment/jenkins-mcp-jenkins-mcp-server
+kubectl -n jenkins-mcp rollout status deployment/jenkins-mcp-jenkins-mcp-server
 ```
 
 ## Tool policy has two layers

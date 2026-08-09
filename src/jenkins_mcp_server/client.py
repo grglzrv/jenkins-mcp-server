@@ -62,9 +62,7 @@ def _job_path(full_name: str) -> str:
     if not parts:
         raise ValueError("job_name must not be empty")
     if any(part in TRAVERSAL_SEGMENTS for part in parts):
-        raise ValueError(
-            f"job_name must not contain '.' or '..' path segments: {full_name!r}"
-        )
+        raise ValueError(f"job_name must not contain '.' or '..' path segments: {full_name!r}")
     return "/".join(f"job/{quote(part, safe='')}" for part in parts)
 
 
@@ -80,9 +78,7 @@ def _build_selector(build_number: int | str) -> str:
         return build_number
     if build_number.isdecimal() and int(build_number) > 0:
         return str(int(build_number))
-    raise ValueError(
-        "build_number must be a positive integer or a supported Jenkins build alias"
-    )
+    raise ValueError("build_number must be a positive integer or a supported Jenkins build alias")
 
 
 def _new_job_parts(job_name: str) -> tuple[str, str]:
@@ -279,8 +275,7 @@ class JenkinsClient:
             response_headers = [
                 (name, value)
                 for name, value in streamed.headers.multi_items()
-                if name.lower()
-                not in {"content-encoding", "content-length", "transfer-encoding"}
+                if name.lower() not in {"content-encoding", "content-length", "transfer-encoding"}
             ]
             return httpx.Response(
                 streamed.status_code,
@@ -365,8 +360,7 @@ class JenkinsClient:
                             path=path,
                         )
                         raise JenkinsError(
-                            "Jenkins response exceeded MCP_MAX_RESPONSE_BYTES "
-                            f"({limit} bytes)"
+                            f"Jenkins response exceeded MCP_MAX_RESPONSE_BYTES ({limit} bytes)"
                         )
                     await self.audit.emit_async(
                         action,
@@ -422,14 +416,21 @@ class JenkinsClient:
                         "reverse-proxy authentication, and SSO bypass for API tokens."
                     )
                 elif response.status_code == 401:
-                    hint = (
-                        " Authentication failed; verify JENKINS_USERNAME and its API token."
-                    )
+                    hint = " Authentication failed; verify JENKINS_USERNAME and its API token."
                 elif response.status_code == 403:
-                    hint = (
-                        " Check Jenkins permissions and whether a proxy preserves the "
-                        "crumb header and client address."
-                    )
+                    hint = " Permission denied; check the Jenkins account's permissions."
+                    # A 403 is not inherently a CSRF failure. Read requests do
+                    # not use crumbs, and Jenkins also returns 403 for missing
+                    # Job/* or Overall/* permissions. Mention proxy/crumb
+                    # troubleshooting only when Jenkins actually identifies a
+                    # crumb problem; otherwise the old advice sent operators
+                    # toward an unrelated proxy setting.
+                    if "crumb" in body.lower():
+                        hint += (
+                            " Jenkins also rejected the CSRF crumb; check that the proxy "
+                            "preserves its header and, when source NAT is involved, review "
+                            "Strict Crumb Issuer's client-IP check."
+                        )
                 else:
                     hint = ""
                 detail = f": {body}" if body else ""
@@ -479,9 +480,7 @@ class JenkinsClient:
         try:
             return response.json()
         except ValueError as exc:
-            raise JenkinsError(
-                f"Jenkins returned malformed JSON for {endpoint}"
-            ) from exc
+            raise JenkinsError(f"Jenkins returned malformed JSON for {endpoint}") from exc
 
     async def list_jobs(self, folder: str | None = None) -> Any:
         if folder and not self.policy.allows_job_or_descendant(folder):
@@ -725,9 +724,7 @@ class JenkinsClient:
                     job_name = _build_job_name(current)
                     if not job_name or not self.policy.allows_job(job_name):
                         continue
-                    running.append(
-                        {"node": computer.get("displayName"), **current}
-                    )
+                    running.append({"node": computer.get("displayName"), **current})
         return running
 
     async def nodes(self) -> Any:
@@ -809,7 +806,5 @@ class JenkinsClient:
                 if name.lower() not in SENSITIVE_RESPONSE_HEADERS
             },
             "body": response.text,
-            "truncated": bool(
-                response.extensions.get("jenkins_mcp_truncated", False)
-            ),
+            "truncated": bool(response.extensions.get("jenkins_mcp_truncated", False)),
         }

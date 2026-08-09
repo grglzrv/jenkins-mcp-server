@@ -1,9 +1,10 @@
 import time
 from pathlib import Path
+from urllib.request import urlopen
 
 from jenkins_mcp_server.audit import AuditLogger
 from jenkins_mcp_server.config import Settings
-from jenkins_mcp_server.health import readiness
+from jenkins_mcp_server.health import readiness, start_health_server
 
 
 def settings(**overrides: object) -> Settings:
@@ -20,6 +21,20 @@ def test_readiness_without_custom_ca() -> None:
     ready, payload = readiness(settings())
     assert ready is True
     assert payload["status"] == "ready"
+
+
+def test_health_responses_are_json_and_never_cached() -> None:
+    server = start_health_server(settings(MCP_HEALTH_HOST="127.0.0.1", MCP_HEALTH_PORT=0))
+    try:
+        port = server.server_address[1]
+        with urlopen(f"http://127.0.0.1:{port}/readyz", timeout=1) as response:
+            assert response.status == 200
+            assert response.headers["Content-Type"] == "application/json; charset=utf-8"
+            assert response.headers["Cache-Control"] == "no-store"
+            assert response.headers["X-Content-Type-Options"] == "nosniff"
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_readiness_fails_when_ca_missing(tmp_path: Path) -> None:

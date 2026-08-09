@@ -198,6 +198,39 @@ async def test_redirect_error_explains_context_path_and_proxy_causes() -> None:
     await jc.close()
 
 
+@pytest.mark.asyncio
+async def test_read_permission_403_does_not_suggest_crumb_troubleshooting() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, text="user is missing the Job/Read permission")
+
+    jc = client(handler)
+    with pytest.raises(JenkinsError) as error:
+        await jc.list_jobs()
+    message = str(error.value)
+    assert "Permission denied" in message
+    assert "crumb header" not in message
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_crumb_403_keeps_targeted_proxy_troubleshooting() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(
+                200,
+                json={"crumbRequestField": "Jenkins-Crumb", "crumb": "stale"},
+            )
+        return httpx.Response(403, text="No valid crumb was included in the request")
+
+    jc = client(handler)
+    with pytest.raises(JenkinsError) as error:
+        await jc.request("POST", "/job/AI/job/build/build", action="test")
+    message = str(error.value)
+    assert "rejected the CSRF crumb" in message
+    assert "Strict Crumb Issuer" in message
+    await jc.close()
+
+
 # --- CSRF crumb refresh ---------------------------------------------------
 
 
@@ -274,9 +307,10 @@ def test_public_certificate_needs_no_ca_bundle() -> None:
 
 
 def test_ca_bundle_pins_trust_to_that_issuer() -> None:
-    assert settings(
-        JENKINS_VERIFY_TLS=True, JENKINS_CA_BUNDLE="/certs/ca.crt"
-    ).verify == "/certs/ca.crt"
+    assert (
+        settings(JENKINS_VERIFY_TLS=True, JENKINS_CA_BUNDLE="/certs/ca.crt").verify
+        == "/certs/ca.crt"
+    )
 
 
 def test_verification_can_be_disabled_without_a_bundle() -> None:
@@ -334,9 +368,7 @@ async def test_empty_parameters_still_use_buildWithParameters() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/crumbIssuer/api/json":
-            return httpx.Response(
-                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
-            )
+            return httpx.Response(200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"})
         calls.append(request.url.path)
         return httpx.Response(201, headers={"Location": "q"})
 
@@ -369,11 +401,11 @@ def test_context_path_is_preserved_in_urls() -> None:
     "path",
     [
         "https://evil.test/x",
-        "HtTpS://evil.test/x",       # scheme case is not a prefix match
-        " https://evil.test/x",      # leading whitespace defeats startswith
-        "//evil.test/x",             # protocol-relative
-        "relative/path",             # not absolute
-        "/a/../../etc/passwd",       # traversal
+        "HtTpS://evil.test/x",  # scheme case is not a prefix match
+        " https://evil.test/x",  # leading whitespace defeats startswith
+        "//evil.test/x",  # protocol-relative
+        "relative/path",  # not absolute
+        "/a/../../etc/passwd",  # traversal
     ],
 )
 async def test_admin_request_rejects_non_jenkins_targets(path: str) -> None:
@@ -393,9 +425,7 @@ async def test_admin_request_withholds_session_and_csrf_headers() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/crumbIssuer/api/json":
-            return httpx.Response(
-                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
-            )
+            return httpx.Response(200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"})
         return httpx.Response(
             200,
             text="ok",
@@ -681,9 +711,7 @@ async def test_failed_crumb_fetch_releases_single_flight_lock() -> None:
 
 
 @pytest.mark.asyncio
-async def test_audit_write_failure_does_not_fail_a_completed_action(
-    tmp_path, caplog
-) -> None:
+async def test_audit_write_failure_does_not_fail_a_completed_action(tmp_path, caplog) -> None:
     """emit() runs after Jenkins acted, so raising misreports a success.
 
     The caller would see a failure for a build that was queued, and would

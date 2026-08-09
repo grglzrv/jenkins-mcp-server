@@ -73,8 +73,13 @@ class HealthHandler(BaseHTTPRequestHandler):
     def _json(self, status: int, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        # Readiness exposes configuration state and changes over the lifetime
+        # of a pod. Monitoring proxies must not cache it, and browsers should
+        # never MIME-sniff either health response as something executable.
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 
