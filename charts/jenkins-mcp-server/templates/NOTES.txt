@@ -1,7 +1,7 @@
 Jenkins MCP Server {{ .Chart.AppVersion }} installed as {{ .Release.Name }}.
 
 MCP endpoint inside the cluster:
-  http://{{ include "jenkins-mcp-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{ .Values.mcp.path }}
+  http{{ if and .Values.minibridge.enabled .Values.minibridge.tls.enabled }}s{{ end }}://{{ include "jenkins-mcp-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{ .Values.mcp.path }}
 
 {{- if .Values.ingress.enabled }}
 {{- if eq .Values.ingress.className "tailscale" }}
@@ -20,7 +20,7 @@ Ingress endpoint:
 Client connection (enter these fields using your client's own configuration schema):
   Name: jenkins
   Transport: Streamable HTTP
-  URL: {{ if .Values.ingress.enabled }}{{ if eq .Values.ingress.className "tailscale" }}https://<TAILSCALE_INGRESS_ADDRESS>{{ else }}http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.hostname }}{{ end }}{{ else }}http://{{ include "jenkins-mcp-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{ end }}{{ .Values.mcp.path }}
+  URL: {{ if .Values.ingress.enabled }}{{ if eq .Values.ingress.className "tailscale" }}https://<TAILSCALE_INGRESS_ADDRESS>{{ else }}http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.hostname }}{{ end }}{{ else }}http{{ if and .Values.minibridge.enabled .Values.minibridge.tls.enabled }}s{{ end }}://{{ include "jenkins-mcp-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{ end }}{{ .Values.mcp.path }}
 
 {{- if .Values.minibridge.enabled }}
 

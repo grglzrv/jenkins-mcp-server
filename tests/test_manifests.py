@@ -178,7 +178,7 @@ def test_helm_ingress_and_test_pod_are_narrowly_scoped():
         ROOT / "charts/jenkins-mcp-server/templates/tests/test-connection.yaml"
     ).read_text()
     assert "/readyz" in test_pod
-    assert "app.kubernetes.io/component: helm-test" in test_pod
+    assert 'include "jenkins-mcp-server.testLabels"' in test_pod
     assert "automountServiceAccountToken: false" in test_pod
 
 

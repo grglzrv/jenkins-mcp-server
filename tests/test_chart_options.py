@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import jsonschema
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -723,6 +724,84 @@ def test_rendered_templates_have_no_duplicate_yaml_keys() -> None:
         for m in re.finditer(r"^  ([a-zA-Z]+):", dep, re.M)
     ]
     assert len(top) == len(set(top)), f"duplicate keys in deployment.yaml: {top}"
+
+
+def test_helm_test_labels_do_not_emit_duplicate_component_keys() -> None:
+    helpers = (CHART / "templates/_helpers.tpl").read_text()
+    hook = (CHART / "templates/tests/test-connection.yaml").read_text()
+    assert 'define "jenkins-mcp-server.testLabels"' in helpers
+    assert 'app.kubernetes.io/component: {{ "helm-test" | quote }}' in helpers
+    assert 'include "jenkins-mcp-server.labels"' not in hook
+    assert 'include "jenkins-mcp-server.testLabels"' in hook
+
+
+def test_rendered_manifests_are_strictly_validated_in_ci_and_release() -> None:
+    script = (ROOT / "scripts/validate_helm_renders.sh").read_text()
+    for marker in ["kubeconform", "-strict", "examples/values/*.yaml"]:
+        assert marker in script
+    for workflow in ["ci.yml", "release.yml"]:
+        text = (ROOT / ".github/workflows" / workflow).read_text()
+        assert "KUBECONFORM_VERSION: v0.8.0" in text
+        assert "./scripts/validate_helm_renders.sh" in text
+
+
+def test_chart_owned_nested_values_reject_typos() -> None:
+    sc = schema()
+    for path in [
+        ("image",),
+        ("service",),
+        ("ingress",),
+        ("jenkins",),
+        ("jenkins", "credentials"),
+        ("mcp",),
+        ("minibridge",),
+        ("tailscale",),
+        ("probes",),
+        ("test",),
+        ("audit",),
+    ]:
+        node = sc
+        for key in path:
+            node = node["properties"][key]
+        assert node["additionalProperties"] is False, ".".join(path)
+
+    invalid = values()
+    invalid["probes"]["readiness"]["periodSecond"] = 10
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(invalid, sc)
+
+
+def test_cross_field_validation_covers_credential_aliases_and_ranges() -> None:
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    for marker in [
+        "must not point at the same Secret key",
+        "same usernameRemoteKey and tokenRemoteKey",
+        "extraData[%d].secretKey",
+        "minibridge.basicAuth must not reuse",
+        "autoscaling.maxReplicas must be greater than or equal",
+        "mcp.port and mcp.healthPort must be different",
+    ]:
+        assert marker in validate
+
+    service_types = schema()["properties"]["service"]["properties"]["type"]["enum"]
+    assert "ExternalName" not in service_types
+    policies = schema()["properties"]["jenkins"]["properties"]["credentials"][
+        "properties"
+    ]["externalSecret"]["properties"]["creationPolicy"]["enum"]
+    assert "CreateOrMerge" in policies
+
+
+def test_helm_test_image_is_configurable() -> None:
+    image = values()["test"]["image"]
+    assert image == {
+        "repository": "busybox",
+        "tag": "1.37",
+        "pullPolicy": "IfNotPresent",
+    }
+    hook = (CHART / "templates/tests/test-connection.yaml").read_text()
+    assert ".Values.test.image.repository" in hook
+    assert ".Values.test.image.tag" in hook
+    assert ".Values.test.image.pullPolicy" in hook
 
 
 # --- silently-ignored value combinations ---------------------------------

@@ -4,8 +4,7 @@ kind: Pod
 metadata:
   name: "{{ include "jenkins-mcp-server.fullname" . }}-test-connection"
   labels:
-    {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
-    app.kubernetes.io/component: helm-test
+    {{- include "jenkins-mcp-server.testLabels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
@@ -19,7 +18,8 @@ spec:
       type: RuntimeDefault
   containers:
     - name: wget
-      image: busybox:1.37
+      image: {{ printf "%s:%s" .Values.test.image.repository .Values.test.image.tag | quote }}
+      imagePullPolicy: {{ .Values.test.image.pullPolicy | quote }}
       securityContext:
         allowPrivilegeEscalation: false
         capabilities:

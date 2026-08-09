@@ -40,6 +40,64 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.3.3] - 2026-08-09
+
+### Highlights
+
+- Helm rendering and values validation are hardened so malformed manifests and
+  unsafe credential aliases fail before they reach the Kubernetes API.
+
+### New Features
+
+- Added strict kubeconform validation for the default chart and every shipped
+  values example to both pull-request and release gates.
+
+### Improvements
+
+- Added typed nested value schemas, valid Kubernetes/ESO enums, probe ranges,
+  Tailscale hostname validation, and the Jenkins chart icon.
+- Made the Helm test image and pull policy configurable for private registries
+  and mirrored/offline clusters.
+- Quoted user-controlled Kubernetes strings consistently, made Service affinity
+  rendering explicit, and corrected TLS-aware endpoints in Helm notes.
+- Updated the main README, chart README, values reference, examples guide, and
+  raw credential manifests with the hardened configuration contracts.
+
+### Bug Fixes
+
+- Fixed the Helm test Pod's duplicate `app.kubernetes.io/component` YAML key,
+  which strict YAML parsers rejected.
+- Reject credential mappings that alias the Jenkins user ID and token, duplicate
+  ExternalSecret target keys, reuse Jenkins credentials for Minibridge auth, or
+  select invalid External Secrets creation/deletion policy combinations.
+- Reject unsupported `ExternalName` chart Services, listener/Service port
+  collisions, inverted HPA replica ranges, empty PodDisruptionBudgets, invalid
+  Tailscale ingress/egress combinations, and reserved pod metadata overrides.
+- Preserve string values such as `on` in rendered Secret, ingress, Service,
+  audit, and Tailscale fields instead of letting YAML coerce them to booleans.
+
+### Breaking Changes
+
+- None for valid configurations. Previously accepted invalid or silently ignored
+  combinations now fail at Helm validation time with an actionable message.
+
+### Known Issues
+
+- NetworkPolicy and file audit-log defaults remain unchanged in this patch; the
+  2.4.0 release changes those security defaults with documented migration notes.
+
+### Security
+
+- Prevented Jenkins API credentials from being accidentally reused as client or
+  remote-policer authentication material.
+- Made schema typos and ambiguous credential source mappings fail closed.
+
+### Upgrade Notes
+
+- Run `helm lint` with your production values before upgrading. Correct any
+  newly rejected nested typos, duplicate Secret-key mappings, invalid ESO policy
+  pair, port collision, or HPA/PDB invariant; valid 2.3.2 values need no change.
+
 ## [2.3.2] - 2026-08-09
 
 ### Highlights

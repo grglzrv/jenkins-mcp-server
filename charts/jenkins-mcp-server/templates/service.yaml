@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "jenkins-mcp-server.fullname" . }}
+  name: {{ include "jenkins-mcp-server.fullname" . | quote }}
   labels:
     {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
   {{- with .Values.service.annotations }}
@@ -9,9 +9,15 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ .Values.service.type | quote }}
   {{- with .Values.service.sessionAffinity }}
-  {{- toYaml . | nindent 2 }}
+  sessionAffinity: {{ .sessionAffinity | quote }}
+  {{- if eq .sessionAffinity "ClientIP" }}
+  {{- with .sessionAffinityConfig }}
+  sessionAffinityConfig:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
   {{- end }}
   selector:
     {{- include "jenkins-mcp-server.selectorLabels" . | nindent 4 }}

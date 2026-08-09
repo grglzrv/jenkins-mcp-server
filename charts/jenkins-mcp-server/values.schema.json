@@ -18,6 +18,7 @@
     },
     "image": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "repository",
         "tag",
@@ -46,6 +47,7 @@
     },
     "serviceAccount": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "create",
         "automount"
@@ -67,6 +69,7 @@
     },
     "service": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "type",
         "port",
@@ -78,8 +81,7 @@
           "enum": [
             "ClusterIP",
             "NodePort",
-            "LoadBalancer",
-            "ExternalName"
+            "LoadBalancer"
           ]
         },
         "port": {
@@ -108,9 +110,11 @@
             },
             "sessionAffinityConfig": {
               "type": "object",
+              "additionalProperties": false,
               "properties": {
                 "clientIP": {
                   "type": "object",
+                  "additionalProperties": false,
                   "properties": {
                     "timeoutSeconds": {
                       "type": "integer",
@@ -130,6 +134,7 @@
     },
     "ingress": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "enabled",
         "className",
@@ -182,6 +187,7 @@
     },
     "jenkins": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "url",
         "verifyTls",
@@ -212,6 +218,7 @@
         },
         "credentials": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "existingSecret",
             "secretKeyRefs",
@@ -221,6 +228,7 @@
           "properties": {
             "existingSecret": {
               "type": "object",
+              "additionalProperties": false,
               "required": [
                 "enabled"
               ],
@@ -241,6 +249,7 @@
             },
             "secretKeyRefs": {
               "type": "object",
+              "additionalProperties": false,
               "required": [
                 "enabled"
               ],
@@ -250,6 +259,7 @@
                 },
                 "username": {
                   "type": "object",
+                  "additionalProperties": false,
                   "required": [
                     "name",
                     "key"
@@ -265,6 +275,7 @@
                 },
                 "token": {
                   "type": "object",
+                  "additionalProperties": false,
                   "required": [
                     "name",
                     "key"
@@ -282,6 +293,7 @@
             },
             "create": {
               "type": "object",
+              "additionalProperties": false,
               "required": [
                 "enabled"
               ],
@@ -333,6 +345,7 @@
             },
             "externalSecret": {
               "type": "object",
+              "additionalProperties": false,
               "required": [
                 "enabled",
                 "refreshInterval",
@@ -356,6 +369,7 @@
                 },
                 "secretStoreRef": {
                   "type": "object",
+                  "additionalProperties": false,
                   "required": [
                     "name",
                     "kind"
@@ -367,7 +381,10 @@
                     },
                     "kind": {
                       "type": "string",
-                      "minLength": 1
+                      "enum": [
+                        "SecretStore",
+                        "ClusterSecretStore"
+                      ]
                     }
                   }
                 },
@@ -400,6 +417,7 @@
                 },
                 "secretStore": {
                   "type": "object",
+                  "additionalProperties": false,
                   "required": [
                     "create"
                   ],
@@ -431,7 +449,8 @@
                     "Owner",
                     "Orphan",
                     "Merge",
-                    "None"
+                    "None",
+                    "CreateOrMerge"
                   ]
                 },
                 "deletionPolicy": {
@@ -455,7 +474,25 @@
                   "type": "string"
                 },
                 "extraData": {
-                  "type": "array"
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "secretKey"
+                    ],
+                    "properties": {
+                      "secretKey": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "remoteRef": {
+                        "type": "object"
+                      },
+                      "sourceRef": {
+                        "type": "object"
+                      }
+                    }
+                  }
                 },
                 "dataFrom": {
                   "type": "array"
@@ -469,6 +506,7 @@
         },
         "caBundle": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "existingSecret",
             "key"
@@ -487,6 +525,7 @@
     },
     "mcp": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "transport",
         "host",
@@ -576,6 +615,7 @@
     },
     "podDisruptionBudget": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "enabled"
       ],
@@ -601,6 +641,7 @@
     },
     "networkPolicy": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "enabled",
         "allowInternetEgress"
@@ -628,6 +669,7 @@
     },
     "tailscale": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "magicDNS",
         "egress",
@@ -637,6 +679,7 @@
       "properties": {
         "magicDNS": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "createDNSConfig",
             "name"
@@ -653,6 +696,7 @@
         },
         "egress": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "enabled",
             "serviceName",
@@ -684,6 +728,7 @@
         },
         "proxyGroups": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "create",
             "ingress",
@@ -695,6 +740,7 @@
             },
             "ingress": {
               "type": "object",
+              "additionalProperties": false,
               "required": [
                 "name",
                 "replicas",
@@ -711,12 +757,13 @@
                 },
                 "hostnamePrefix": {
                   "type": "string",
-                  "minLength": 1
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,61}$"
                 }
               }
             },
             "egress": {
               "type": "object",
+              "additionalProperties": false,
               "required": [
                 "name",
                 "replicas",
@@ -733,7 +780,7 @@
                 },
                 "hostnamePrefix": {
                   "type": "string",
-                  "minLength": 1
+                  "pattern": "^[a-z0-9][a-z0-9-]{0,61}$"
                 }
               }
             }
@@ -749,6 +796,7 @@
     },
     "minibridge": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "enabled"
       ],
@@ -758,6 +806,7 @@
         },
         "image": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "repository": {
               "type": "string"
@@ -796,6 +845,7 @@
         },
         "basicAuth": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "enabled"
           ],
@@ -813,6 +863,7 @@
         },
         "tools": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "deny": {
               "type": "array",
@@ -843,6 +894,7 @@
         },
         "log": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "level": {
               "type": "string",
@@ -857,6 +909,7 @@
         },
         "tracing": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "url": {
               "type": "string"
@@ -868,6 +921,7 @@
         },
         "mcp": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "useTempDir"
           ],
@@ -879,6 +933,7 @@
         },
         "tls": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "enabled"
           ],
@@ -900,12 +955,14 @@
             },
             "pass": {
               "type": "object",
+              "additionalProperties": false,
               "required": [
                 "valueFrom"
               ],
               "properties": {
                 "valueFrom": {
                   "type": "object",
+                  "additionalProperties": false,
                   "required": [
                     "name",
                     "key"
@@ -928,6 +985,7 @@
         },
         "policer": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "enforce"
           ],
@@ -937,6 +995,7 @@
             },
             "rego": {
               "type": "object",
+              "additionalProperties": false,
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -948,6 +1007,7 @@
             },
             "http": {
               "type": "object",
+              "additionalProperties": false,
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -960,6 +1020,7 @@
                 },
                 "token": {
                   "type": "object",
+                  "additionalProperties": false,
                   "properties": {
                     "existingSecret": {
                       "type": "string"
@@ -981,6 +1042,7 @@
     },
     "autoscaling": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "enabled"
       ],
@@ -1075,10 +1137,64 @@
       "type": "array"
     },
     "probes": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "liveness",
+        "readiness",
+        "startup"
+      ],
+      "properties": {
+        "liveness": {
+          "$ref": "#/definitions/probe"
+        },
+        "readiness": {
+          "$ref": "#/definitions/probe"
+        },
+        "startup": {
+          "$ref": "#/definitions/probe"
+        }
+      }
+    },
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "image"
+      ],
+      "properties": {
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repository",
+            "tag",
+            "pullPolicy"
+          ],
+          "properties": {
+            "repository": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "pullPolicy": {
+              "type": "string",
+              "enum": [
+                "Always",
+                "IfNotPresent",
+                "Never"
+              ]
+            }
+          }
+        }
+      }
     },
     "audit": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "fileEnabled": {
           "type": "boolean"
@@ -1088,6 +1204,7 @@
         },
         "storage": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "type"
           ],
@@ -1104,6 +1221,7 @@
             },
             "persistentVolumeClaim": {
               "type": "object",
+              "additionalProperties": false,
               "properties": {
                 "claimName": {
                   "type": "string"
@@ -1116,6 +1234,39 @@
     },
     "global": {
       "type": "object"
+    }
+  },
+  "definitions": {
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "periodSeconds",
+        "timeoutSeconds",
+        "failureThreshold"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "initialDelaySeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
     }
   },
   "additionalProperties": false

@@ -24,6 +24,25 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if not .Values.tailscale.egress.tailnetFQDN }}
 {{- fail "tailscale.egress.tailnetFQDN is required when the egress proxy is enabled. It must match the host in jenkins.url." }}
 {{- end }}
+{{- $url := urlParse .Values.jenkins.url -}}
+{{- $jenkinsHost := regexReplaceAll ":[0-9]+$" (get $url "host") "" -}}
+{{- if ne $jenkinsHost .Values.tailscale.egress.tailnetFQDN }}
+{{- fail (printf "tailscale.egress.tailnetFQDN (%s) must exactly match the host in jenkins.url (%s), otherwise traffic or TLS hostname verification targets the wrong Jenkins controller." .Values.tailscale.egress.tailnetFQDN $jenkinsHost) }}
+{{- end }}
+{{- end }}
+
+{{- /* Tailscale Ingress derives its hostname and certificate from spec.tls and
+       expects no host rule or user-supplied TLS Secret. */ -}}
+{{- if and .Values.ingress.enabled (eq .Values.ingress.className "tailscale") }}
+{{- if not .Values.ingress.tls }}
+{{- fail "ingress.className=tailscale requires ingress.tls=true because the Tailscale Operator derives the MagicDNS name and certificate from spec.tls.hosts." }}
+{{- end }}
+{{- if .Values.ingress.tlsSecretName }}
+{{- fail "ingress.tlsSecretName must be empty for ingress.className=tailscale; the Tailscale Operator provisions the certificate." }}
+{{- end }}
+{{- if eq .Values.ingress.hostRule true }}
+{{- fail "ingress.hostRule must be false or null for ingress.className=tailscale; the Operator expects a hostless rule." }}
+{{- end }}
 {{- end }}
 
 {{- /* Exactly one credential source. Four booleans replace what used to be a
@@ -70,11 +89,48 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if and $creds.existingSecret.enabled (eq $creds.existingSecret.usernameKey $creds.existingSecret.tokenKey) }}
 {{- fail "jenkins.credentials.existingSecret.usernameKey and tokenKey must be different. Pointing both environment variables at one Secret key makes Jenkins receive the same value as the user ID and API token." }}
 {{- end }}
+{{- if and $creds.secretKeyRefs.enabled (eq $creds.secretKeyRefs.username.name $creds.secretKeyRefs.token.name) (eq $creds.secretKeyRefs.username.key $creds.secretKeyRefs.token.key) }}
+{{- fail "jenkins.credentials.secretKeyRefs.username and token must not point at the same Secret key. Jenkins needs a distinct user ID and API token." }}
+{{- end }}
+{{- if and $creds.create.enabled (not (or $creds.create.jenkinsUserId $creds.create.jenkinsApiToken (index $creds.create "JENKINS_USERNAME") (index $creds.create "JENKINS_TOKEN"))) (eq (default "JENKINS_USERNAME" $creds.create.usernameKey) (default "JENKINS_TOKEN" $creds.create.tokenKey)) }}
+{{- fail "deprecated jenkins.credentials.create.usernameKey and tokenKey must be different. Use jenkinsUserId and jenkinsApiToken with the stable chart-managed key names." }}
+{{- end }}
 {{- if and $creds.externalSecret.enabled (eq $creds.externalSecret.targetUsernameKey $creds.externalSecret.targetTokenKey) }}
 {{- fail "jenkins.credentials.externalSecret.targetUsernameKey and targetTokenKey must be different. ESO must write the Jenkins user ID and API token to separate target Secret keys." }}
 {{- end }}
 {{- if and $creds.externalSecret.enabled $creds.externalSecret.dataFrom $creds.externalSecret.extraData }}
 {{- fail "jenkins.credentials.externalSecret.dataFrom and extraData cannot be combined. dataFrom replaces the explicit data list, so extraData would be ignored; choose one source shape." }}
+{{- end }}
+{{- if and $creds.externalSecret.enabled (not $creds.externalSecret.dataFrom) (eq $creds.externalSecret.usernameRemoteKey $creds.externalSecret.tokenRemoteKey) }}
+{{- if or (not $creds.externalSecret.usernameRemoteProperty) (not $creds.externalSecret.tokenRemoteProperty) (eq $creds.externalSecret.usernameRemoteProperty $creds.externalSecret.tokenRemoteProperty) }}
+{{- fail "jenkins.credentials.externalSecret may use the same usernameRemoteKey and tokenRemoteKey only when usernameRemoteProperty and tokenRemoteProperty are both set and different." }}
+{{- end }}
+{{- end }}
+{{- if and $creds.externalSecret.enabled (not $creds.externalSecret.dataFrom) }}
+{{- $targetKeys := list $creds.externalSecret.targetUsernameKey $creds.externalSecret.targetTokenKey -}}
+{{- range $i, $entry := $creds.externalSecret.extraData }}
+{{- $key := required (printf "jenkins.credentials.externalSecret.extraData[%d].secretKey is required" $i) $entry.secretKey -}}
+{{- if has $key $targetKeys }}
+{{- fail (printf "jenkins.credentials.externalSecret.extraData[%d].secretKey (%s) duplicates another target key; every generated Secret key must be unique." $i $key) }}
+{{- end }}
+{{- $targetKeys = append $targetKeys $key -}}
+{{- end }}
+{{- end }}
+
+{{- /* ESO rejects policy combinations where deletion requires ownership that
+       the selected creation policy does not provide. */ -}}
+{{- if $creds.externalSecret.enabled }}
+{{- $creation := $creds.externalSecret.creationPolicy -}}
+{{- $deletion := $creds.externalSecret.deletionPolicy -}}
+{{- if and (eq $creds.externalSecret.apiVersion "external-secrets.io/v1beta1") (eq $creation "CreateOrMerge") }}
+{{- fail "jenkins.credentials.externalSecret.creationPolicy=CreateOrMerge requires apiVersion=external-secrets.io/v1; the v1beta1 CRD does not define that policy." }}
+{{- end }}
+{{- if and (eq $deletion "Delete") (or (eq $creation "Merge") (eq $creation "None") (eq $creation "CreateOrMerge")) }}
+{{- fail "jenkins.credentials.externalSecret.deletionPolicy=Delete requires creationPolicy=Owner or Orphan; the selected creation policy does not own a target Secret that ESO may delete." }}
+{{- end }}
+{{- if and (eq $deletion "Merge") (eq $creation "None") }}
+{{- fail "jenkins.credentials.externalSecret.deletionPolicy=Merge cannot be combined with creationPolicy=None because there is no target Secret to merge." }}
+{{- end }}
 {{- end }}
 
 {{- /* TLS trust settings. A CA bundle is only meaningful when verification is
@@ -108,6 +164,9 @@ Cross-field validation that would otherwise only surface at runtime.
 
 {{- if .Values.minibridge.enabled }}
 {{- $mb := .Values.minibridge -}}
+{{- if eq (int $mb.port) (int $mb.healthPort) }}
+{{- fail "minibridge.port and minibridge.healthPort must be different because the proxy cannot bind both listeners to one port." }}
+{{- end }}
 {{- if and $mb.policer.rego.enabled $mb.policer.http.enabled }}
 {{- fail "minibridge.policer.rego.enabled and minibridge.policer.http.enabled are mutually exclusive. Select exactly one policer." }}
 {{- end }}
@@ -117,8 +176,11 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if and $mb.policer.http.enabled (not $mb.policer.http.url) }}
 {{- fail "minibridge.policer.http.url is required when the HTTP policer is enabled." }}
 {{- end }}
-{{- if and $mb.policer.http.token.existingSecret (not $mb.policer.http.token.secretKey) }}
+{{- if and $mb.policer.http.enabled $mb.policer.http.token.existingSecret (not $mb.policer.http.token.secretKey) }}
 {{- fail "minibridge.policer.http.token.secretKey is required when its existingSecret is set." }}
+{{- end }}
+{{- if and $mb.policer.http.enabled $mb.policer.http.token.secretKey (not $mb.policer.http.token.existingSecret) }}
+{{- fail "minibridge.policer.http.token.existingSecret is required when its secretKey is set." }}
 {{- end }}
 {{- if and (not $mb.policer.http.enabled) (or $mb.policer.http.url $mb.policer.http.caPath $mb.policer.http.token.existingSecret) }}
 {{- fail "minibridge.policer.http is disabled but its URL, CA, or token is configured. Enable the HTTP policer and disable the Rego policer, or clear those HTTP settings." }}
@@ -132,6 +194,30 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if and (not $mb.tls.enabled) (or $mb.tls.existingSecret $mb.tls.passSecretKey $mb.tls.pass.valueFrom.name $mb.tls.pass.valueFrom.key $mb.tls.clientCASecretKey) }}
 {{- fail "minibridge.tls is disabled but TLS Secret settings are configured. Enable TLS or clear those settings." }}
 {{- end }}
+{{- if $mb.tls.enabled }}
+{{- $_ := required "minibridge.tls.existingSecret is required when TLS is enabled" $mb.tls.existingSecret -}}
+{{- $_ := required "minibridge.tls.certKey is required when TLS is enabled" $mb.tls.certKey -}}
+{{- $_ := required "minibridge.tls.keyKey is required when TLS is enabled" $mb.tls.keyKey -}}
+{{- if eq $mb.tls.certKey $mb.tls.keyKey }}
+{{- fail "minibridge.tls.certKey and keyKey must be different." }}
+{{- end }}
+{{- end }}
+{{- if and $mb.policer.rego.enabled (not $mb.policer.rego.policy) }}
+{{- fail "minibridge.policer.rego.policy is required when the Rego policer is enabled." }}
+{{- end }}
+{{- if $mb.basicAuth.enabled }}
+{{- $_ := required "minibridge.basicAuth.existingSecret is required when basicAuth is enabled" $mb.basicAuth.existingSecret -}}
+{{- $_ := required "minibridge.basicAuth.secretKey is required when basicAuth is enabled" $mb.basicAuth.secretKey -}}
+{{- end }}
+{{- end }}
+
+{{- if and (not .Values.minibridge.enabled) (eq (int .Values.mcp.port) (int .Values.mcp.healthPort)) }}
+{{- fail "mcp.port and mcp.healthPort must be different because the server cannot bind both listeners to one port." }}
+{{- end }}
+{{- $effectiveHealthPort := .Values.mcp.healthPort -}}
+{{- if .Values.minibridge.enabled }}{{- $effectiveHealthPort = .Values.minibridge.healthPort -}}{{- end }}
+{{- if and .Values.service.exposeHealthPort (eq (int .Values.service.port) (int $effectiveHealthPort)) }}
+{{- fail "service.port must differ from the effective health port when service.exposeHealthPort=true; Kubernetes Service ports must be unique." }}
 {{- end }}
 
 {{- /* An Ingress TLS secret is only read when TLS is on. */ -}}
@@ -156,14 +242,55 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- end }}
 {{- end }}
 {{- end }}
+{{- if and .Values.autoscaling.enabled (lt (int .Values.autoscaling.maxReplicas) (int .Values.autoscaling.minReplicas)) }}
+{{- fail "autoscaling.maxReplicas must be greater than or equal to autoscaling.minReplicas." }}
+{{- end }}
+
+{{- /* User-supplied pod metadata must not replace selector labels or disable
+       the checksums that trigger safe rollouts. */ -}}
+{{- range $key := list "app.kubernetes.io/name" "app.kubernetes.io/instance" "app.kubernetes.io/component" }}
+{{- if hasKey $.Values.podLabels $key }}
+{{- fail (printf "podLabels.%s is reserved by the chart and cannot be overridden." $key) }}
+{{- end }}
+{{- end }}
+{{- range $key := list "checksum/config" "checksum/credentials" }}
+{{- if hasKey $.Values.podAnnotations $key }}
+{{- fail (printf "podAnnotations.%s is reserved by the chart and cannot be overridden." $key) }}
+{{- end }}
+{{- end }}
+
+{{- /* Never allow a proxy or remote-policer credential to alias a Jenkins
+       credential; doing so leaks the Jenkins API token outside the server. */ -}}
+{{- if .Values.minibridge.enabled }}
+{{- $usernameName := include "jenkins-mcp-server.usernameSecretName" . -}}
+{{- $usernameKey := include "jenkins-mcp-server.usernameSecretKey" . -}}
+{{- $tokenName := include "jenkins-mcp-server.tokenSecretName" . -}}
+{{- $tokenKey := include "jenkins-mcp-server.tokenSecretKey" . -}}
+{{- if .Values.minibridge.basicAuth.enabled }}
+{{- $name := .Values.minibridge.basicAuth.existingSecret -}}
+{{- $key := .Values.minibridge.basicAuth.secretKey -}}
+{{- if or (and (eq $name $usernameName) (eq $key $usernameKey)) (and (eq $name $tokenName) (eq $key $tokenKey)) }}
+{{- fail "minibridge.basicAuth must not reuse the Jenkins user ID or API token Secret key. Store the client authentication secret under a distinct key, preferably in its own Secret." }}
+{{- end }}
+{{- end }}
+{{- if .Values.minibridge.policer.http.token.existingSecret }}
+{{- $name := .Values.minibridge.policer.http.token.existingSecret -}}
+{{- $key := .Values.minibridge.policer.http.token.secretKey -}}
+{{- if or (and (eq $name $usernameName) (eq $key $usernameKey)) (and (eq $name $tokenName) (eq $key $tokenKey)) }}
+{{- fail "minibridge.policer.http.token must not reuse the Jenkins user ID or API token Secret key." }}
+{{- end }}
+{{- end }}
+{{- end }}
 {{- if and .Values.minibridge.enabled .Values.minibridge.basicAuth.enabled }}
-{{- $credName := include "jenkins-mcp-server.credentialsSecretName" . }}
-{{- if and .Values.jenkins.credentials.externalSecret.enabled (eq .Values.minibridge.basicAuth.existingSecret $credName) }}
+{{- if .Values.jenkins.credentials.externalSecret.enabled }}
+{{- $credName := printf "%s-credentials" (include "jenkins-mcp-server.fullname" .) }}
+{{- if eq .Values.minibridge.basicAuth.existingSecret $credName }}
 {{- $key := .Values.minibridge.basicAuth.secretKey }}
 {{- $provided := list .Values.jenkins.credentials.externalSecret.targetUsernameKey .Values.jenkins.credentials.externalSecret.targetTokenKey }}
 {{- range .Values.jenkins.credentials.externalSecret.extraData }}{{- $provided = append $provided .secretKey }}{{- end }}
 {{- if and (not .Values.jenkins.credentials.externalSecret.dataFrom) (not (has $key $provided)) }}
 {{- fail (printf "minibridge.basicAuth points at the ExternalSecret target %q for key %q, but the ExternalSecret only creates keys %v. The pod would fail with CreateContainerConfigError. Add the key via externalSecret.extraData, or point basicAuth.existingSecret at a different Secret." $credName $key $provided) }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

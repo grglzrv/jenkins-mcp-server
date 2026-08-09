@@ -133,6 +133,12 @@ probes:
     timeoutSeconds: 3
     failureThreshold: 30
 
+test:
+  image:
+    repository: busybox
+    tag: "1.37"
+    pullPolicy: IfNotPresent
+
 podDisruptionBudget:
   enabled: true
   # Configure exactly one of minAvailable or maxUnavailable.
@@ -233,6 +239,8 @@ jenkins:
     #    not a second way to configure one existing Secret; use existingSecret
     #    above for that. Use this only when user ID and token are split across
     #    different Secret objects (or separately managed references).
+    #    The username and token references must not resolve to the same Secret
+    #    key; Jenkins needs two distinct values.
     secretKeyRefs:
       enabled: false
       username:
@@ -294,7 +302,8 @@ jenkins:
       remoteVersion: ""
       # Extra data entries appended to the generated ExternalSecret. Cannot be
       # combined with dataFrom because ESO treats them as different source
-      # shapes and this chart will not silently ignore one.
+      # shapes and this chart will not silently ignore one. Every secretKey
+      # must be unique and must not duplicate either credential target key.
       extraData: []
       # Use dataFrom instead of the per-key data block above (mutually exclusive).
       dataFrom: []

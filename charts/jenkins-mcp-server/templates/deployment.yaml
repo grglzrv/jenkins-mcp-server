@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "jenkins-mcp-server.fullname" . }}
+  name: {{ include "jenkins-mcp-server.fullname" . | quote }}
   labels:
     {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
 spec:
@@ -39,11 +39,11 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      serviceAccountName: {{ include "jenkins-mcp-server.serviceAccountName" . }}
+      serviceAccountName: {{ include "jenkins-mcp-server.serviceAccountName" . | quote }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.priorityClassName }}
-      priorityClassName: {{ . }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -53,8 +53,8 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: jenkins-mcp-server
-          image: {{ include "jenkins-mcp-server.image" . }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: {{ include "jenkins-mcp-server.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
 {{- if not .Values.minibridge.enabled }}
@@ -62,7 +62,7 @@ spec:
 {{- end }}
           envFrom:
             - configMapRef:
-                name: {{ include "jenkins-mcp-server.fullname" . }}
+                name: {{ include "jenkins-mcp-server.fullname" . | quote }}
           env:
             - name: JENKINS_USERNAME
               valueFrom:
@@ -154,7 +154,7 @@ spec:
         {{- if and .Values.minibridge.enabled .Values.minibridge.tls.enabled }}
         - name: minibridge-tls
           secret:
-            secretName: {{ required "minibridge.tls.existingSecret is required when TLS is enabled" .Values.minibridge.tls.existingSecret }}
+            secretName: {{ required "minibridge.tls.existingSecret is required when TLS is enabled" .Values.minibridge.tls.existingSecret | quote }}
         {{- end }}
         - name: tmp
           emptyDir: {}
@@ -162,7 +162,7 @@ spec:
         - name: audit
           {{- if eq .Values.audit.storage.type "pvc" }}
           persistentVolumeClaim:
-            claimName: {{ required "audit.storage.persistentVolumeClaim.claimName is required for pvc storage" .Values.audit.storage.persistentVolumeClaim.claimName }}
+            claimName: {{ required "audit.storage.persistentVolumeClaim.claimName is required for pvc storage" .Values.audit.storage.persistentVolumeClaim.claimName | quote }}
           {{- else }}
           emptyDir:
             {{- toYaml .Values.audit.storage.emptyDir | nindent 12 }}
@@ -171,9 +171,9 @@ spec:
         {{- if .Values.jenkins.caBundle.existingSecret }}
         - name: jenkins-ca
           secret:
-            secretName: {{ .Values.jenkins.caBundle.existingSecret }}
+            secretName: {{ .Values.jenkins.caBundle.existingSecret | quote }}
             items:
-              - key: {{ .Values.jenkins.caBundle.key }}
+              - key: {{ .Values.jenkins.caBundle.key | quote }}
                 path: ca.crt
         {{- end }}
         {{- with .Values.extraVolumes }}
