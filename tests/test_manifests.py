@@ -71,7 +71,7 @@ def test_raw_mcp_services_keep_sessions_on_one_replica():
 def test_raw_resources_use_one_component_label_without_selector_changes():
     base_paths = [
         "deploy/kubernetes/base/deployment.yaml",
-        "deploy/kubernetes/base/networkpolicy.yaml",
+        "deploy/kubernetes/tailscale/networkpolicy.yaml",
         "deploy/kubernetes/base/pdb.yaml",
         "deploy/kubernetes/base/service.yaml",
         "deploy/kubernetes/base/serviceaccount.yaml",
@@ -183,7 +183,7 @@ def test_helm_ingress_and_test_pod_are_narrowly_scoped():
 
 
 def test_raw_network_policy_allows_dynamic_tailscale_proxy_ports():
-    policy = load("deploy/kubernetes/base/networkpolicy.yaml")[0]
+    policy = load("deploy/kubernetes/tailscale/networkpolicy.yaml")[0]
     tailscale_rules = [
         rule
         for rule in policy["spec"]["egress"]
@@ -234,11 +234,15 @@ def test_raw_deploy_credentials_use_the_fixed_environment_key_contract():
 
 
 def test_base_manifests_are_environment_neutral():
-    """The base must not carry an ingress tied to one controller."""
+    """The base must not carry environment-specific ingress or egress policy."""
     base = ROOT / "deploy/kubernetes/base"
     assert not (base / "ingress.yaml").exists(), "ingress belongs in an overlay"
     kustomization = (base / "kustomization.yaml").read_text()
     assert "ingress.yaml" not in kustomization.replace("# No Ingress here", "")
+    assert "networkpolicy.yaml" not in kustomization
+    assert not (base / "networkpolicy.yaml").exists()
+    standalone = load("deploy/kubernetes/minibridge/standalone-deployment.yaml")
+    assert all(doc["kind"] != "NetworkPolicy" for doc in standalone if doc)
     # No tailnet hostnames outside the Tailscale-specific pieces.
     config = (base / "config.env").read_text()
     hosts = [m.group(0) for m in TAILNET_HOST.finditer(config)]

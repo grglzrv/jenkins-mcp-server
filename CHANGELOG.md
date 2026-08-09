@@ -40,6 +40,65 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.4.1] - 2026-08-09
+
+### Highlights
+
+- Restored NetworkPolicy to an explicit opt-in so firewall-protected external
+  Jenkins URLs remain reachable without broad or brittle CIDR rules.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Moved the raw Tailscale-specific NetworkPolicy out of the neutral Kubernetes
+  base and into the Tailscale overlay.
+- Updated every Helm values example and Argo CD Application to state whether
+  NetworkPolicy is intentionally disabled for external Jenkins or enabled for
+  the Tailscale proxy path.
+- Added Helm NOTES for the disabled-policy boundary and for health ports
+  published by `LoadBalancer` or `NodePort` Services.
+- Clarified that the legacy `allowInternetEgress` switch permits unrestricted
+  egress, because Kubernetes NetworkPolicy cannot identify public destinations
+  or external DNS names portably.
+
+### Bug Fixes
+
+- Changed `networkPolicy.enabled` back to `false`; the 2.4.0 default-deny egress
+  policy blocked direct external Jenkins hostnames unless operators opened all
+  egress or maintained destination CIDRs.
+- Removed the unconditional NetworkPolicy from the standalone Minibridge raw
+  manifest, which otherwise imposed a different networking default from Helm.
+- Removed a stale MagicDNS instruction from the environment-neutral raw
+  Kubernetes configuration.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- Kubernetes NetworkPolicy has no portable DNS-name destination selector. When
+  enabling it for direct external Jenkins, use stable `ipBlock` rules, a
+  selectable in-cluster proxy, or the unrestricted egress opt-in.
+
+### Security
+
+- Network isolation remains available and fully tested as an explicit opt-in.
+  Deployments that rely on a firewall allowing only authorized pods or clusters
+  no longer need to weaken a default-deny policy merely to reach Jenkins.
+
+### Upgrade Notes
+
+- Upgrading from 2.4.0 removes the chart-managed NetworkPolicy unless
+  `networkPolicy.enabled=true` is set explicitly. Set it before upgrading when
+  the 2.4.0 policy is part of the intended security boundary.
+- Raw Tailscale users continue to receive the policy through the production
+  overlay. The neutral base and standalone Minibridge manifest no longer apply
+  one automatically.
+
 ## [2.4.0] - 2026-08-09
 
 ### Highlights

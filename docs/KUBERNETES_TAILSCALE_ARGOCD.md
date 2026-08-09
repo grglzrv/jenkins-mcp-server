@@ -32,8 +32,9 @@ MCP server Pod
 3. Set `JENKINS_URL` and `tailscale.com/tailnet-fqdn` to the exact `svc:jenkins` FQDN.
 4. Adjust `MCP_ALLOWED_JOBS` and keep `MCP_ALLOW_DESTRUCTIVE=false` unless
    irreversible actions have a reviewed need.
-5. Review namespace names in `networkpolicy.yaml`; do not disable the policy to
-   work around a missing client or Jenkins egress selector.
+5. Review namespace names in `deploy/kubernetes/tailscale/networkpolicy.yaml`;
+   this Tailscale overlay opts into the policy, so fix missing client or Jenkins
+   egress selectors instead of weakening it.
 6. Create the Jenkins credential Secret through your secret manager.
 7. Choose the plain image or the `-minibridge` Kustomize overlay. The latter is
    one bundled container and blocks `@destructive` in the shipped example.

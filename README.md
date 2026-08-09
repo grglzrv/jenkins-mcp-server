@@ -231,7 +231,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.4.0 \
+  --version 2.4.1 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -244,11 +244,12 @@ External Secrets Operator. See
 [`per-field-secret-refs.yaml`](examples/values/per-field-secret-refs.yaml) for
 the split-secret form.
 
-The chart enables a default-deny NetworkPolicy. Same-namespace clients can
-reach MCP, while external Jenkins egress stays blocked until values explicitly
-enable it or provide a narrow rule; the Tailscale example supplies its own
-proxy egress. Destructive server actions and file audit logging are also off by
-default. Audit JSONL always remains available on stdout.
+The chart ships a default-deny NetworkPolicy as an opt-in. It is disabled by
+default so external Jenkins URLs protected by cluster/firewall allowlists are
+not unexpectedly blocked. Enable it only after modeling both MCP client ingress
+and Jenkins egress; the Tailscale example supplies a narrowly selectable proxy
+path. Destructive server actions and file audit logging are also off by default.
+Audit JSONL always remains available on stdout.
 
 The chart-managed source is enabled by default so Helm can create the Secret
 without a separate pre-install step. Set
@@ -525,7 +526,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.4.0
+NEW_VERSION=2.4.1
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 

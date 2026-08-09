@@ -146,11 +146,11 @@ podDisruptionBudget:
   maxUnavailable: null
 
 networkPolicy:
-  # Enabled by default. Pods in this release's namespace can reach MCP; add
-  # other client namespaces explicitly below. Egress is fail-closed except for
-  # DNS and an enabled Tailscale proxy, so external Jenkins URLs also need an
-  # explicit egress rule or allowInternetEgress: true.
-  enabled: true
+  # Disabled by default. A default-deny egress policy cannot select an external
+  # Jenkins hostname by DNS and can unexpectedly block a firewalled Jenkins URL.
+  # Enable this only when the cluster needs pod-level isolation, then configure
+  # every client namespace and Jenkins egress path explicitly below.
+  enabled: false
   # Permit client pods in the release namespace to reach MCP. Disable this for
   # a dedicated server namespace, then list only the real client namespaces.
   allowSameNamespace: true
@@ -159,8 +159,10 @@ networkPolicy:
   # allowSameNamespace: false means only the chart's health/test traffic.
   #   allowedNamespaces: ["agents", "tailscale"]
   allowedNamespaces: []
-  # Allow egress to the public internet. Not needed when Jenkins is in-cluster
-  # or reached over a private network.
+  # Allow unrestricted egress while the policy is enabled. Despite the legacy
+  # key name, Kubernetes NetworkPolicy cannot distinguish "the internet" from
+  # all private destinations without explicit CIDRs. Prefer additionalEgress
+  # when Jenkins has stable destination CIDRs or a selectable in-cluster proxy.
   allowInternetEgress: false
   # Raw rules appended verbatim, for anything the fields above cannot express.
   additionalIngress: []

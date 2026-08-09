@@ -10,7 +10,10 @@ resources:
   # production overlay adds a Tailscale Ingress; add your own for another
   # controller.
   - pdb.yaml
-  - networkpolicy.yaml
+# No NetworkPolicy here: a neutral base must not block a firewall-protected
+# external Jenkins hostname. Add an environment-specific policy only after its
+# client ingress and Jenkins egress paths are modeled; the Tailscale overlay
+# includes one for its proxy path.
 configMapGenerator:
   - name: jenkins-mcp-config
     envs:

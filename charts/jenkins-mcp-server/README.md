@@ -59,19 +59,17 @@ creates the credentials Secret.
 ```bash
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.4.0 \
+  --version 2.4.1 \
   --namespace jenkins-mcp \
   --create-namespace \
   --set jenkins.url=https://jenkins.example.com \
-  --set networkPolicy.allowInternetEgress=true \
   --set-string jenkins.credentials.create.jenkinsUserId='<actual-jenkins-login-id>' \
   --set-string jenkins.credentials.create.jenkinsApiToken='<jenkins-api-token>'
 ```
 
-The explicit egress opt-in is needed because this example uses an external
-Jenkins hostname; omit it when Jenkins is reached through the Tailscale egress
-integration or replace it with a narrow `additionalEgress` rule. That gives a
-ClusterIP Service reachable by pods in the release namespace at
+NetworkPolicy is disabled by default so a normal external, firewall-protected
+Jenkins URL remains reachable. The install gives a ClusterIP Service reachable
+by pods in the release namespace at
 `http://jenkins-mcp-jenkins-mcp-server.jenkins-mcp.svc.cluster.local:8000/mcp`.
 Installing without `jenkins.url` fails with a message saying so, rather than
 deploying something that cannot reach a Jenkins.
@@ -85,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.4.0 \
+  --version 2.4.1 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -93,17 +91,19 @@ helm upgrade --install jenkins-mcp \
 
 For a public package, registry login is not needed for pulls.
 
-### Upgrading from 2.3
+### Upgrading from 2.3 or 2.4.0
 
-2.4 changes three defaults: `mcp.allowDestructive=false`,
-`networkPolicy.enabled=true` with same-namespace ingress, and
-`audit.fileEnabled=false`. Existing releases that need job configuration
-updates, build stops, queue cancellation, or node offlining must explicitly opt
-back in to the master destructive switch. Clients in another namespace must be
-listed in `networkPolicy.allowedNamespaces`; external Jenkins endpoints need an
-explicit egress rule or `allowInternetEgress=true`. File audit users must set
-`audit.fileEnabled=true` and provide rotated or bounded storage. Audit JSONL
-continues to stdout in every configuration.
+2.4 keeps `mcp.allowDestructive=false` and `audit.fileEnabled=false`. Existing
+releases that need job configuration updates, build stops, queue cancellation,
+or node offlining must explicitly opt back in to the master destructive switch.
+File audit users must set `audit.fileEnabled=true` and provide rotated or
+bounded storage. Audit JSONL continues to stdout in every configuration.
+
+2.4.0 briefly enabled NetworkPolicy by default. 2.4.1 restores the opt-in
+default because a default-deny egress policy cannot select an external Jenkins
+hostname by DNS and can block otherwise authorized, firewall-protected traffic.
+If you enabled or depended on the 2.4.0 policy, set `networkPolicy.enabled=true`
+explicitly and retain the required client and Jenkins egress rules.
 
 ## Required Jenkins credentials
 
@@ -369,10 +369,10 @@ does not render direct-listener variables into the ConfigMap.
 | `ingress.annotations` | `{}` | Controller-specific; see `values.yaml` for examples |
 | `ingress.hostRule` | `null` | `null` decides from the class: Tailscale omits `rules[].host`, others need it |
 | `ingress.tls` / `tlsSecretName` | `true` / `""` | Tailscale issues its own certificate |
-| `networkPolicy.enabled` | `true` | Default-deny ingress/egress policy; DNS and enabled Tailscale egress are allowed |
+| `networkPolicy.enabled` | `false` | Opt-in default-deny ingress/egress policy; enable only after modeling client and Jenkins traffic |
 | `networkPolicy.allowSameNamespace` | `true` | Allows MCP clients in the release namespace; disable for a dedicated server namespace |
 | `networkPolicy.allowedNamespaces` | `[]` | Additional client namespaces, matched by `kubernetes.io/metadata.name` |
-| `networkPolicy.allowInternetEgress` | `false` | External Jenkins needs this or a narrower `additionalEgress` rule |
+| `networkPolicy.allowInternetEgress` | `false` | When policy is enabled, this legacy-named switch allows unrestricted egress; prefer a narrower `additionalEgress` rule when stable CIDRs or an in-cluster proxy are available |
 | `tailscale.enabled` | `false` | The whole integration is opt-in. Configuring a sub-feature while it is false fails the render |
 | `tailscale.egress`, `magicDNS`, `proxyGroups` | disabled | See `values.yaml` |
 
@@ -380,6 +380,13 @@ Kubernetes Service affinity sees the source address that reaches the Service.
 When an ingress controller masks client addresses, configure that controller's
 cookie or backend affinity as well. Affinity prevents routine cross-pod session
 loss; it does not migrate a pod's in-memory sessions during restart or eviction.
+
+Kubernetes NetworkPolicy has no portable DNS-name destination selector. For an
+external Jenkins URL protected by a firewall that only admits the cluster, keep
+the chart policy disabled and use those perimeter controls. If pod-level
+isolation is required, enable it explicitly and configure `additionalEgress`
+with stable CIDRs or route Jenkins through a selectable in-cluster proxy. The
+Tailscale production example demonstrates the proxy pattern.
 
 ### Audit
 
@@ -431,7 +438,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.4.0
+NEW_VERSION=2.4.1
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

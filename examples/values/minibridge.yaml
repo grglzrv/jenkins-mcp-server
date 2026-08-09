@@ -72,6 +72,7 @@ audit:
   fileEnabled: false
 
 networkPolicy:
-  enabled: true
+  # Jenkins is external and protected independently, so policy is opt-in.
+  enabled: false
   allowSameNamespace: true
-  allowInternetEgress: true
+  allowInternetEgress: false

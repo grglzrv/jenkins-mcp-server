@@ -138,11 +138,11 @@ audit:
   fileEnabled: false                   # stdout remains enabled
 
 networkPolicy:
-  enabled: true
+  # Disabled for a firewall-protected external Jenkins URL. Enable only after
+  # modeling both client ingress and the Jenkins egress destination.
+  enabled: false
   allowSameNamespace: true
-  # This example's Jenkins URL is external. Prefer a narrower egress rule when
-  # its address range is known, or use the documented Tailscale egress path.
-  allowInternetEgress: true
+  allowInternetEgress: false
 
 minibridge:
   enabled: true
@@ -187,7 +187,7 @@ Do not report success before all four pass.
 # 1. Pods ready
 kubectl -n jenkins-mcp rollout status deploy/jenkins-mcp-jenkins-mcp-server
 
-# 2. Chart's own test: reaches the service through the NetworkPolicy
+# 2. Chart's own test: reaches the Service (and an enabled policy, if configured)
 helm test jenkins-mcp --namespace jenkins-mcp
 
 # 3. The MCP endpoint answers

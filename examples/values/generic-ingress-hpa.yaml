@@ -86,8 +86,10 @@ audit:
   fileEnabled: false
 
 networkPolicy:
-  enabled: true
+  # Disabled so the external Jenkins hostname remains reachable. When enabling,
+  # retain the ingress namespace and add the exact Jenkins egress path.
+  enabled: false
   allowSameNamespace: true
   # Adjust to the namespace used by your ingress controller.
   allowedNamespaces: [ingress-nginx]
-  allowInternetEgress: true
+  allowInternetEgress: false
