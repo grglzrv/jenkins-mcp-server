@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     allow_job_update: bool = Field(default=True, alias="MCP_ALLOW_JOB_UPDATE")
     allow_build_stop: bool = Field(default=True, alias="MCP_ALLOW_BUILD_STOP")
     allowed_jobs: str = Field(default="*", alias="MCP_ALLOWED_JOBS")
+    # Bound every response from Jenkins. Console and administrator calls use
+    # the smaller max_log_bytes limit because their payload is returned as
+    # text; ordinary API and config responses must be complete to be useful.
+    max_response_bytes: int = Field(
+        default=10_000_000,
+        ge=1024,
+        alias="MCP_MAX_RESPONSE_BYTES",
+    )
     max_log_bytes: int = Field(default=1_000_000, ge=1, alias="MCP_MAX_LOG_BYTES")
     audit_log_path: Path | None = Field(default=None, alias="MCP_AUDIT_LOG_PATH")
     audit_max_bytes: int = Field(default=0, ge=0, alias="MCP_AUDIT_MAX_BYTES")

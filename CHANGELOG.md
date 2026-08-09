@@ -10,19 +10,71 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None.
+- None yet.
 
 ### New Features
 
-- None.
+- None yet.
 
 ### Improvements
 
-- None.
+- None yet.
 
 ### Bug Fixes
 
-- None.
+- None yet.
+
+### Breaking Changes
+
+- None yet.
+
+### Known Issues
+
+- None yet.
+
+### Security
+
+- None yet.
+
+### Upgrade Notes
+
+- None yet.
+
+## [2.6.0] - 2026-08-09
+
+### Highlights
+
+- Jenkins API, job-config, and crumb responses are now streamed through a
+  configurable 10 MB safety bound instead of being buffered without a limit.
+
+### New Features
+
+- `mcp.maxResponseBytes` (`MCP_MAX_RESPONSE_BYTES`, default 10 MB) limits every
+  complete Jenkins response independently of the smaller, truncating console
+  and administrator-response limit.
+
+### Improvements
+
+- HTTP errors now give targeted hints for authentication failures, permission
+  or crumb failures, and unexpected proxy/SSO redirects.
+- A new troubleshooting guide covers health semantics, external Jenkins DNS,
+  firewalls and egress policies, TLS, redirects, layered tool policy, audit
+  degradation, and multi-replica session affinity.
+- The main and chart READMEs, onboarding, compatibility documentation, every
+  Helm and Argo CD example, raw manifests, standalone Minibridge deployment,
+  and k3s smoke values document the same operational limits and diagnostics.
+
+### Bug Fixes
+
+- Jenkins JSON, XML, and crumb responses could consume unbounded process memory.
+  Oversized complete responses now fail predictably, while console/admin text
+  retains its documented bounded-truncation behavior.
+- Malformed Jenkins API JSON leaked a decoder exception. It is now reported as
+  a stable `JenkinsError` naming the affected endpoint.
+- Troubleshooting incorrectly said TLS verification failures occurred at
+  startup and that server-side `mcp.allow*` flags removed tools from discovery.
+  TLS is exercised on Jenkins calls; only Minibridge tool policy filters
+  `tools/list`, while server policy rejects unauthorized calls.
 
 ### Breaking Changes
 
@@ -34,11 +86,14 @@ from the matching version entry after CI validates it.
 
 ### Security
 
-- None.
+- Bounded upstream responses reduce memory-exhaustion risk from unexpectedly
+  large or intermediary-generated Jenkins payloads.
 
 ### Upgrade Notes
 
-- No action required.
+- No action is required. If a measured legitimate Jenkins API or job-config
+  response exceeds 10 MB, raise `mcp.maxResponseBytes` deliberately; prefer a
+  narrower folder/query where possible.
 
 ## [2.5.0] - 2026-08-09
 

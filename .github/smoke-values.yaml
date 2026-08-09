@@ -46,6 +46,7 @@ resources:
 
 mcp:
   allowedJobs: "AI/*,Platform/*"
+  maxResponseBytes: 10000000
 
 # Exercise the complete file-audit path in a real cluster. The unit tests use
 # tiny limits to force rotation; this smoke verifies the chart-created volume,

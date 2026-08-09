@@ -354,6 +354,9 @@ mcp:
   allowBuildStop: true
   # Applied to job discovery, queue/running-build visibility, and mutations.
   allowedJobs: "AI/*,Platform/*"
+  # Hard limit on every complete Jenkins API, config, and crumb response.
+  # Increase only when a known controller response legitimately exceeds 10 MB.
+  maxResponseBytes: 10000000
   # Hard limit on bytes downloaded for console and administrator responses.
   maxLogBytes: 1000000
   extraEnv: []

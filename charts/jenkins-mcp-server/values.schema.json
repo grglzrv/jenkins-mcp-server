@@ -539,6 +539,7 @@
         "allowNodeWrite",
         "allowAdminRequest",
         "allowedJobs",
+        "maxResponseBytes",
         "maxLogBytes",
         "allowDestructive",
         "allowJobDelete",
@@ -591,6 +592,10 @@
         },
         "allowedJobs": {
           "type": "string"
+        },
+        "maxResponseBytes": {
+          "type": "integer",
+          "minimum": 1024
         },
         "maxLogBytes": {
           "type": "integer",

@@ -28,6 +28,9 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Forward audit JSONL process logs to the central SIEM. File output is an
   optional, size-rotated copy. Set `audit.requiredForReadiness=true` only when
   the file is the record of account and losing it must fail closed.
+- Keep `MCP_MAX_RESPONSE_BYTES` bounded. Raise the 10 MB default only for a
+  measured legitimate Jenkins API or job-config response; narrow folder
+  queries first.
 - Rotate the Jenkins API token and never commit `.env` or certificates.
 
 ## Secret handling

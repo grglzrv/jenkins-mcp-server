@@ -147,6 +147,57 @@ async def test_console_untruncated_uses_jenkins_offset() -> None:
     await jc.close()
 
 
+@pytest.mark.asyncio
+async def test_api_response_is_streamed_and_rejected_at_global_limit() -> None:
+    """Large Jenkins JSON must not be buffered without a bound."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b'{"jobs":[' + b" " * 2048)
+
+    jc = client(handler, MCP_MAX_RESPONSE_BYTES=1024)
+    with pytest.raises(JenkinsError, match=r"MCP_MAX_RESPONSE_BYTES \(1024 bytes\)"):
+        await jc.list_jobs()
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_malformed_api_json_is_wrapped_as_jenkins_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="not-json")
+
+    jc = client(handler)
+    with pytest.raises(JenkinsError, match="malformed JSON for /api/json"):
+        await jc.list_jobs()
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_console_keeps_its_smaller_truncating_limit() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"x" * 4096)
+
+    jc = client(
+        handler,
+        MCP_MAX_LOG_BYTES=1024,
+        MCP_MAX_RESPONSE_BYTES=2048,
+    )
+    result = await jc.console("AI/build", 7)
+    assert len(result["text"]) == 1024
+    assert result["truncated"] is True
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_redirect_error_explains_context_path_and_proxy_causes() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(302, headers={"Location": "/login"})
+
+    jc = client(handler)
+    with pytest.raises(JenkinsError, match="Unexpected redirect.*context path"):
+        await jc.list_jobs()
+    await jc.close()
+
+
 # --- CSRF crumb refresh ---------------------------------------------------
 
 
@@ -595,6 +646,17 @@ async def test_malformed_crumb_response_is_wrapped(response: httpx.Response) -> 
 
     jc = client(handler, JENKINS_MAX_RETRIES=0)
     with pytest.raises(JenkinsError, match="malformed JSON"):
+        await jc.build("demo")
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_crumb_response_is_bounded() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"{" + b"x" * 2048)
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0, MCP_MAX_RESPONSE_BYTES=1024)
+    with pytest.raises(JenkinsError, match=r"crumb issuer response exceeded.*1024 bytes"):
         await jc.build("demo")
     await jc.close()
 
