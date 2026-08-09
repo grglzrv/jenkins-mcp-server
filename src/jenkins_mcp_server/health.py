@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .audit import AuditLogger
+from .client import jenkins_contact
 from .config import Settings
 
 log = logging.getLogger(__name__)
@@ -50,7 +51,22 @@ def readiness(
     ready = all(bool(value) for value in required)
     if settings.audit_required_for_readiness:
         ready = ready and audit_ok
-    return ready, {"status": "ready" if ready else "not_ready", "checks": checks}
+
+    # Reachability is reported, never required. Readiness controls Service
+    # endpoints: taking every replica out because Jenkins is restarting turns
+    # one upstream outage into two, and leaves callers with a refused
+    # connection instead of an error naming the cause. The server can still
+    # serve, and what it serves is more useful than nothing.
+    #
+    # Passive by design. last_success_age_seconds is null on a pod that has not
+    # been asked to do anything yet; that is honest rather than a probe result
+    # invented to fill the field.
+    payload: dict[str, Any] = {
+        "status": "ready" if ready else "not_ready",
+        "checks": checks,
+        "jenkins": jenkins_contact.snapshot(),
+    }
+    return ready, payload
 
 
 class HealthHandler(BaseHTTPRequestHandler):

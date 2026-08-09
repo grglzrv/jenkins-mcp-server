@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import random
+import threading
+import time
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -13,6 +15,47 @@ from . import __version__
 from .audit import AuditLogger
 from .config import Settings
 from .security import Policy, PolicyError
+
+
+class JenkinsContact:
+    """Whether this process has recently reached Jenkins, for diagnostics only.
+
+    Deliberately passive: it records the outcome of requests the server was
+    already making. An active probe would have every replica polling the
+    controller on its readiness interval, which costs the controller more the
+    more replicas you add, exactly when it is already struggling.
+
+    Read from the health server thread, written from the event loop, so the
+    state is guarded.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._last_success: float | None = None
+        self._last_error: str | None = None
+
+    def record_success(self) -> None:
+        with self._lock:
+            self._last_success = time.monotonic()
+            self._last_error = None
+
+    def record_failure(self, exc: BaseException) -> None:
+        with self._lock:
+            self._last_error = type(exc).__name__
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            last_success, last_error = self._last_success, self._last_error
+        if last_success is None:
+            age: float | None = None
+        else:
+            age = round(max(0.0, time.monotonic() - last_success), 1)
+        return {"last_success_age_seconds": age, "last_error": last_error}
+
+
+# Module level so the health server can read it without holding a client, and
+# without a probe creating one.
+jenkins_contact = JenkinsContact()
 
 
 class JenkinsError(RuntimeError):
@@ -343,6 +386,9 @@ class JenkinsClient:
                     if response_limit is not None
                     else self.settings.max_response_bytes,
                 )
+                # Any HTTP response means the controller answered. A 403 or a
+                # 500 is a Jenkins problem, not a reachability problem.
+                jenkins_contact.record_success()
                 if response.status_code in expected:
                     if (
                         response.extensions.get("jenkins_mcp_truncated", False)
@@ -446,6 +492,7 @@ class JenkinsClient:
                 )
             except httpx.TransportError as exc:
                 last_error = exc
+                jenkins_contact.record_failure(exc)
                 # Connection establishment and pool acquisition fail before a
                 # request is sent. Read/write/protocol failures can arrive after
                 # Jenkins accepted it, so only replay safe methods then.

@@ -53,7 +53,16 @@ from the matching version entry after CI validates it.
 
 ### Improvements
 
-- None.
+- `/readyz` reports Jenkins reachability under a `jenkins` key: how long ago the
+  last request reached the controller, and the class of the last transport
+  failure. It is a diagnostic and never gates readiness. Readiness controls
+  Service endpoints, so failing it during a Jenkins restart would turn one
+  upstream outage into two and leave callers with a refused connection instead
+  of an error naming the cause. The value is observed from requests the server
+  was already making rather than an added probe, which would have every replica
+  polling the controller on its readiness interval, hardest exactly when the
+  controller is already struggling. A pod that has not been asked to do anything
+  reports null rather than an invented result.
 
 ### Bug Fixes
 

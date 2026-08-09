@@ -4,6 +4,20 @@ Start with the pod and its two local health endpoints. `/healthz` only proves
 the process is running. `/readyz` validates configuration, the configured CA
 file, and optional audit-file health; it deliberately does **not** call Jenkins.
 
+It does report what recent traffic revealed, under `jenkins`:
+
+```json
+{"jenkins": {"last_success_age_seconds": 4.2, "last_error": null}}
+```
+
+`last_success_age_seconds` is how long ago a request last reached the
+controller, and is `null` on a pod that has not been asked to do anything yet.
+`last_error` names the class of the last transport failure. Neither gates
+readiness: a Jenkins outage would otherwise remove every replica from the
+Service, replacing an error that names the cause with a refused connection. Use
+a growing age alongside a set `last_error` to spot a pod that has lost Jenkins
+while its peers have not.
+
 ```bash
 kubectl -n jenkins-mcp get pods
 kubectl -n jenkins-mcp logs deployment/jenkins-mcp-jenkins-mcp-server
@@ -32,6 +46,7 @@ instead. Do not paste Jenkins tokens or Secret output into an issue.
 | A tool is absent from `tools/list` | Minibridge denied it through `minibridge.tools` | Check `tools.allow` and `tools.deny`; deny wins. Server-side `mcp.allow*` flags do not hide tools |
 | A visible tool is refused with a policy/destructive-action error | The in-process server policy rejected the call | Check `mcp.readOnly`, `mcp.allowedJobs`, the category flag, `mcp.allowDestructive`, and the operation-specific flag |
 | An MCP session works intermittently with multiple replicas | Requests are reaching a replica that does not own the in-memory Streamable HTTP session | Keep the Service's `ClientIP` affinity, or provide equivalent ingress affinity. Reconnect after pod restarts |
+| `jenkins.last_error` is set and `last_success_age_seconds` keeps growing | This pod cannot reach Jenkins; check egress, DNS, and the CA bundle | The pod stays ready on purpose: tool calls return an error naming the cause |
 | `/readyz` reports `audit_log_writable: false` | The optional audit-file copy cannot be written | Fix the mount, permissions, or full volume. Process-log audit records continue; traffic is gated only with `audit.requiredForReadiness: true` |
 | `Jenkins response exceeded MCP_MAX_RESPONSE_BYTES` | A complete API, config, or crumb response exceeded the 10 MB default safety bound | Narrow the query/folder where possible. Raise `mcp.maxResponseBytes` only for a measured legitimate response |
 | `Jenkins returned malformed JSON` | Jenkins or an intermediary returned HTML, truncated data, or invalid JSON to an API endpoint | Inspect the proxy/WAF response and Jenkins logs; confirm the URL does not lead to a login page |

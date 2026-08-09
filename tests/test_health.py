@@ -2,7 +2,10 @@ import time
 from pathlib import Path
 from urllib.request import urlopen
 
+import httpx
+
 from jenkins_mcp_server.audit import AuditLogger
+from jenkins_mcp_server.client import JenkinsContact, jenkins_contact
 from jenkins_mcp_server.config import Settings
 from jenkins_mcp_server.health import readiness, start_health_server
 
@@ -175,3 +178,43 @@ def test_missing_jenkins_configuration_still_fails_readiness() -> None:
     )
     ready, _ = readiness(settings)
     assert ready is False
+
+
+def _settings(**overrides):
+    values = {
+        "JENKINS_URL": "https://jenkins.test",
+        "JENKINS_USERNAME": "u",
+        "JENKINS_TOKEN": "t",
+    }
+    values.update(overrides)
+    return Settings(**values)
+
+
+def test_jenkins_reachability_is_reported_but_never_gates_readiness() -> None:
+    """Readiness controls Service endpoints.
+
+    Taking every replica out because Jenkins is restarting turns one upstream
+    outage into two, and leaves callers with a refused connection instead of an
+    error naming the cause.
+    """
+    jenkins_contact.record_failure(httpx.ConnectError("refused"))
+    ready, payload = readiness(_settings())
+    assert ready is True
+    assert payload["jenkins"]["last_error"] == "ConnectError"
+
+
+def test_reachability_is_null_until_the_pod_has_done_something() -> None:
+    """Passive by design: no probe result is invented to fill the field."""
+    fresh = JenkinsContact()
+    assert fresh.snapshot() == {"last_success_age_seconds": None, "last_error": None}
+
+
+def test_any_http_response_counts_as_reaching_jenkins() -> None:
+    """A 403 is a Jenkins problem, not a reachability problem."""
+    contact = JenkinsContact()
+    contact.record_failure(httpx.ConnectError("refused"))
+    assert contact.snapshot()["last_error"] == "ConnectError"
+    contact.record_success()
+    snapshot = contact.snapshot()
+    assert snapshot["last_error"] is None
+    assert snapshot["last_success_age_seconds"] is not None
