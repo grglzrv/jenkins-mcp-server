@@ -352,18 +352,20 @@ mcp:
   allowJobUpdate: true
   # Aborts running builds and cancels queued items. Does not affect triggering.
   allowBuildStop: true
+  # Applied to job discovery, queue/running-build visibility, and mutations.
   allowedJobs: "AI/*,Platform/*"
+  # Hard limit on bytes downloaded for console and administrator responses.
   maxLogBytes: 1000000
   extraEnv: []
 
 audit:
-  # Audit records always go to stdout. File output is opt-in because the server
-  # does not rotate files; use a log collector for the durable default path.
+  # Audit records always go to process logs. File output is opt-in because the
+  # server does not rotate files; use a collector for the durable default path.
   fileEnabled: false
   path: /data/audit.jsonl
   storage:
     # emptyDir keeps audit records for the pod's lifetime only. Records are
-    # always written to stdout as well, so a log pipeline is the durable path.
+    # also written to process logs, so a log pipeline is the durable path.
     type: emptyDir
     emptyDir:
       sizeLimit: 256Mi

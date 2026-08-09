@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import random
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
 from . import __version__
 from .audit import AuditLogger
 from .config import Settings
-from .security import Policy
+from .security import Policy, PolicyError
 
 
 class JenkinsError(RuntimeError):
@@ -17,6 +20,25 @@ class JenkinsError(RuntimeError):
 
 
 TRAVERSAL_SEGMENTS = {".", ".."}
+
+# Methods that are safe to replay against Jenkins. Although HTTP defines PUT
+# and DELETE as idempotent, the generic administrator tool can route them to
+# plugin endpoints whose side effects do not follow that contract.
+REPLAY_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
+MAX_RETRY_DELAY_SECONDS = 30.0
+
+BUILD_ALIASES = frozenset(
+    {
+        "lastBuild",
+        "lastCompletedBuild",
+        "lastFailedBuild",
+        "lastStableBuild",
+        "lastSuccessfulBuild",
+        "lastUnstableBuild",
+        "lastUnsuccessfulBuild",
+    }
+)
 
 # Response headers withheld from admin_request callers. The MCP client is not
 # the authenticated party: Jenkins issues the session to this server, and
@@ -46,6 +68,63 @@ def _job_path(full_name: str) -> str:
     return "/".join(f"job/{quote(part, safe='')}" for part in parts)
 
 
+def _build_selector(build_number: int | str) -> str:
+    """Validate the path component used to address a Jenkins build."""
+    if isinstance(build_number, bool):
+        raise ValueError("build_number must be a positive integer or Jenkins alias")
+    if isinstance(build_number, int):
+        if build_number < 1:
+            raise ValueError("build_number must be positive")
+        return str(build_number)
+    if build_number in BUILD_ALIASES:
+        return build_number
+    if build_number.isdecimal() and int(build_number) > 0:
+        return str(int(build_number))
+    raise ValueError(
+        "build_number must be a positive integer or a supported Jenkins build alias"
+    )
+
+
+def _new_job_parts(job_name: str) -> tuple[str, str]:
+    """Return a canonical parent/name pair for job creation."""
+    if job_name != job_name.strip("/") or "//" in job_name:
+        raise ValueError(
+            "new job names must not have leading, trailing, or repeated '/' separators"
+        )
+    _job_path(job_name)
+    parent, _, leaf = job_name.rpartition("/")
+    if not leaf:
+        raise ValueError("new job name must not be empty")
+    return parent, leaf
+
+
+def _queue_job_name(item: dict[str, Any]) -> str | None:
+    task = item.get("task")
+    if not isinstance(task, dict):
+        return None
+    full_name = task.get("fullName")
+    if isinstance(full_name, str) and full_name:
+        return full_name
+    from_url = _job_name_from_url(task.get("url"))
+    if from_url:
+        return from_url
+    name = task.get("name")
+    return name if isinstance(name, str) and name else None
+
+
+def _job_name_from_url(url: Any) -> str | None:
+    if not isinstance(url, str):
+        return None
+    segments = [unquote(part) for part in urlsplit(url).path.split("/") if part]
+    names = [segments[index + 1] for index, part in enumerate(segments[:-1]) if part == "job"]
+    return "/".join(names) or None
+
+
+def _build_job_name(executable: dict[str, Any]) -> str | None:
+    """Extract a nested Jenkins job name from a build URL."""
+    return _job_name_from_url(executable.get("url"))
+
+
 class JenkinsClient:
     def __init__(
         self,
@@ -69,25 +148,140 @@ class JenkinsClient:
         self._crumb: tuple[str, str] | None = None
         # Set when the controller has no crumb issuer, so the probe runs once.
         self._crumb_disabled = False
+        # Concurrent writes would otherwise each fetch their own crumb: eight
+        # parallel triggers meant eight crumb requests against a controller
+        # that is often the slow part.
+        self._crumb_lock = asyncio.Lock()
 
     async def close(self) -> None:
         await self.http.aclose()
 
-    async def _get_crumb(self) -> tuple[str, str] | None:
-        if self._crumb is not None:
+    async def _get_crumb(
+        self,
+        stale: tuple[str, str] | None = None,
+    ) -> tuple[str, str] | None:
+        if stale is None and self._crumb is not None:
             return self._crumb
-        if self._crumb_disabled:
+        if stale is None and self._crumb_disabled:
             return None
-        response = await self.http.get("/crumbIssuer/api/json")
-        if response.status_code == 404:
-            # CSRF protection is off on this controller. Remember it, otherwise
-            # every write pays for a 404 round trip first.
-            self._crumb_disabled = True
-            return None
-        response.raise_for_status()
-        data = response.json()
-        self._crumb = (data["crumbRequestField"], data["crumb"])
-        return self._crumb
+        async with self._crumb_lock:
+            # A second request may have refreshed the stale crumb while this
+            # caller waited. Reuse that value instead of rotating it again.
+            if stale is not None:
+                if self._crumb is not None and self._crumb != stale:
+                    return self._crumb
+                self._crumb = None
+            elif self._crumb is not None:
+                return self._crumb
+            if self._crumb_disabled:
+                return None
+            try:
+                response = await self.http.get("/crumbIssuer/api/json")
+            except httpx.TransportError as exc:
+                raise JenkinsError(f"Could not reach the Jenkins crumb issuer: {exc}") from exc
+            if response.status_code == 404:
+                # CSRF protection is off on this controller. Remember it,
+                # otherwise every write pays for a 404 round trip first.
+                self._crumb_disabled = True
+                return None
+            if response.status_code >= 400:
+                # Surfacing httpx.HTTPStatusError here leaks the transport
+                # exception type through tools that only document JenkinsError.
+                raise JenkinsError(
+                    f"Jenkins crumb issuer returned {response.status_code}. "
+                    "Check that the account can authenticate."
+                )
+            try:
+                data = response.json()
+                field = data["crumbRequestField"]
+                value = data["crumb"]
+                if (
+                    not isinstance(field, str)
+                    or not field
+                    or not isinstance(value, str)
+                    or not value
+                ):
+                    raise TypeError("crumb fields must be strings")
+                self._crumb = (field, value)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise JenkinsError("Jenkins crumb issuer returned malformed JSON") from exc
+            return self._crumb
+
+    def _may_retry(self, method: str, status_code: int) -> bool:
+        """Whether replaying this request risks applying it twice.
+
+        Jenkins has no idempotency key, so a replayed POST is a second build,
+        a second job deletion, a second node update.
+        """
+        if status_code not in RETRYABLE_STATUSES:
+            return False
+        return method.upper() in REPLAY_SAFE_METHODS
+
+    @staticmethod
+    def _retry_delay(response: httpx.Response, attempt: int) -> float:
+        """Use Retry-After when supplied, with a bounded operational wait."""
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            try:
+                delay = float(retry_after)
+            except ValueError:
+                try:
+                    when = parsedate_to_datetime(retry_after)
+                    if when.tzinfo is None:
+                        when = when.replace(tzinfo=UTC)
+                    delay = (when - datetime.now(UTC)).total_seconds()
+                except (TypeError, ValueError, OverflowError):
+                    delay = 0
+            if delay > 0:
+                return min(delay, MAX_RETRY_DELAY_SECONDS)
+        return JenkinsClient._backoff_delay(attempt)
+
+    @staticmethod
+    def _backoff_delay(attempt: int) -> float:
+        """Full jitter prevents replicas retrying Jenkins in lockstep."""
+        return random.uniform(0, min(2**attempt, 5))
+
+    async def _send(
+        self,
+        method: str,
+        path: str,
+        request_kwargs: dict[str, Any],
+        response_limit: int | None,
+    ) -> httpx.Response:
+        if response_limit is None:
+            return await self.http.request(method, path, **request_kwargs)
+
+        truncated = False
+        content = bytearray()
+        async with self.http.stream(method, path, **request_kwargs) as streamed:
+            async for chunk in streamed.aiter_bytes():
+                remaining = response_limit - len(content)
+                if remaining <= 0:
+                    truncated = True
+                    break
+                content.extend(chunk[:remaining])
+                if len(chunk) > remaining:
+                    truncated = True
+                    break
+            # aiter_bytes() has already decoded content encodings. Carrying
+            # gzip/br (or the original length) onto the synthetic response
+            # would make HTTPX try to decode the plain bytes a second time.
+            response_headers = [
+                (name, value)
+                for name, value in streamed.headers.multi_items()
+                if name.lower()
+                not in {"content-encoding", "content-length", "transfer-encoding"}
+            ]
+            return httpx.Response(
+                streamed.status_code,
+                headers=response_headers,
+                content=bytes(content),
+                request=streamed.request,
+                extensions={
+                    **streamed.extensions,
+                    "jenkins_mcp_truncated": truncated,
+                },
+            )
 
     async def request(
         self,
@@ -100,10 +294,23 @@ class JenkinsClient:
         json: Any = None,
         headers: dict[str, str] | None = None,
         expected: tuple[int, ...] = (200,),
+        response_limit: int | None = None,
     ) -> httpx.Response:
+        method_upper = method.upper()
         request_headers = dict(headers or {})
-        if method.upper() in {"POST", "PUT", "DELETE"}:
-            crumb = await self._get_crumb()
+        crumb: tuple[str, str] | None = None
+        if method_upper not in REPLAY_SAFE_METHODS:
+            try:
+                crumb = await self._get_crumb()
+            except JenkinsError as exc:
+                await self.audit.emit_async(
+                    action,
+                    "failure",
+                    status="crumb",
+                    path=path,
+                    error=type(exc).__name__,
+                )
+                raise
             if crumb:
                 request_headers[crumb[0]] = crumb[1]
 
@@ -122,9 +329,14 @@ class JenkinsClient:
                 else:
                     request_kwargs["data"] = data
 
-                response = await self.http.request(method, path, **request_kwargs)
+                response = await self._send(
+                    method,
+                    path,
+                    request_kwargs,
+                    response_limit,
+                )
                 if response.status_code in expected:
-                    self.audit.emit(
+                    await self.audit.emit_async(
                         action,
                         "success",
                         status=response.status_code,
@@ -136,24 +348,37 @@ class JenkinsClient:
                 # Re-issue it once rather than surfacing a hard 403.
                 if (
                     response.status_code == 403
+                    and method_upper not in REPLAY_SAFE_METHODS
                     and not crumb_refreshed
+                    and crumb is not None
                     and "crumb" in response.text.lower()
                 ):
                     crumb_refreshed = True
-                    self._crumb = None
-                    crumb = await self._get_crumb()
+                    try:
+                        crumb = await self._get_crumb(stale=crumb)
+                    except JenkinsError as exc:
+                        await self.audit.emit_async(
+                            action,
+                            "failure",
+                            status="crumb",
+                            path=path,
+                            error=type(exc).__name__,
+                        )
+                        raise
                     if crumb:
                         request_headers[crumb[0]] = crumb[1]
                         continue
 
-                retryable = response.status_code in {429, 502, 503, 504}
-                if retryable and attempt < self.settings.jenkins_max_retries:
-                    await asyncio.sleep(min(2**attempt, 5))
+                if (
+                    self._may_retry(method, response.status_code)
+                    and attempt < self.settings.jenkins_max_retries
+                ):
+                    await asyncio.sleep(self._retry_delay(response, attempt))
                     attempt += 1
                     continue
 
                 body = response.text[:2000]
-                self.audit.emit(
+                await self.audit.emit_async(
                     action,
                     "failure",
                     status=response.status_code,
@@ -162,13 +387,27 @@ class JenkinsClient:
                 raise JenkinsError(
                     f"Jenkins returned {response.status_code}: {body}"
                 )
-            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            except httpx.TransportError as exc:
                 last_error = exc
-                if attempt >= self.settings.jenkins_max_retries:
+                # Connection establishment and pool acquisition fail before a
+                # request is sent. Read/write/protocol failures can arrive after
+                # Jenkins accepted it, so only replay safe methods then.
+                safe_to_replay = method_upper in REPLAY_SAFE_METHODS or isinstance(
+                    exc,
+                    httpx.ConnectError | httpx.ConnectTimeout | httpx.PoolTimeout,
+                )
+                if not safe_to_replay or attempt >= self.settings.jenkins_max_retries:
                     break
-                await asyncio.sleep(min(2**attempt, 5))
+                await asyncio.sleep(self._backoff_delay(attempt))
                 attempt += 1
 
+        await self.audit.emit_async(
+            action,
+            "failure",
+            status="network",
+            path=path,
+            error=type(last_error).__name__ if last_error else "unknown",
+        )
         raise JenkinsError(f"Jenkins request failed: {last_error}")
 
     async def api(
@@ -191,8 +430,27 @@ class JenkinsClient:
         return response.json()
 
     async def list_jobs(self, folder: str | None = None) -> Any:
+        if folder and not self.policy.allows_job_or_descendant(folder):
+            raise PolicyError(f"Job folder '{folder}' is not allowed by MCP_ALLOWED_JOBS")
         path = _job_path(folder) if folder else ""
-        return await self.api(path, tree="jobs[name,url,color,_class]")
+        result = await self.api(path, tree="jobs[name,fullName,url,color,_class]")
+        if not isinstance(result, dict) or not isinstance(result.get("jobs"), list):
+            return result
+        visible: list[Any] = []
+        for entry in result["jobs"]:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("fullName") or entry.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            if folder and "/" not in name:
+                name = f"{folder.strip('/')}/{name}"
+            try:
+                if self.policy.allows_job_or_descendant(name):
+                    visible.append(entry)
+            except PolicyError:
+                continue
+        return {**result, "jobs": visible}
 
     async def get_job(self, job_name: str) -> Any:
         self.policy.check_job(job_name)
@@ -212,14 +470,14 @@ class JenkinsClient:
         job_name: str,
         config_xml: str,
     ) -> dict[str, Any]:
+        parent, leaf = _new_job_parts(job_name)
         self.policy.require_write("job", job_name)
-        parent, _, leaf = job_name.rpartition("/")
         path = f"/{_job_path(parent)}/createItem" if parent else "/createItem"
         await self.request(
             "POST",
             path,
             action="job.create",
-            params={"name": leaf or job_name},
+            params={"name": leaf},
             data=config_xml.encode(),
             headers={"Content-Type": "application/xml"},
             expected=(200,),
@@ -268,13 +526,15 @@ class JenkinsClient:
         return {"job": job_name, "enabled": enabled}
 
     async def copy_job(self, source: str, target: str) -> dict[str, Any]:
+        parent, leaf = _new_job_parts(target)
         self.policy.check_job(source)
         self.policy.require_write("job", target)
+        path = f"/{_job_path(parent)}/createItem" if parent else "/createItem"
         await self.request(
             "POST",
-            "/createItem",
+            path,
             action="job.copy",
-            params={"name": target, "mode": "copy", "from": source},
+            params={"name": leaf, "mode": "copy", "from": source},
             expected=(200, 302),
         )
         return {"source": source, "target": target}
@@ -305,6 +565,8 @@ class JenkinsClient:
         mode: str = "stop",
     ) -> dict[str, Any]:
         self.policy.require_destructive("build.stop", job_name)
+        if isinstance(build_number, bool) or build_number < 1:
+            raise ValueError("build_number must be positive")
         if mode not in {"stop", "term", "kill"}:
             raise ValueError("mode must be stop, term, or kill")
         await self.request(
@@ -325,7 +587,8 @@ class JenkinsClient:
         build_number: int | str = "lastBuild",
     ) -> Any:
         self.policy.check_job(job_name)
-        return await self.api(f"{_job_path(job_name)}/{build_number}", depth=2)
+        selector = _build_selector(build_number)
+        return await self.api(f"{_job_path(job_name)}/{selector}", depth=2)
 
     async def console(
         self,
@@ -334,14 +597,18 @@ class JenkinsClient:
         start: int = 0,
     ) -> dict[str, Any]:
         self.policy.check_job(job_name)
+        selector = _build_selector(build_number)
+        if start < 0:
+            raise ValueError("start must not be negative")
         response = await self.request(
             "GET",
-            f"/{_job_path(job_name)}/{build_number}/logText/progressiveText",
+            f"/{_job_path(job_name)}/{selector}/logText/progressiveText",
             action="build.console",
             params={"start": start},
+            response_limit=self.settings.max_log_bytes,
         )
-        raw = response.content[: self.settings.max_log_bytes]
-        truncated = len(response.content) > self.settings.max_log_bytes
+        raw = response.content
+        truncated = bool(response.extensions.get("jenkins_mcp_truncated", False))
         if truncated:
             # Jenkins' X-Text-Size counts everything it sent. Honouring it after
             # we clipped the body would make the next page skip the bytes we
@@ -359,10 +626,27 @@ class JenkinsClient:
         }
 
     async def queue(self) -> Any:
-        return await self.api("queue", depth=2)
+        result = await self.api("queue", depth=2)
+        if not isinstance(result, dict) or not isinstance(result.get("items"), list):
+            return result
+        visible: list[Any] = []
+        for item in result["items"]:
+            if not isinstance(item, dict):
+                continue
+            job_name = _queue_job_name(item)
+            if job_name and self.policy.allows_job(job_name):
+                visible.append(item)
+        return {**result, "items": visible}
 
     async def cancel_queue(self, item_id: int) -> dict[str, Any]:
+        if isinstance(item_id, bool) or item_id < 1:
+            raise ValueError("item_id must be positive")
         self.policy.require_destructive("queue.cancel")
+        item = await self.api(f"queue/item/{item_id}", depth=1)
+        job_name = _queue_job_name(item) if isinstance(item, dict) else None
+        if not job_name:
+            raise PolicyError("Queue item does not identify a Jenkins job")
+        self.policy.check_job(job_name)
         await self.request(
             "POST",
             "/queue/cancelItem",
@@ -383,6 +667,9 @@ class JenkinsClient:
             for executor in executors:
                 current = executor.get("currentExecutable")
                 if current:
+                    job_name = _build_job_name(current)
+                    if not job_name or not self.policy.allows_job(job_name):
+                        continue
                     running.append(
                         {"node": computer.get("displayName"), **current}
                     )
@@ -401,7 +688,10 @@ class JenkinsClient:
         offline: bool,
         message: str = "Managed by MCP",
     ) -> dict[str, Any]:
-        self.policy.require_destructive("node.offline")
+        if offline:
+            self.policy.require_destructive("node.offline")
+        else:
+            self.policy.require_write("node")
         current = await self.node_info(node_name)
         if bool(current.get("temporarilyOffline")) != offline:
             encoded_node = quote(node_name, safe="")
@@ -453,6 +743,7 @@ class JenkinsClient:
             data=body,
             headers={"Content-Type": content_type},
             expected=tuple(range(200, 400)),
+            response_limit=self.settings.max_log_bytes,
         )
         return {
             "status": response.status_code,
@@ -461,5 +752,8 @@ class JenkinsClient:
                 for name, value in response.headers.items()
                 if name.lower() not in SENSITIVE_RESPONSE_HEADERS
             },
-            "body": response.text[: self.settings.max_log_bytes],
+            "body": response.text,
+            "truncated": bool(
+                response.extensions.get("jenkins_mcp_truncated", False)
+            ),
         }

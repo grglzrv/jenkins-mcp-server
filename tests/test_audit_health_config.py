@@ -5,6 +5,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import pytest
+
 from jenkins_mcp_server.audit import AuditLogger
 from jenkins_mcp_server.config import Settings
 from jenkins_mcp_server.health import start_health_server
@@ -37,6 +39,35 @@ def test_settings_normalization_and_ca(tmp_path: Path) -> None:
 def test_settings_boolean_verify_without_ca() -> None:
     settings = make_settings(JENKINS_VERIFY_TLS=False)
     assert settings.verify is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "jenkins.example",
+        "ftp://jenkins.example",
+        "https://u:p@jenkins.example",
+        "https://jenkins.example/#x",
+    ],
+)
+def test_settings_reject_unsafe_jenkins_urls(url: str) -> None:
+    with pytest.raises(ValueError, match="JENKINS_URL"):
+        make_settings(JENKINS_URL=url)
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("JENKINS_TIMEOUT_SECONDS", 0),
+        ("JENKINS_MAX_RETRIES", -1),
+        ("JENKINS_MAX_RETRIES", 11),
+        ("MCP_PORT", 65536),
+        ("MCP_MAX_LOG_BYTES", 0),
+    ],
+)
+def test_settings_reject_invalid_operational_limits(name: str, value: int) -> None:
+    with pytest.raises(ValueError):
+        make_settings(**{name: value})
 
 
 def test_audit_file_output(tmp_path: Path) -> None:

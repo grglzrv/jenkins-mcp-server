@@ -10,35 +10,110 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.4.2] - 2026-08-09
+
+### Highlights
+
+- Jenkins writes are never replayed after an HTTP response or an ambiguous
+  transport failure, job allowlists cover reads and queue cancellation, and
+  response limits now bound downloaded data rather than only returned text.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Concurrent writes now share a single crumb request. Eight parallel triggers
+  previously issued eight requests to the crumb issuer, which is often the
+  slowest part of a controller.
+- Crumb issuer failures raise `JenkinsError` with a message naming the status,
+  instead of leaking `httpx.HTTPStatusError` through tools that document only
+  `JenkinsError`.
+- Optional audit-file writes run outside the async event loop. A failed file
+  destination degrades `/readyz`, records continue in the process logs, and
+  readiness recovers after the destination becomes writable again.
+- Safe read retries honour a bounded `Retry-After` delay and otherwise use
+  jittered backoff so replicas do not retry in lockstep. Configuration now
+  rejects malformed Jenkins URLs, invalid ports, negative retry counts, and
+  invalid response limits at startup.
+- Bringing a node online requires node-write permission but no longer requires
+  the destructive-action master switch used for taking it offline.
+
+### Bug Fixes
+
+- `trigger_build`, `delete_job`, `stop_build` and every other write were
+  replayed on 429, 502, 503, 504 and on read timeouts. None of those responses
+  proves whether Jenkins acted on the first attempt, and Jenkins has no
+  idempotency key, so a replay could queue a second build while the tool
+  reported a single success. Writes now retry only failures that occur before
+  sending: connection establishment, connection timeout, or pool acquisition.
+- `MCP_ALLOWED_JOBS` was not applied to job listings, the queue, or running
+  builds, and `cancel_queue_item` could cancel an item belonging to a job
+  outside the allowlist. Results are filtered now, and cancellation resolves
+  and authorizes the queued job before sending the mutation.
+- Arbitrary string build numbers were interpolated into URLs. Build tools now
+  accept only positive numbers and documented Jenkins aliases, preventing path,
+  query, and fragment injection.
+- `MCP_MAX_LOG_BYTES` sliced console and administrator responses only after
+  HTTPX buffered the complete body. Those endpoints now stop streaming at the
+  configured limit, preventing large responses from exhausting pod memory,
+  without attempting to decode compressed Jenkins responses twice.
+- Copying a job to a nested target sent the complete target path as a root job
+  name. The copy is now created through its parent folder endpoint.
+- An unwritable audit path no longer fails the tool call. `emit` runs after the
+  Jenkins request has completed, so raising reported a failure for an action
+  that had already succeeded, inviting the caller to repeat it. The record
+  remains in the process logs and the path problem is reflected in readiness.
+
+### Breaking Changes
+
+- None. Writes fail faster on ambiguous transient failures, which is the
+  intended correction: the previous behaviour hid duplicates rather than
+  preventing them.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Job allowlists now cover job discovery, queue visibility, running-build
+  visibility, build selectors, and queue cancellation as documented.
+
+### Upgrade Notes
+
+- No action required.
 
 ## [2.4.1] - 2026-08-09
 

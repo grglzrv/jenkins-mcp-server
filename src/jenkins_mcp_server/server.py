@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from typing import Any
 
@@ -13,7 +15,10 @@ from .security import Policy
 from .templates import multibranch_github_xml, pipeline_job_xml
 
 
-def create_client(settings: Settings) -> JenkinsClient:
+def create_client(
+    settings: Settings,
+    audit: AuditLogger | None = None,
+) -> JenkinsClient:
     policy = Policy(
         read_only=settings.read_only,
         allow_job_write=settings.allow_job_write,
@@ -26,18 +31,38 @@ def create_client(settings: Settings) -> JenkinsClient:
         allow_job_update=settings.allow_job_update,
         allow_build_stop=settings.allow_build_stop,
     )
-    return JenkinsClient(settings, policy, AuditLogger(settings.audit_log_path))
+    audit_logger = audit or AuditLogger(settings.audit_log_path)
+    if audit is None:
+        audit_logger.probe()
+    return JenkinsClient(settings, policy, audit_logger)
+
+
+@lru_cache
+def get_audit_logger() -> AuditLogger:
+    audit = AuditLogger(get_settings().audit_log_path)
+    audit.probe()
+    return audit
 
 
 @lru_cache
 def get_client() -> JenkinsClient:
-    return create_client(get_settings())
+    return create_client(get_settings(), get_audit_logger())
+
+
+@asynccontextmanager
+async def server_lifespan(_: MCPServer[None]) -> AsyncIterator[None]:
+    client = get_client()
+    try:
+        yield None
+    finally:
+        await client.close()
+        get_client.cache_clear()
 
 
 # MCPServer takes the version directly, so clients see the server they are
 # actually talking to in `initialize` -> serverInfo rather than the SDK version.
 # stateless_http moved from the constructor to the transport call in mcp 2.x.
-mcp = MCPServer("Jenkins MCP Server", version=__version__)
+mcp = MCPServer("Jenkins MCP Server", version=__version__, lifespan=server_lifespan)
 
 
 @mcp.tool()

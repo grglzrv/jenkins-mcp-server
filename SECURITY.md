@@ -9,7 +9,8 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Use HTTPS to Jenkins and keep `JENKINS_VERIFY_TLS=true`.
 - Mount the enterprise CA through `JENKINS_CA_BUNDLE`.
 - Use a dedicated Jenkins service account and API token.
-- Restrict `MCP_ALLOWED_JOBS` to controlled folders.
+- Restrict `MCP_ALLOWED_JOBS` to controlled folders. It filters job discovery,
+  queue and running-build visibility, and job/build mutations.
 - Keep `MCP_ALLOW_ADMIN_REQUEST=false` unless a reviewed use case requires it.
 - Keep `MCP_ALLOW_JOB_DELETE=false` unless the agent genuinely needs to remove jobs;
   deletion is irreversible and is gated separately from `MCP_ALLOW_JOB_WRITE`.
@@ -24,8 +25,9 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
   explicitly name client namespaces and the narrow egress path to Jenkins.
   Leave it disabled when a firewall-protected external Jenkins URL is the
   intended boundary and cannot be represented safely by stable CIDRs.
-- Forward audit JSONL and application logs from stdout to the central SIEM. File
-  output is opt-in and requires external rotation or bounded storage.
+- Forward audit JSONL and application process logs to the central SIEM. File
+  output is opt-in, participates in readiness, and requires external rotation
+  or bounded storage.
 - Rotate the Jenkins API token and never commit `.env` or certificates.
 
 ## Secret handling

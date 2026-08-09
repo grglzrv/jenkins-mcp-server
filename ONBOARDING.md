@@ -135,7 +135,7 @@ mcp:
   allowAdminRequest: false
 
 audit:
-  fileEnabled: false                   # stdout remains enabled
+  fileEnabled: false                   # process-log JSONL remains enabled
 
 networkPolicy:
   # Disabled for a firewall-protected external Jenkins URL. Enable only after
