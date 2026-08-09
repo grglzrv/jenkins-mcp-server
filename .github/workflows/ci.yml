@@ -147,7 +147,13 @@ jobs:
           fi
       - name: Reject extraEnv credential and policy overrides
         run: |
-          for name in JENKINS_TOKEN MCP_ALLOW_DESTRUCTIVE MINIBRIDGE_TOOLS_DENY OTEL_EXPORTER_OTLP_ENDPOINT; do
+          for name in \
+            JENKINS_TOKEN jenkins_token Jenkins_Token \
+            MCP_ALLOW_DESTRUCTIVE mcp_read_only \
+            MINIBRIDGE_POLICER_ENFORCE minibridge_mode \
+            OTEL_EXPORTER_OTLP_ENDPOINT otel_exporter_otlp_endpoint \
+            TOOLS_DENY tools_deny TOOLS_ALLOW METHODS_DENY GUARDRAILS \
+            BASIC_AUTH_SECRET basic_auth_secret; do
             if helm template jenkins-mcp charts/jenkins-mcp-server \
               --set jenkins.url=https://jenkins.example.com \
               --set-string jenkins.credentials.create.jenkinsUserId=ci \

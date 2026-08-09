@@ -1,6 +1,7 @@
 """Chart wiring tests for destructive-action flags and ExternalSecret options."""
 
 import json
+import re
 from pathlib import Path
 
 import jsonschema
@@ -169,7 +170,13 @@ def test_extra_env_cannot_override_credentials_or_chart_policy() -> None:
         'hasPrefix "JENKINS_"',
         'hasPrefix "MCP_"',
         'hasPrefix "MINIBRIDGE_"',
-        'eq $upper "OTEL_EXPORTER_OTLP_ENDPOINT"',
+        'has $upper $extraEnvExact',
+        '"OTEL_EXPORTER_OTLP_ENDPOINT"',
+        '"TOOLS_DENY"',
+        '"TOOLS_ALLOW"',
+        '"METHODS_DENY"',
+        '"GUARDRAILS"',
+        '"BASIC_AUTH_SECRET"',
     ]:
         assert reserved in validate
     assert "duplicates another extraEnv entry" in validate
@@ -1495,14 +1502,14 @@ def test_chart_version_and_app_version_move_together() -> None:
     assert values()["image"]["tag"] == ""
 
 
-# --- agent onboarding -----------------------------------------------------
+# --- operator onboarding --------------------------------------------------
 
 
 def test_onboarding_exists_and_is_linked_from_the_readme() -> None:
     assert (ROOT / "ONBOARDING.md").is_file()
     readme = (ROOT / "README.md").read_text()
     assert "ONBOARDING.md" in readme
-    assert "If you are an AI agent" in readme
+    assert "operator-focused" in readme
 
 
 def test_onboarding_names_match_what_the_chart_renders() -> None:
@@ -1529,16 +1536,16 @@ def test_onboarding_only_references_files_that_exist() -> None:
     assert not missing, f"ONBOARDING.md links to missing files: {missing}"
 
 
-def test_onboarding_states_the_safety_rules_for_an_agent() -> None:
-    """These instructions are executed by an agent with cluster access."""
+def test_onboarding_states_operator_safety_rules() -> None:
+    """The operator guide must retain the controls around privileged access."""
     onboarding = (ROOT / "ONBOARDING.md").read_text().lower()
     for rule in [
-        "never invent",
-        "ask before anything that changes state",
+        "never guess",
+        "review every state-changing command",
         "do not disable tls verification",
         "do not write secrets into values files",
     ]:
-        assert rule in onboarding, f"missing agent safety rule: {rule}"
+        assert rule in onboarding, f"missing operator safety rule: {rule}"
 
 
 def test_readme_headline_claims_match_reality() -> None:
@@ -1546,7 +1553,7 @@ def test_readme_headline_claims_match_reality() -> None:
     import re
 
     readme = (ROOT / "README.md").read_text()
-    intro = " ".join(readme.split("## 🚀 Two ways to install")[0].split())
+    intro = " ".join(readme.split("## 🚀 Installation paths")[0].split())
 
     # Tool count.
     server = (ROOT / "src/jenkins_mcp_server/server.py").read_text()
@@ -1719,7 +1726,42 @@ def test_extra_env_guard_rejects_chart_owned_names_in_any_case() -> None:
     assert "in any capitalisation" in validate
 
 
+def test_extra_env_guard_covers_every_app_and_minibridge_variable() -> None:
+    """A new chart-owned env name must not silently escape the extraEnv guard."""
+    config = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
+    helpers = (CHART / "templates/_helpers.tpl").read_text()
+    validate = (CHART / "templates/_validate.tpl").read_text()
+
+    aliases = set(re.findall(r'alias="([A-Z][A-Z0-9_]*)"', config))
+    minibridge_names = set(
+        re.findall(r"^- name: ([A-Z][A-Z0-9_]*)$", helpers, flags=re.MULTILINE)
+    )
+    exact_match = re.search(r"\$extraEnvExact := list ([^\n]+)", validate)
+    assert exact_match, "the exact chart-owned environment list is missing"
+    exact = set(re.findall(r'"([A-Z][A-Z0-9_]*)"', exact_match.group(1)))
+
+    def guarded(name: str) -> bool:
+        return name.startswith(("JENKINS_", "MCP_", "MINIBRIDGE_")) or name in exact
+
+    unguarded = sorted(name for name in aliases | minibridge_names if not guarded(name))
+    assert not unguarded, f"chart-owned environment names escape mcp.extraEnv: {unguarded}"
+
+
 def test_settings_are_case_sensitive() -> None:
     """Guards the source-side half of the same defence."""
     config = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
     assert "case_sensitive=True" in config
+
+
+def test_installation_docs_are_operator_facing_not_agent_instructions() -> None:
+    readme = (ROOT / "README.md").read_text()
+    onboarding = (ROOT / "ONBOARDING.md").read_text()
+    for unsafe in [
+        "If you are an AI agent reading this repository",
+        "Rules for the agent",
+        "The person who shared this link wants you to",
+    ]:
+        assert unsafe not in readme
+        assert unsafe not in onboarding
+    assert "operator-focused" in readme
+    assert "## Safety rules" in onboarding

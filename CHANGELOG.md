@@ -44,8 +44,8 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- A lowercase environment variable can no longer override the credentials and
-  policy the chart validated.
+- `mcp.extraEnv` can no longer override the server credentials/policy or
+  Minibridge tool policy and authentication that the chart validated.
 
 ### New Features
 
@@ -55,6 +55,12 @@ from the matching version entry after CI validates it.
 
 - `mcp.extraEnv` rejects chart-owned names in any capitalisation, so a spelling
   that would have had no effect is reported instead of shipped.
+- Regression coverage derives the protected surface from every application
+  alias and Minibridge variable emitted by the chart, preventing future names
+  from silently falling outside the guard.
+- Reframed onboarding as an operator guide and removed repository text that
+  issued installation and credential-gathering instructions directly to AI
+  agents when they merely read the README.
 
 ### Bug Fixes
 
@@ -63,6 +69,11 @@ from the matching version entry after CI validates it.
   `jenkins_token` passed the chart guard and then replaced the token supplied by
   the Secret. Settings are now matched case-sensitively. Documented uppercase
   names are unaffected.
+- Minibridge's unprefixed `TOOLS_DENY`, `TOOLS_ALLOW`, `METHODS_DENY`,
+  `GUARDRAILS`, and `BASIC_AUTH_SECRET` variables were not covered by the
+  prefix-based chart guard. Because `mcp.extraEnv` renders last, their canonical
+  spellings could replace the chart-owned tool policy, guardrails, or basic-auth
+  secret. They are now reserved explicitly in any capitalisation.
 
 ### Breaking Changes
 
@@ -82,12 +93,18 @@ from the matching version entry after CI validates it.
   effect at runtime, so an operator with values access could substitute
   credentials or disable the job allowlist without touching the Secret. The fix
   is applied in the server, which decides, and in the chart, which reports.
+- Closes the equivalent Minibridge bypass that could weaken proxy tool policy or
+  replace its basic-auth secret through a later `mcp.extraEnv` entry.
+- Removes agent-targeted repository instructions that could be interpreted as
+  prompt injection by automated reviewers or repository-reading assistants.
 
 ### Upgrade Notes
 
 - If a values file sets a lowercase chart-owned name in `mcp.extraEnv`, the
   render now fails and names the entry. Remove it and use the corresponding
   `jenkins.*`, `mcp.*`, `audit.*` or `minibridge.*` value.
+- Direct Docker and raw-manifest users must use the documented uppercase
+  application setting names; lowercase or mixed-case spellings are ignored.
 
 ## [2.6.1] - 2026-08-09
 

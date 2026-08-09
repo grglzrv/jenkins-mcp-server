@@ -361,7 +361,9 @@ mcp:
   maxLogBytes: 1000000
   # Additional container variables such as HTTP_PROXY or SSL_CERT_FILE.
   # Chart-owned JENKINS_*, MCP_*, MINIBRIDGE_*, and OTEL exporter endpoint
-  # variables are rejected here; configure them through their typed values.
+  # variables are rejected here in any capitalisation. Minibridge's unprefixed
+  # policy/auth variables are reserved too. Configure all of them through their
+  # typed values; application environment-variable names are case-sensitive.
   extraEnv: []
 
 audit:

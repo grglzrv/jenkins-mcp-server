@@ -97,6 +97,14 @@ for commands and the complete symptom guide covering external Jenkins
 networking, audit readiness, session affinity, TLS, response limits, and both
 policy layers.
 
+### Upgrading from 2.6.1
+
+Environment-variable names are now matched case-sensitively. Rename any
+unsupported lowercase spelling such as `jenkins_token` to the documented
+uppercase name. `mcp.extraEnv` rejects chart-owned names in any capitalisation,
+including Minibridge's `TOOLS_DENY`, `TOOLS_ALLOW`, `METHODS_DENY`, `GUARDRAILS`
+and `BASIC_AUTH_SECRET`; configure those through their typed chart values.
+
 ### Upgrading from 2.5
 
 No action is required. Jenkins API, job-config, and crumb responses now have a
@@ -287,8 +295,10 @@ pod-template checksum and roll the Deployment automatically. Existing Secrets
 and ESO targets update independently of Helm; restart the Deployment after a
 rotation because environment variables in a running process are immutable.
 Credential and chart policy variables cannot be replaced through
-`mcp.extraEnv`; use the typed credential, `mcp`, `audit`, or `minibridge` value
-instead. Duplicate extra environment-variable names also fail the render.
+`mcp.extraEnv`, in any capitalisation; this includes Minibridge's unprefixed
+tool-policy, guardrail, and basic-auth variables. Use the typed credential,
+`mcp`, `audit`, or `minibridge` value instead. Duplicate extra
+environment-variable names also fail the render.
 
 `externalSecret.dataFrom` and `extraData` are mutually exclusive. With
 `dataFrom`, the synchronized Secret must still contain the two configured
@@ -328,7 +338,7 @@ jenkins:
 | `mcp.allowJobUpdate` / `allowBuildStop` | `true` |
 | `mcp.maxResponseBytes` | `10000000` — hard streamed-response limit for complete Jenkins API, config, and crumb responses |
 | `mcp.maxLogBytes` | `1000000` — hard streamed-response limit for console and administrator calls |
-| `mcp.extraEnv` | `[]` — additional variables such as `HTTP_PROXY`; chart-owned `JENKINS_*`, `MCP_*`, `MINIBRIDGE_*`, and the OTEL endpoint cannot be overridden here |
+| `mcp.extraEnv` | `[]` — additional variables such as `HTTP_PROXY`; names are case-sensitive, while chart-owned server, Minibridge, OTEL, policy, guardrail, and auth names are rejected in any capitalisation |
 
 ### minibridge proxy, optional
 

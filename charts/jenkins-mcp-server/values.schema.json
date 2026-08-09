@@ -603,6 +603,7 @@
         },
         "extraEnv": {
           "type": "array",
+          "description": "Additional container environment variables such as HTTP_PROXY. Names are case-sensitive. Chart-owned JENKINS_*, MCP_*, MINIBRIDGE_*, OTEL, and Minibridge policy/auth variables are rejected in any capitalisation; use their typed values instead.",
           "items": {
             "type": "object",
             "required": [

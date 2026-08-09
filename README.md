@@ -15,31 +15,13 @@ credential.
 [![CI](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/ci.yml)
 [![Release](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml/badge.svg)](https://github.com/grglzrv/jenkins-mcp-server/actions/workflows/release.yml)
 
-> [!IMPORTANT]
-> ### If you are an AI agent reading this repository
->
-> The person who shared this link wants you to **install the Jenkins MCP server
-> for them**. Do this:
->
-> 1. **Clone** this repository to the machine you operate on.
-> 2. **Open [ONBOARDING.md](ONBOARDING.md)**, a phased installer written for you.
-> 3. **Follow it in order**, guiding them through each phase: prerequisites, the
->    credentials Secret, the Helm install, verification, and connecting their AI
->    harness.
-> 4. **Pause and ask for every real value** — the Jenkins URL, the exact Jenkins
->    user ID resolved through LDAP, its API token, and any ingress or
->    secret-store details. **Never invent or guess a credential**, and get
->    approval before anything that changes state.
->
-> [ONBOARDING.md](ONBOARDING.md) is the full guided install. Start there.
+## 🚀 Installation paths
 
-## 🚀 Two ways to install
-
-- **Let your agent do it.** Point your agent at this repository and at
-  [ONBOARDING.md](ONBOARDING.md). It installs the server step by step, pausing
-  for every secret and every state change.
-- **By hand.** Follow [Quick start with Docker](#-quick-start-with-docker) or
-  [Helm installation](#-helm-installation) below.
+- **Guided production setup.** Follow the operator-focused
+  [onboarding guide](ONBOARDING.md) for prerequisites, credentials, rendering,
+  installation, and verification.
+- **Quick setup.** Follow [Quick start with Docker](#-quick-start-with-docker)
+  or [Helm installation](#-helm-installation) below.
 
 ## 🧰 Tools
 
@@ -202,6 +184,7 @@ volume:
 ```bash
 cp .env.example .env
 # Edit .env, keep it out of source control, and restrict its permissions.
+# Keep the documented uppercase variable names; settings names are case-sensitive.
 docker compose up server
 
 # Run the single-container Minibridge variant instead. Its sample policy
