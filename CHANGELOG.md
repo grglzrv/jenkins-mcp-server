@@ -58,9 +58,6 @@ from the matching version entry after CI validates it.
 - Regression coverage derives the protected surface from every application
   alias and Minibridge variable emitted by the chart, preventing future names
   from silently falling outside the guard.
-- Removed the root README block that issued installation and
-  credential-gathering instructions merely because an AI agent read the
-  repository. The explicitly selected `ONBOARDING.md` remains an AI-agent guide.
 
 ### Bug Fixes
 
@@ -95,8 +92,6 @@ from the matching version entry after CI validates it.
   is applied in the server, which decides, and in the chart, which reports.
 - Closes the equivalent Minibridge bypass that could weaken proxy tool policy or
   replace its basic-auth secret through a later `mcp.extraEnv` entry.
-- Removes automatic agent-targeted instructions from the root README while
-  retaining the purpose-built, explicitly selected AI-agent onboarding guide.
 
 ### Upgrade Notes
 

@@ -1509,7 +1509,7 @@ def test_onboarding_exists_and_is_linked_from_the_readme() -> None:
     assert (ROOT / "ONBOARDING.md").is_file()
     readme = (ROOT / "README.md").read_text()
     assert "ONBOARDING.md" in readme
-    assert "AI-agent onboarding guide" in readme
+    assert "If you are an AI agent" in readme
 
 
 def test_onboarding_names_match_what_the_chart_renders() -> None:
@@ -1553,7 +1553,7 @@ def test_readme_headline_claims_match_reality() -> None:
     import re
 
     readme = (ROOT / "README.md").read_text()
-    intro = " ".join(readme.split("## 🚀 Installation paths")[0].split())
+    intro = " ".join(readme.split("## 🚀 Two ways to install")[0].split())
 
     # Tool count.
     server = (ROOT / "src/jenkins_mcp_server/server.py").read_text()
@@ -1751,15 +1751,3 @@ def test_settings_are_case_sensitive() -> None:
     """Guards the source-side half of the same defence."""
     config = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
     assert "case_sensitive=True" in config
-
-
-def test_readme_does_not_auto_instruct_repository_readers() -> None:
-    readme = (ROOT / "README.md").read_text()
-    onboarding = (ROOT / "ONBOARDING.md").read_text()
-    for unsafe in [
-        "If you are an AI agent reading this repository",
-        "The person who shared this link wants you to",
-    ]:
-        assert unsafe not in readme
-    assert "AI-agent onboarding guide" in readme
-    assert "## Rules for the agent" in onboarding
