@@ -10,35 +10,78 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.6.4] - 2026-08-09
+
+### Highlights
+
+- A crumb issuer that is briefly unavailable no longer disables Jenkins writes
+  until the pod restarts.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- None.
+
+### Bug Fixes
+
+- A 404 from the crumb issuer is treated as CSRF protection being disabled,
+  which is correct for a controller that has it off and wrong for one that is
+  restarting or briefly behind a misrouting proxy. The conclusion was permanent:
+  nothing re-probed the issuer, and readiness does not test it, so every write
+  returned 403 for the life of the process and only a restart recovered. A
+  crumb-related 403 now clears the flag and re-probes once, because Jenkins
+  asking for a crumb disproves the earlier conclusion. Controllers with CSRF
+  genuinely disabled are still probed exactly once.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- None. The re-probe is triggered by Jenkins rejecting a write for a missing
+  crumb, and the retried request carries the crumb Jenkins issued.
+
+### Upgrade Notes
+
+- No action required.
 
 ## [2.6.3] - 2026-08-09
 

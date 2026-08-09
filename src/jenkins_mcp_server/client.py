@@ -370,16 +370,23 @@ class JenkinsClient:
                     )
                     return response
 
-                # A cached crumb goes stale when Jenkins rotates the session.
-                # Re-issue it once rather than surfacing a hard 403.
+                # A cached crumb goes stale when Jenkins rotates the session,
+                # and a 404 from the crumb issuer during a restart or a proxy
+                # blip makes us conclude CSRF is off. Jenkins asking for a crumb
+                # disproves both, so re-issue once rather than surfacing a hard
+                # 403. Without this the wrong conclusion is permanent: nothing
+                # re-probes the issuer, readiness does not test it, so every
+                # write fails until the process restarts.
                 if (
                     response.status_code == 403
                     and method_upper not in REPLAY_SAFE_METHODS
                     and not crumb_refreshed
-                    and crumb is not None
+                    and (crumb is not None or self._crumb_disabled)
                     and "crumb" in response.text.lower()
                 ):
                     crumb_refreshed = True
+                    if crumb is None:
+                        self._crumb_disabled = False
                     try:
                         crumb = await self._get_crumb(stale=crumb)
                     except JenkinsError as exc:

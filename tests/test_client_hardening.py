@@ -748,3 +748,52 @@ def test_audit_reports_an_unwritable_path_once(tmp_path, caplog) -> None:
         for _ in range(5):
             audit.emit("build.trigger", "success", status=201)
     assert caplog.text.count("not writable") == 1
+
+
+@pytest.mark.asyncio
+async def test_a_transient_crumb_404_does_not_disable_csrf_forever() -> None:
+    """A 404 during a restart made the wrong conclusion permanent.
+
+    Nothing re-probed the issuer and readiness does not test it, so every write
+    failed until the process restarted. Jenkins asking for a crumb disproves the
+    conclusion, so the next write must recover on its own.
+    """
+    state = {"issuer_up": False, "probes": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            state["probes"] += 1
+            if not state["issuer_up"]:
+                return httpx.Response(404, text="not found")
+            return httpx.Response(
+                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
+            )
+        if "Jenkins-Crumb" not in request.headers:
+            return httpx.Response(403, text="No valid crumb was included")
+        return httpx.Response(201, headers={"Location": "/queue/1"})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(JenkinsError):
+        await jc.build("demo")
+
+    state["issuer_up"] = True
+    assert (await jc.build("demo"))["queued"] is True
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_csrf_disabled_controllers_are_still_probed_only_once() -> None:
+    """The negative cache is why the flag exists; recovery must not cost it."""
+    probes = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            probes["count"] += 1
+            return httpx.Response(404)
+        return httpx.Response(201, headers={"Location": "/queue/1"})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    for _ in range(5):
+        await jc.build("demo")
+    assert probes["count"] == 1, f"re-probed {probes['count']} times"
+    await jc.close()
