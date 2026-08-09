@@ -123,10 +123,17 @@ by this server.
 
 | Situation | Effect |
 | --- | --- |
-| Thousands of jobs | `list_jobs` returns what Jenkins returns. Use the folder argument to scope it rather than listing the root |
-| Very large console logs | Capped by `MCP_MAX_LOG_BYTES`, default 1 MB, and paginated. The response reports `truncated` and the offset to resume from |
+| Thousands of jobs | `list_jobs` filters Jenkins results through `MCP_ALLOWED_JOBS`; use the folder argument to avoid fetching a large root listing before filtering |
+| Very large console logs | Streamed only up to `MCP_MAX_LOG_BYTES`, default 1 MB, and paginated. The response reports `truncated` and the offset to resume from without buffering the full Jenkins response |
 | Busy queue | `trigger_build` returns as soon as the item is queued. The build number does not exist until it leaves the queue, so poll `get_build_info` before addressing a build by number |
 | Multiple MCP replicas | Each maintains its own crumb and session. No shared state, so replicas do not interfere |
+
+Safe reads retry 429 and transient gateway/network failures, respecting a
+bounded `Retry-After` value or using jittered backoff. Writes retry only
+connection establishment, connection timeout, and connection-pool acquisition
+failures, where the request body was not sent. They are not replayed after
+429/502/503/504 responses, read timeouts, write timeouts, or ambiguous protocol
+errors.
 
 ## Authentication
 

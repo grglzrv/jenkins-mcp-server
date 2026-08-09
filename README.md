@@ -68,7 +68,7 @@ credential.
 | `@destructive` | `delete_job` | Delete a job — irreversible, opt-in |
 | `@destructive` | `stop_build` | Stop, terminate, or kill a running build |
 | `@destructive` | `cancel_queue_item` | Cancel a queued item |
-| `@destructive` | `set_node_offline` | Take an agent offline or online |
+| `@destructive` | `set_node_offline` | Take an agent offline; bringing it online only needs node-write permission |
 | `@admin` | `jenkins_admin_request` | Generic Jenkins REST call — disabled by default |
 
 See [Security and guardrails](#-security-and-guardrails) for how to restrict
@@ -119,9 +119,11 @@ depend on it.
 - Build trigger, parameterized builds, running-build discovery, stop/terminate/kill.
 - Queue inspection and cancellation.
 - Node inspection and optional online/offline management.
-- Progressive bounded console logs.
-- Jenkins crumb support, retries, timeouts, nested-folder paths, and TLS verification.
-- Read-only mode, job allowlist, write-category controls, and JSONL audit logging.
+- Progressively streamed console logs with a hard response-memory limit.
+- Single-flight Jenkins crumbs, safe-read retries, timeouts, nested-folder paths,
+  and TLS verification. Writes retry only failures known to occur before sending.
+- Read-only mode, job allowlists covering discovery and mutations,
+  write-category controls, and JSONL audit logging.
 - Optional generic administrator REST request, disabled by default.
 
 ## 📦 Published artifacts
@@ -231,7 +233,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.5.0 \
+  --version 2.4.2 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -249,7 +251,8 @@ default so external Jenkins URLs protected by cluster/firewall allowlists are
 not unexpectedly blocked. Enable it only after modeling both MCP client ingress
 and Jenkins egress; the Tailscale example supplies a narrowly selectable proxy
 path. Destructive server actions and file audit logging are also off by default.
-Audit JSONL always remains available on stdout.
+Audit JSONL always remains available in the process logs (stderr for stdio
+transport). If configured file output fails, `/readyz` reports the degradation.
 
 The chart-managed source is enabled by default so Helm can create the Secret
 without a separate pre-install step. Set
@@ -430,12 +433,12 @@ Applied in-process, so it holds whether or not the proxy is deployed.
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| `mcp.allowedJobs` | `AI/*,Platform/*` | Glob allowlist of job paths. Traversal segments are rejected |
+| `mcp.allowedJobs` | `AI/*,Platform/*` | Glob allowlist for job reads, discovery, builds, and mutations. Queue cancellation resolves the owning job before authorization; traversal segments are rejected |
 | `mcp.readOnly` | `false` | Refuses every write tool |
 | `mcp.allowDestructive` | **`false`** | Master gate for job updates/deletes, build stops, queue cancellation, and node offlining |
 | `mcp.allowJobDelete` | **`false`** | `delete_job` is opt-in; deletion is irreversible |
 | `mcp.allowAdminRequest` | **`false`** | `jenkins_admin_request` is opt-in |
-| `mcp.allowNodeWrite` | `false` | `set_node_offline` |
+| `mcp.allowNodeWrite` | `false` | `set_node_offline`; taking a node offline also needs `allowDestructive`, while bringing it online does not |
 
 Jenkins permissions remain the outer boundary: these settings can only narrow
 what the account is already allowed to do.
@@ -526,7 +529,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.5.0
+NEW_VERSION=2.4.2
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 

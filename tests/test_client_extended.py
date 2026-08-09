@@ -60,6 +60,16 @@ async def test_read_and_mutation_methods() -> None:
         if path == "/crumbIssuer/api/json":
             return httpx.Response(404)
         if path.endswith("/api/json"):
+            if path == "/queue/item/5/api/json":
+                return httpx.Response(
+                    200,
+                    json={
+                        "task": {
+                            "fullName": "demo",
+                            "url": "https://jenkins.test/job/demo/",
+                        }
+                    },
+                )
             if path == "/computer/api/json":
                 return httpx.Response(
                     200,
@@ -144,6 +154,26 @@ async def test_read_and_mutation_methods() -> None:
 
     assert ("POST", "/job/demo/buildWithParameters") in requests
     assert ("POST", "/computer/agent 1/toggleOffline") in requests
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_copy_job_creates_nested_target_in_its_parent_folder() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(404)
+        requests.append(request)
+        return httpx.Response(200)
+
+    client = make_client(handler)
+    await client.copy_job("source", "team/copied")
+
+    request = requests[-1]
+    assert request.url.path == "/job/team/createItem"
+    assert request.url.params["name"] == "copied"
+    assert request.url.params["from"] == "source"
     await client.close()
 
 

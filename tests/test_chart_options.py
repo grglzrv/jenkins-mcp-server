@@ -592,7 +592,7 @@ def test_config_env_covers_every_supported_setting() -> None:
         )
     )
     # Credentials and the optional CA bundle come from the Secret. File audit is
-    # deliberately omitted so stdout stays the unbounded-safe default.
+    # deliberately omitted so process logs stay the unbounded-safe default.
     from_secret = {"JENKINS_USERNAME", "JENKINS_TOKEN", "JENKINS_CA_BUNDLE"}
     intentionally_unset = {"MCP_AUDIT_LOG_PATH"}
     allowed_missing = from_secret | intentionally_unset

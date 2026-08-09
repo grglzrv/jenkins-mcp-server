@@ -146,6 +146,14 @@ async def test_client_cancel_queue_blocked_when_disabled() -> None:
 
 
 @pytest.mark.asyncio
+async def test_bringing_node_online_does_not_require_destructive_switch() -> None:
+    jc = client(policy(allow_destructive=False, allow_node_write=True))
+    result = await jc.toggle_node("agent", False)
+    assert result == {"node": "agent", "offline": False}
+    await jc.close()
+
+
+@pytest.mark.asyncio
 async def test_client_trigger_build_unaffected_by_stop_being_disabled() -> None:
     jc = client(policy(allow_build_stop=False))
     # Trigger must still work; only the destructive counterpart is blocked.

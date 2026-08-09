@@ -43,7 +43,7 @@ spec:
     chart: jenkins-mcp-server
     # Pin an exact version. A range or "*" would let a sync move you between
     # releases without review.
-    targetRevision: 2.5.0
+    targetRevision: 2.4.2
     helm:
       releaseName: jenkins-mcp
       # valuesObject is inline and easy to read. For larger setups, keep values
@@ -118,8 +118,8 @@ spec:
             cpu: "1"
             memory: 512Mi
 
-        # Audit records go to stdout for collection. File output is deliberately
-        # disabled because the application does not rotate it.
+        # Audit records go to process logs for collection. File output is
+        # deliberately disabled because the application does not rotate it.
         audit:
           fileEnabled: false
 

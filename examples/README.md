@@ -126,6 +126,6 @@ single-container Minibridge variant. Copy `.env.example` to `.env`, set the
 Jenkins URL and credentials, then run `docker compose up server` or
 `docker compose --profile minibridge up minibridge`. The Minibridge profile
 blocks only `@destructive` and leaves all other tool groups available.
-The server's own destructive master switch is also off. Audit logs go to stdout
-without an unbounded named volume. Its published endpoint is Streamable HTTP at
-`http://localhost:8000/mcp`.
+The server's own destructive master switch is also off. Audit logs go to the
+process logs without an unbounded named volume. Its published endpoint is
+Streamable HTTP at `http://localhost:8000/mcp`.

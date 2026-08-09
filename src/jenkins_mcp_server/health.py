@@ -7,12 +7,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from .audit import AuditLogger
 from .config import Settings
 
 log = logging.getLogger(__name__)
 
 
-def readiness(settings: Settings) -> tuple[bool, dict[str, Any]]:
+def readiness(
+    settings: Settings,
+    audit: AuditLogger | None = None,
+) -> tuple[bool, dict[str, Any]]:
     checks: dict[str, Any] = {
         "jenkins_url_configured": bool(settings.jenkins_url),
         "jenkins_username_configured": bool(settings.jenkins_username),
@@ -20,19 +24,22 @@ def readiness(settings: Settings) -> tuple[bool, dict[str, Any]]:
     }
     if settings.jenkins_ca_bundle:
         checks["jenkins_ca_bundle_exists"] = Path(settings.jenkins_ca_bundle).is_file()
+    if audit and audit.path:
+        checks["audit_log_writable"] = audit.healthy
     ready = all(bool(value) for value in checks.values())
     return ready, {"status": "ready" if ready else "not_ready", "checks": checks}
 
 
 class HealthHandler(BaseHTTPRequestHandler):
     settings: Settings
+    audit: AuditLogger | None = None
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/healthz":
             self._json(200, {"status": "ok"})
             return
         if self.path == "/readyz":
-            ready, payload = readiness(self.settings)
+            ready, payload = readiness(self.settings, self.audit)
             self._json(200 if ready else 503, payload)
             return
         self._json(404, {"error": "not_found"})
@@ -49,8 +56,15 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def start_health_server(settings: Settings) -> ThreadingHTTPServer:
-    handler = type("ConfiguredHealthHandler", (HealthHandler,), {"settings": settings})
+def start_health_server(
+    settings: Settings,
+    audit: AuditLogger | None = None,
+) -> ThreadingHTTPServer:
+    handler = type(
+        "ConfiguredHealthHandler",
+        (HealthHandler,),
+        {"settings": settings, "audit": audit},
+    )
     server = ThreadingHTTPServer((settings.health_host, settings.health_port), handler)
     thread = threading.Thread(target=server.serve_forever, name="health-server", daemon=True)
     thread.start()

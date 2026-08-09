@@ -59,7 +59,7 @@ creates the credentials Secret.
 ```bash
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.5.0 \
+  --version 2.4.2 \
   --namespace jenkins-mcp \
   --create-namespace \
   --set jenkins.url=https://jenkins.example.com \
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.5.0 \
+  --version 2.4.2 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -97,7 +97,8 @@ For a public package, registry login is not needed for pulls.
 releases that need job configuration updates, build stops, queue cancellation,
 or node offlining must explicitly opt back in to the master destructive switch.
 File audit users must set `audit.fileEnabled=true` and provide rotated or
-bounded storage. Audit JSONL continues to stdout in every configuration.
+bounded storage. Audit JSONL continues in the process logs in every
+configuration, and a failed configured file destination degrades `/readyz`.
 
 2.4.0 briefly enabled NetworkPolicy by default. 2.4.1 restores the opt-in
 default because a default-deny egress policy cannot select an external Jenkins
@@ -181,7 +182,7 @@ and pod scheduling fields remain open by design.
 | `jenkins.caBundle.existingSecret` | `""` | ⚪ Optional | Mount a CA from a Secret. Only for a private or self-signed issuer |
 | `jenkins.caBundle.key` | `ca.crt` | ⚪ Optional | Key within that Secret |
 | `jenkins.caBundlePath` | `""` | ⚪ Optional | Path to a CA already present in the image or mounted by `extraVolumes`. Mutually exclusive with `caBundle.existingSecret` |
-| `jenkins.timeoutSeconds` / `maxRetries` | `30` / `3` | — | |
+| `jenkins.timeoutSeconds` / `maxRetries` | `30` / `3` | — | Retries apply to safe reads and failures before a write is sent; writes are never replayed after an HTTP response |
 
 Neither CA setting is needed for a publicly issued certificate, which covers
 Let's Encrypt, any commercial CA, and Tailscale: the container's trust store
@@ -291,12 +292,13 @@ jenkins:
 | Key | Default |
 | --- | --- |
 | `mcp.readOnly` | `false` |
-| `mcp.allowedJobs` | `AI/*,Platform/*` |
+| `mcp.allowedJobs` | `AI/*,Platform/*` — applies to job discovery, queue/running-build visibility, and mutations |
 | `mcp.allowJobWrite` / `allowBuildWrite` | `true` |
 | `mcp.allowNodeWrite` / `allowAdminRequest` | `false` |
 | `mcp.allowDestructive` | **`false`** — master switch; all irreversible actions are opt-in |
 | `mcp.allowJobDelete` | **`false`** — irreversible, opt-in |
 | `mcp.allowJobUpdate` / `allowBuildStop` | `true` |
+| `mcp.maxLogBytes` | `1000000` — hard streamed-response limit for console and administrator calls |
 
 ### minibridge proxy, optional
 
@@ -392,7 +394,7 @@ Tailscale production example demonstrates the proxy pattern.
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `audit.fileEnabled` | `false` | Records always go to stdout; file output is opt-in and is not rotated by the application |
+| `audit.fileEnabled` | `false` | Records always go to process logs; file output is opt-in, affects readiness if unwritable, and is not rotated by the application |
 | `audit.storage.type` | `emptyDir` | Bounded to 256Mi by default; `pvc` needs `persistentVolumeClaim.claimName` |
 
 ## Example values files
@@ -438,7 +440,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.5.0
+NEW_VERSION=2.4.2
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

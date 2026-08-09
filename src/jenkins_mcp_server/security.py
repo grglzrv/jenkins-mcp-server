@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import re
 from dataclasses import dataclass
 
 
@@ -14,6 +15,19 @@ class PolicyError(PermissionError):
 DESTRUCTIVE_ACTIONS = frozenset(
     {"job.delete", "job.update", "build.stop", "queue.cancel", "node.offline"}
 )
+
+GLOB_META = re.compile(r"[*?[]")
+
+
+def _job_segments(job_name: str) -> list[str]:
+    segments = [part for part in job_name.strip("/").split("/") if part]
+    if not segments:
+        raise PolicyError("Job name must not be empty")
+    if any(part in {".", ".."} for part in segments):
+        raise PolicyError(
+            f"Job '{job_name}' contains path traversal segments and is rejected"
+        )
+    return segments
 
 
 @dataclass(frozen=True)
@@ -30,17 +44,33 @@ class Policy:
     allow_build_stop: bool = True
 
     def check_job(self, job_name: str) -> None:
-        segments = [part for part in job_name.strip("/").split("/") if part]
-        if not segments:
-            raise PolicyError("Job name must not be empty")
-        # Traversal segments would let a name that matches an allow pattern
-        # resolve to a different Jenkins path once '..' is normalised away.
-        if any(part in {".", ".."} for part in segments):
-            raise PolicyError(
-                f"Job '{job_name}' contains path traversal segments and is rejected"
-            )
-        if not any(fnmatch.fnmatchcase(job_name, p) for p in self.job_patterns):
+        _job_segments(job_name)
+        if not self.allows_job(job_name):
             raise PolicyError(f"Job '{job_name}' is not allowed by MCP_ALLOWED_JOBS")
+
+    def allows_job(self, job_name: str) -> bool:
+        """Return whether a concrete job path is in the configured allowlist."""
+        _job_segments(job_name)
+        return any(fnmatch.fnmatchcase(job_name, pattern) for pattern in self.job_patterns)
+
+    def allows_job_or_descendant(self, job_name: str) -> bool:
+        """Allow browsing a folder that may contain an allowed job.
+
+        Jenkins lists folders before their children. For ``AI/*`` the ``AI``
+        folder therefore has to remain visible even though ``AI`` itself does
+        not match the pattern. Patterns beginning with a wildcard can match a
+        descendant of any folder, so their ancestors cannot be narrowed safely.
+        """
+        _job_segments(job_name)
+        if self.allows_job(job_name):
+            return True
+        prefix = job_name.strip("/") + "/"
+        for pattern in self.job_patterns:
+            match = GLOB_META.search(pattern)
+            literal_prefix = pattern[: match.start()] if match else pattern
+            if not literal_prefix or literal_prefix.startswith(prefix):
+                return True
+        return False
 
     def require_destructive(self, action: str, job_name: str | None = None) -> None:
         """Gate an irreversible action.
