@@ -87,7 +87,8 @@ from the matching version entry after CI validates it.
   query, and fragment injection.
 - `MCP_MAX_LOG_BYTES` sliced console and administrator responses only after
   HTTPX buffered the complete body. Those endpoints now stop streaming at the
-  configured limit, preventing large responses from exhausting pod memory.
+  configured limit, preventing large responses from exhausting pod memory,
+  without attempting to decode compressed Jenkins responses twice.
 - Copying a job to a nested target sent the complete target path as a root job
   name. The copy is now created through its parent folder endpoint.
 - An unwritable audit path no longer fails the tool call. `emit` runs after the

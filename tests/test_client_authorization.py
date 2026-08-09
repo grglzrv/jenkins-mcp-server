@@ -1,5 +1,6 @@
 """Regression tests for job scoping, path validation, and bounded responses."""
 
+import gzip
 from collections.abc import Callable
 
 import httpx
@@ -184,4 +185,28 @@ async def test_console_stops_streaming_at_the_configured_limit() -> None:
     assert len(result["text"]) == 1024
     assert result["truncated"] is True
     assert stream.second_chunk_requested is False
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_console_does_not_redecode_streamed_gzip_content() -> None:
+    content = b"Jenkins console output\n"
+    compressed = gzip.compress(content)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=compressed,
+            headers={
+                "Content-Encoding": "gzip",
+                "Content-Length": str(len(compressed)),
+                "X-Text-Size": str(len(content)),
+                "X-More-Data": "false",
+            },
+        )
+
+    client = make_client(handler, max_log_bytes=1024)
+    result = await client.console("AI/build", 1)
+    assert result["text"] == content.decode()
+    assert result["truncated"] is False
     await client.close()

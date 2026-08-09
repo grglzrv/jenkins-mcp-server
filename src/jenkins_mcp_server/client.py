@@ -263,9 +263,18 @@ class JenkinsClient:
                 if len(chunk) > remaining:
                     truncated = True
                     break
+            # aiter_bytes() has already decoded content encodings. Carrying
+            # gzip/br (or the original length) onto the synthetic response
+            # would make HTTPX try to decode the plain bytes a second time.
+            response_headers = [
+                (name, value)
+                for name, value in streamed.headers.multi_items()
+                if name.lower()
+                not in {"content-encoding", "content-length", "transfer-encoding"}
+            ]
             return httpx.Response(
                 streamed.status_code,
-                headers=streamed.headers,
+                headers=response_headers,
                 content=bytes(content),
                 request=streamed.request,
                 extensions={
