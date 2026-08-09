@@ -116,6 +116,9 @@ For a public package, registry login is not needed for pulls.
 No action is required. Jenkins API, job-config, and crumb responses now have a
 10 MB streamed safety bound. If a measured legitimate response is larger,
 increase `mcp.maxResponseBytes`; prefer narrowing a folder query first.
+Review `mcp.extraEnv` and move any chart-owned `JENKINS_*`, `MCP_*`, or
+`MINIBRIDGE_*` override to its typed chart value. Proxy and trust variables such
+as `HTTP_PROXY`, `NO_PROXY`, and `SSL_CERT_FILE` remain supported.
 
 ### Upgrading from 2.4.2
 
@@ -297,6 +300,9 @@ chart does not control. Deprecated
 pod-template checksum and roll the Deployment automatically. Existing Secrets
 and ESO targets update independently of Helm; restart the Deployment after a
 rotation because environment variables in a running process are immutable.
+Credential and chart policy variables cannot be replaced through
+`mcp.extraEnv`; use the typed credential, `mcp`, `audit`, or `minibridge` value
+instead. Duplicate extra environment-variable names also fail the render.
 
 `externalSecret.dataFrom` and `extraData` are mutually exclusive. With
 `dataFrom`, the synchronized Secret must still contain the two configured
@@ -336,6 +342,7 @@ jenkins:
 | `mcp.allowJobUpdate` / `allowBuildStop` | `true` |
 | `mcp.maxResponseBytes` | `10000000` — hard streamed-response limit for complete Jenkins API, config, and crumb responses |
 | `mcp.maxLogBytes` | `1000000` — hard streamed-response limit for console and administrator calls |
+| `mcp.extraEnv` | `[]` — additional variables such as `HTTP_PROXY`; chart-owned `JENKINS_*`, `MCP_*`, `MINIBRIDGE_*`, and the OTEL endpoint cannot be overridden here |
 
 ### minibridge proxy, optional
 

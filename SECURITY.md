@@ -9,6 +9,9 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Use HTTPS to Jenkins and keep `JENKINS_VERIFY_TLS=true`.
 - Mount the enterprise CA through `JENKINS_CA_BUNDLE`.
 - Use a dedicated Jenkins service account and API token.
+- Select exactly one `jenkins.credentials` source. `mcp.extraEnv` rejects
+  chart-owned `JENKINS_*`, `MCP_*`, and `MINIBRIDGE_*` names so a later explicit
+  environment entry cannot replace the validated credential or policy values.
 - Restrict `MCP_ALLOWED_JOBS` to controlled folders. It filters job discovery,
   queue and running-build visibility, and job/build mutations.
 - Keep `MCP_ALLOW_ADMIN_REQUEST=false` unless a reviewed use case requires it.

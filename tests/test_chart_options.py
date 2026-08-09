@@ -160,6 +160,24 @@ def test_chart_env_names_match_the_settings_aliases() -> None:
         assert f'alias="{env}"' in config_src, f"{env} has no matching Settings alias"
 
 
+def test_extra_env_cannot_override_credentials_or_chart_policy() -> None:
+    """Explicit env entries come after envFrom and would silently win."""
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    for reserved in [
+        'hasPrefix "JENKINS_"',
+        'hasPrefix "MCP_"',
+        'hasPrefix "MINIBRIDGE_"',
+        'eq $name "OTEL_EXPORTER_OTLP_ENDPOINT"',
+    ]:
+        assert reserved in validate
+    assert "duplicates another extraEnv entry" in validate
+    extra_env = schema()["properties"]["mcp"]["properties"]["extraEnv"]
+    assert extra_env["items"]["required"] == ["name"]
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "Reject extraEnv credential and policy overrides" in workflow
+    assert "expected reserved extraEnv name" in workflow
+
+
 # --- ExternalSecret -------------------------------------------------------
 
 
@@ -265,7 +283,8 @@ def test_secret_rotation_contracts_are_explicit_and_smoked() -> None:
     for marker in [
         "credential-sources:",
         "Helm-managed Secret is owned, rotated, and deleted",
-        "Existing Secret is read but never owned or deleted",
+        "Existing Secret rotates after restart and is never owned or deleted",
+        "Split Secret refs are read independently and never owned",
         "ESO Kubernetes provider syncs and rotates credentials",
         "external-secrets/external-secrets",
         "provider.kubernetes.remoteNamespace",

@@ -60,6 +60,21 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if eq (len $enabled) 0 }}
 {{- fail "no jenkins.credentials source is enabled. The server cannot start without a username and API token. Enable one of: existingSecret (reference a Secret you created), secretKeyRefs (a different Secret or key per field), create (chart-managed, disposable environments only), externalSecret (External Secrets Operator)." }}
 {{- end }}
+{{- /* Explicit env entries are rendered after the chart-owned credential,
+       policy, and Minibridge variables, so a duplicate silently wins at
+       runtime. Keep extraEnv genuinely extra instead of letting it bypass the
+       validated values and credential-source selection above. */ -}}
+{{- $extraEnvNames := list -}}
+{{- range $i, $entry := .Values.mcp.extraEnv }}
+{{- $name := required (printf "mcp.extraEnv[%d].name is required" $i) $entry.name -}}
+{{- if has $name $extraEnvNames }}
+{{- fail (printf "mcp.extraEnv[%d].name (%s) duplicates another extraEnv entry; environment variable names must be unique." $i $name) }}
+{{- end }}
+{{- if or (hasPrefix "JENKINS_" $name) (hasPrefix "MCP_" $name) (hasPrefix "MINIBRIDGE_" $name) (eq $name "OTEL_EXPORTER_OTLP_ENDPOINT") }}
+{{- fail (printf "mcp.extraEnv[%d].name (%s) is managed by the chart and cannot be overridden through extraEnv. Use the corresponding jenkins.*, mcp.*, audit.*, or minibridge.* value instead." $i $name) }}
+{{- end }}
+{{- $extraEnvNames = append $extraEnvNames $name -}}
+{{- end }}
 {{- if $creds.create.enabled }}
 {{- $userId := default "" $creds.create.jenkinsUserId -}}
 {{- $apiToken := default "" $creds.create.jenkinsApiToken -}}

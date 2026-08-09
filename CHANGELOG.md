@@ -63,6 +63,9 @@ from the matching version entry after CI validates it.
 - The main and chart READMEs, onboarding, compatibility documentation, every
   Helm and Argo CD example, raw manifests, standalone Minibridge deployment,
   and k3s smoke values document the same operational limits and diagnostics.
+- The live credential smoke matrix now covers split username/token Secret refs
+  and verifies that existing-Secret rotation takes effect after the documented
+  Deployment restart without transferring Secret ownership to Helm.
 
 ### Bug Fixes
 
@@ -75,10 +78,16 @@ from the matching version entry after CI validates it.
   startup and that server-side `mcp.allow*` flags removed tools from discovery.
   TLS is exercised on Jenkins calls; only Minibridge tool policy filters
   `tools/list`, while server policy rejects unauthorized calls.
+- `mcp.extraEnv` could silently override the validated Jenkins credential
+  source or chart-owned policy/proxy variables because explicit environment
+  entries take precedence over `envFrom`. Reserved names and duplicates now
+  fail the chart render.
 
 ### Breaking Changes
 
-- None.
+- `mcp.extraEnv` no longer accepts chart-owned `JENKINS_*`, `MCP_*`, or
+  `MINIBRIDGE_*` names, `OTEL_EXPORTER_OTLP_ENDPOINT`, or duplicate names.
+  These entries previously overrode the chart's validated values silently.
 
 ### Known Issues
 
@@ -88,12 +97,18 @@ from the matching version entry after CI validates it.
 
 - Bounded upstream responses reduce memory-exhaustion risk from unexpectedly
   large or intermediary-generated Jenkins payloads.
+- Helm values can no longer replace Jenkins credentials or security policy
+  through a duplicate `mcp.extraEnv` entry after passing source validation.
 
 ### Upgrade Notes
 
 - No action is required. If a measured legitimate Jenkins API or job-config
   response exceeds 10 MB, raise `mcp.maxResponseBytes` deliberately; prefer a
   narrower folder/query where possible.
+- Review `mcp.extraEnv` before upgrading. Move any chart-owned variable to its
+  corresponding `jenkins.*`, `mcp.*`, `audit.*`, or `minibridge.*` value;
+  ordinary extras such as `HTTP_PROXY`, `NO_PROXY`, and `SSL_CERT_FILE` remain
+  supported.
 
 ## [2.5.0] - 2026-08-09
 

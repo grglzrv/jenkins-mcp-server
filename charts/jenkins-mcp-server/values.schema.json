@@ -602,7 +602,19 @@
           "minimum": 1024
         },
         "extraEnv": {
-          "type": "array"
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         },
         "allowDestructive": {
           "type": "boolean"
