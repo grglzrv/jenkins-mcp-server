@@ -10,7 +10,42 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None.
+- None yet.
+
+### New Features
+
+- None yet.
+
+### Improvements
+
+- None yet.
+
+### Bug Fixes
+
+- None yet.
+
+### Breaking Changes
+
+- None yet.
+
+### Known Issues
+
+- None yet.
+
+### Security
+
+- None yet.
+
+### Upgrade Notes
+
+- None yet.
+
+## [2.6.3] - 2026-08-09
+
+### Highlights
+
+- Raises the tested Uvicorn runtime baseline to 0.52.1, incorporating upstream
+  correctness fixes for WebSocket shutdown, backpressure, and denial responses.
 
 ### New Features
 
@@ -18,11 +53,17 @@ from the matching version entry after CI validates it.
 
 ### Improvements
 
-- None.
+- The declared production dependency now requires `uvicorn>=0.52.1,<1`, keeping
+  fresh installations and rebuilt container images on the patched 0.52.1
+  baseline while retaining compatibility with future 0.x releases.
 
 ### Bug Fixes
 
-- None.
+- Pulls in Uvicorn's upstream fixes for completing server-initiated WebSocket
+  close handshakes, preserving large in-flight writes under backpressure,
+  handling connection loss during blocked writes, and avoiding duplicate
+  content headers in WebSocket denial responses. Jenkins MCP's Streamable HTTP
+  API and configuration are unchanged.
 
 ### Breaking Changes
 
@@ -34,11 +75,15 @@ from the matching version entry after CI validates it.
 
 ### Security
 
-- None.
+- No Jenkins MCP security policy changes. Existing dependency audit, CodeQL,
+  Helm, container, k3s, Minibridge, and Jenkins integration gates remain in
+  force for this dependency-only patch.
 
 ### Upgrade Notes
 
-- No action required.
+- No configuration changes are required. Rebuild or pull the 2.6.3 application
+  and Minibridge images, or reinstall/upgrade the 2.6.3 chart, to consume the
+  updated dependency baseline.
 
 ## [2.6.2] - 2026-08-09
 
