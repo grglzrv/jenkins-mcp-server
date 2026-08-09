@@ -20,8 +20,10 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Keep node mutation disabled unless explicitly needed.
 - Put the `/mcp` endpoint behind an authenticated MCP gateway, service mesh, reverse proxy, or private network policy.
 - Require Hermes human approval for delete, configuration update, node state, build kill, and generic admin operations.
-- Keep the chart NetworkPolicy enabled; explicitly name client namespaces and
-  the narrow egress path to Jenkins.
+- Use the chart's opt-in NetworkPolicy when pod-level isolation is required;
+  explicitly name client namespaces and the narrow egress path to Jenkins.
+  Leave it disabled when a firewall-protected external Jenkins URL is the
+  intended boundary and cannot be represented safely by stable CIDRs.
 - Forward audit JSONL and application logs from stdout to the central SIEM. File
   output is opt-in and requires external rotation or bounded storage.
 - Rotate the Jenkins API token and never commit `.env` or certificates.
@@ -79,5 +81,5 @@ This repository does not implement end-user identity delegation to Jenkins. Ever
 - Grant only the Kubernetes egress proxy identity access to `svc:jenkins` on TCP 443.
 - Keep Jenkins bound to loopback or a private interface and publish it with Tailscale Serve/Services.
 - Treat `svc:jenkins` hosting approval and `svc:*` Kubernetes auto-approval as privileged tailnet-policy changes.
-- The example NetworkPolicy assumes Tailscale Operator namespace `tailscale` and Hermes namespace `hermes`; change these selectors to your real namespaces.
+- The Tailscale overlay NetworkPolicy assumes Tailscale Operator namespace `tailscale` and Hermes namespace `hermes`; change these selectors to your real namespaces.
 - Tailscale provides network identity and encrypted transport, but every Jenkins operation still executes as the configured Jenkins service account.

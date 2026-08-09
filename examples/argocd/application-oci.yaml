@@ -43,7 +43,7 @@ spec:
     chart: jenkins-mcp-server
     # Pin an exact version. A range or "*" would let a sync move you between
     # releases without review.
-    targetRevision: 2.4.0
+    targetRevision: 2.4.1
     helm:
       releaseName: jenkins-mcp
       # valuesObject is inline and easy to read. For larger setups, keep values
@@ -128,6 +128,7 @@ spec:
           # Clients enter through the Tailscale ingress namespace.
           allowSameNamespace: false
           allowedNamespaces: [tailscale]
+          allowInternetEgress: false
 
         tailscale:
           # Off by default in the chart; this deployment uses the tailnet.

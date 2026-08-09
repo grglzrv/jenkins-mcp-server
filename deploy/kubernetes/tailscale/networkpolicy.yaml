@@ -13,8 +13,8 @@ spec:
       app.kubernetes.io/name: jenkins-mcp
   policyTypes: ["Ingress", "Egress"]
   ingress:
-    # Same-namespace clients can reach MCP; put clients in dedicated namespaces
-    # and remove this rule when stricter isolation is required.
+    # Same-namespace clients can reach MCP; remove this rule when clients enter
+    # only through the Tailscale ingress proxy.
     - from:
         - podSelector: {}
       ports:

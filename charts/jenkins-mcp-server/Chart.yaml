@@ -2,8 +2,8 @@ apiVersion: v2
 name: jenkins-mcp-server
 description: Production-ready Jenkins Model Context Protocol server for Hermes Agent and other MCP clients
 type: application
-version: 2.4.0
-appVersion: "2.4.0"
+version: 2.4.1
+appVersion: "2.4.1"
 kubeVersion: ">=1.27.0-0"
 home: https://github.com/grglzrv/jenkins-mcp-server
 icon: https://www.jenkins.io/images/logos/jenkins/jenkins.svg

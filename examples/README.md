@@ -42,11 +42,12 @@ After rotating an existing or ESO-managed Secret,
 restart the Deployment so the process receives the new environment variables;
 chart-managed changes trigger that rollout automatically.
 
-Every shipped Helm values example states the 2.4 security defaults explicitly:
-destructive actions and file audit logging are off, and NetworkPolicy is on.
-Examples using an external Jenkins URL opt in to internet egress; Tailscale
-examples instead allow only the Tailscale namespace. Adjust client namespace
-selectors before deploying rather than disabling the policy.
+Every shipped Helm values example states its security and networking intent
+explicitly. Destructive actions and file audit logging are off. Examples using
+an external, firewall-protected Jenkins URL leave NetworkPolicy disabled so DNS
+destinations are not blocked; Tailscale examples opt in and allow only the
+Tailscale namespace. If you enable the policy elsewhere, configure client
+namespace selectors and the Jenkins egress path before deploying it.
 
 ## Networking and scaling
 
@@ -85,10 +86,10 @@ README, so users of either installation path see the same transport contract.
 
 | Path | What it is |
 | --- | --- |
-| `../deploy/kubernetes/base` | Plain Deployment, Service, PDB and NetworkPolicy. Add an ingress overlay when external access is required. |
-| `../deploy/kubernetes/overlays/production` | The base plus the Tailscale proxy group, egress Service and DNSConfig. |
+| `../deploy/kubernetes/base` | Neutral Deployment, Service and PDB with no ingress or NetworkPolicy. Add environment-specific controls as overlays. |
+| `../deploy/kubernetes/overlays/production` | The base plus the Tailscale proxy group, egress Service, DNSConfig and NetworkPolicy. |
 | `../deploy/kubernetes/minibridge` | Kustomize overlay putting minibridge in front of the base. |
-| `../deploy/kubernetes/minibridge/standalone-deployment.yaml` | One self-contained file: Secret, ConfigMap, Deployment, Service, NetworkPolicy. |
+| `../deploy/kubernetes/minibridge/standalone-deployment.yaml` | One self-contained file: Secret, ConfigMap, Deployment and Service. Add a policy only after modeling external Jenkins egress. |
 | `../deploy/kubernetes/secret.example.yaml` | Shape of the credentials Secret. |
 | `../deploy/kubernetes/external-secret-gcp.example.yaml` | Raw `ExternalSecret` for GCP Secret Manager. |
 

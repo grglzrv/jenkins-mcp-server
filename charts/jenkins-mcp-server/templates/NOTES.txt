@@ -47,6 +47,18 @@ Server policy in effect (applies with or without minibridge):
 NetworkPolicy egress is restricted to DNS and explicit additionalEgress rules.
 If Jenkins is outside the cluster, add a narrow rule or set
 networkPolicy.allowInternetEgress=true.
+{{- else if not .Values.networkPolicy.enabled }}
+
+NetworkPolicy is disabled. The chart does not restrict pod ingress or egress.
+This is appropriate when an external Jenkins endpoint is protected by cluster
+or firewall controls; otherwise enable the policy and configure both client
+ingress and the Jenkins egress path.
+{{- end }}
+{{- if and (ne .Values.service.type "ClusterIP") .Values.service.exposeHealthPort }}
+
+WARNING: service.type={{ .Values.service.type }} also publishes the health port.
+/readyz reports configuration state. Set service.exposeHealthPort=false unless
+the external Service needs that port and access is restricted upstream.
 {{- end }}
 {{- if not .Values.jenkins.verifyTls }}
 

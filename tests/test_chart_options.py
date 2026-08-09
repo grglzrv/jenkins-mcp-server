@@ -52,10 +52,13 @@ def test_destructive_flags_exist_with_safe_defaults() -> None:
     assert mcp["allowDestructive"] is False
 
 
-def test_240_security_defaults_are_consistent_across_runtime_and_deployments() -> None:
+def test_241_security_defaults_are_consistent_across_runtime_and_deployments() -> None:
     v = values()
     assert v["mcp"]["allowDestructive"] is False
-    assert v["networkPolicy"]["enabled"] is True
+    # External Jenkins commonly sits behind a firewall allowing only the
+    # cluster. A DNS hostname cannot be selected portably by NetworkPolicy, so
+    # pod-level isolation must be an explicit, fully modeled opt-in.
+    assert v["networkPolicy"]["enabled"] is False
     assert v["networkPolicy"]["allowSameNamespace"] is True
     assert v["networkPolicy"]["allowInternetEgress"] is False
     assert v["audit"]["fileEnabled"] is False
@@ -73,13 +76,20 @@ def test_240_security_defaults_are_consistent_across_runtime_and_deployments() -
     assert "mountPath: /data" not in raw_deployment
 
 
+def test_network_policy_template_remains_an_explicit_opt_in() -> None:
+    template = (CHART / "templates/networkpolicy.yaml").read_text()
+    assert template.startswith("{{- if .Values.networkPolicy.enabled }}")
+    assert template.rstrip().endswith("{{- end }}")
+
+
 def test_every_values_example_states_security_and_network_intent() -> None:
     for path in sorted(EXAMPLES.glob("*.yaml")):
         example = yaml.safe_load(path.read_text())
         assert example["mcp"]["allowDestructive"] is False, path.name
         assert example["audit"]["fileEnabled"] is False, path.name
         policy = example["networkPolicy"]
-        assert policy["enabled"] is True, path.name
+        expected_enabled = path.name == "tailscale-production.yaml"
+        assert policy["enabled"] is expected_enabled, path.name
         assert "allowSameNamespace" in policy, path.name
         assert "allowInternetEgress" in policy, path.name
 
@@ -91,8 +101,10 @@ def test_every_argocd_application_states_security_and_network_intent() -> None:
         assert values_object["mcp"]["allowDestructive"] is False, path.name
         assert values_object["audit"]["fileEnabled"] is False, path.name
         policy = values_object["networkPolicy"]
-        assert policy["enabled"] is True, path.name
+        expected_enabled = path.name != "application-hpa-generic.yaml"
+        assert policy["enabled"] is expected_enabled, path.name
         assert "allowSameNamespace" in policy, path.name
+        assert "allowInternetEgress" in policy, path.name
 
 
 def test_destructive_flags_are_passed_to_the_container() -> None:
@@ -615,6 +627,8 @@ def test_tailscale_directory_is_a_kustomization() -> None:
     )
     assert "../../tailscale" in production["resources"]
     assert not any(r.endswith(".yaml") for r in production["resources"])
+    tailscale = yaml.safe_load((DEPLOY / "tailscale/kustomization.yaml").read_text())
+    assert "networkpolicy.yaml" in tailscale["resources"]
 
 
 # --- Argo CD examples -----------------------------------------------------
@@ -931,6 +945,8 @@ def test_notes_describe_the_actual_deployment() -> None:
     assert "policer.enforce" in notes
     assert "minibridge.enabled" in notes
     assert "verifyTls" in notes
+    assert "NetworkPolicy is disabled" in notes
+    assert 'ne .Values.service.type "ClusterIP"' in notes
 
 
 def test_health_port_exposure_is_configurable() -> None:

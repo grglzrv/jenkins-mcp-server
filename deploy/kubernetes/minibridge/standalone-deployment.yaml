@@ -5,6 +5,8 @@
 # Everything is in one file so it can be read top to bottom. For anything beyond
 # a demo, prefer the Helm chart or the kustomize overlay in this directory, and
 # supply the Secret from External Secrets rather than committing it.
+# NetworkPolicy is intentionally absent so an external Jenkins hostname remains
+# reachable; add a policy only after modeling both client ingress and egress.
 #
 # Replace before applying:
 #   - jenkins.example.com  -> your Jenkins URL
@@ -107,7 +109,7 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:2.4.0-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.4.1-minibridge
           imagePullPolicy: IfNotPresent
           # No args: the entrypoint follows Acuvity's single-container pattern:
           # public Streamable HTTP in Minibridge, private stdio to Jenkins.
@@ -183,40 +185,3 @@ spec:
     - name: health
       port: 8080
       targetPort: health
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: jenkins-mcp-minibridge
-  namespace: jenkins-mcp
-  labels:
-    app.kubernetes.io/name: jenkins-mcp-minibridge
-    app.kubernetes.io/component: mcp-server
-    app.kubernetes.io/part-of: jenkins-mcp
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: jenkins-mcp-minibridge
-  policyTypes: [Ingress, Egress]
-  ingress:
-    - from:
-        - podSelector: {}
-      ports:
-        - protocol: TCP
-          port: 8000
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-    # The placeholder Jenkins URL above uses external HTTPS. Replace this with
-    # a narrower destination selector/CIDR or the Tailscale egress pattern for
-    # production.
-    - ports:
-        - protocol: TCP
-          port: 443

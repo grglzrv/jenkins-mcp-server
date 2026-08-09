@@ -9,3 +9,4 @@ resources:
   - proxy-groups.yaml
   - jenkins-egress-service.yaml
   - dnsconfig.yaml
+  - networkpolicy.yaml
