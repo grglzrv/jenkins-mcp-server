@@ -17,9 +17,9 @@ credential.
 
 ## 🚀 Installation paths
 
-- **Guided production setup.** Follow the operator-focused
-  [onboarding guide](ONBOARDING.md) for prerequisites, credentials, rendering,
-  installation, and verification.
+- **Guided agent-assisted setup.** Use the purpose-built
+  [AI-agent onboarding guide](ONBOARDING.md) for prerequisites, credentials,
+  rendering, installation, and verification.
 - **Quick setup.** Follow [Quick start with Docker](#-quick-start-with-docker)
   or [Helm installation](#-helm-installation) below.
 

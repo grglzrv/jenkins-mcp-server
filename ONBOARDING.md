@@ -1,28 +1,28 @@
 # Onboarding
 
-A guided installation of the Jenkins MCP server for the operator who owns the
-Jenkins and deployment environment.
+A guided installation of the Jenkins MCP server, written to be followed by an AI
+agent working with the person who owns the Jenkins.
 
 Work through the phases in order. Each one ends with a check, so a mistake
 surfaces at the step that caused it rather than three steps later.
 
-## Safety rules
+## Rules for the agent
 
 Follow these for the whole install.
 
-1. **Never guess a credential, hostname, or URL.** Confirm each value. A guessed
+1. **Never invent a credential, hostname, or URL.** Stop and ask. A guessed
    Jenkins URL fails TLS verification; a guessed token silently produces 401s
    that look like a broken server.
-2. **Review every state-changing command before running it** — especially
-   creating Kubernetes resources, installing a Helm release, or triggering a
-   Jenkins build.
-3. **Never print a token.** Read secrets directly into `kubectl create secret`,
-   and never echo them into logs, shell history, tickets, or chat.
+2. **Ask before anything that changes state** — creating Kubernetes resources,
+   installing a Helm release, triggering a Jenkins build. Show the exact command
+   and wait.
+3. **Never print a token back.** Read secrets from the person's input straight
+   into `kubectl create secret`, and never echo them into logs or a summary.
 4. **Do not write secrets into values files for production.** The chart-managed
    source is the installation default for disposable evaluation only; Helm
    stores those values in release history. Use an existing Secret or External
    Secrets for a durable installation.
-5. **Do not disable TLS verification** to get past a certificate error. Check
+5. **Do not disable TLS verification** to get past a certificate error. Ask
    whether Jenkins uses a private CA and mount it instead. See
    [docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
 6. **Report what you actually observed.** If a check fails, say so and stop.
@@ -30,28 +30,28 @@ Follow these for the whole install.
 
 ## Phase 1 — Decide the shape of the install
 
-Decide these before touching anything. Every item has a safe default except the
-Jenkins URL and client choice.
+Ask these before touching anything. Every one has a safe default, so a person
+who does not know can say "default".
 
 | Question | Default if unsure |
 | --- | --- |
 | Kubernetes with Helm, or Docker on a single host? | Kubernetes with Helm |
-| What is the Jenkins base URL, exactly as the certificate is issued? | *required — no default* |
-| Which Jenkins folders should the MCP client be able to touch? | `*`, then narrow |
+| What is the Jenkins base URL, exactly as the certificate is issued? | *must ask — no default* |
+| Which Jenkins folders should the agent be able to touch? | `*`, then narrow |
 | Should destructive tools be blocked at the proxy? | yes, `deny: ["@destructive"]` |
 | Do you use the External Secrets Operator? | no, use a Kubernetes Secret |
 | Do you have an ingress controller, and should this be exposed through it? | no, keep it in-cluster |
-| Which MCP client will connect to this? | *required for phase 6* |
+| Which AI harness will connect to this? | *ask — needed for phase 6* |
 | Is Jenkins reachable only over a private network such as Tailscale? | no |
 
 Notes on the last three:
 
-- If you **do** use External Secrets, identify the provider (GCP Secret Manager,
+- If they **do** use External Secrets, ask which provider (GCP Secret Manager,
   AWS Secrets Manager, Vault, ...), the `SecretStore` or `ClusterSecretStore`
   name, and the remote keys holding the Jenkins user ID and API token. Then use
   `jenkins.credentials.externalSecret.*` instead of creating a Secret by hand, and see
   `examples/values/external-secrets-gcp.yaml`.
-- If you **do** want an ingress, set the `ingressClassName` and the
+- If they **do** want an ingress, ask for the `ingressClassName` and the
   hostname. Do not guess the class; a wrong one produces an Ingress no
   controller ever picks up.
 - If Jenkins is only reachable over a private network, stop and read
@@ -68,19 +68,20 @@ helm version --short                                     # 3.8 or newer
 kubectl auth can-i create deployment -n jenkins-mcp
 ```
 
-Create a **Jenkins API token**, not an account password, at
-*People → user → Security → API Token → Add new Token*.
+The person also needs a **Jenkins API token**, not their password. It is created
+at *People → their user → Security → API Token → Add new Token*. Ask them to
+create one now if they have not.
 
-The account behind that token is the real security boundary. Review its
-permissions, especially whether it is an admin account: this server can
+The account behind that token is the real security boundary. Ask what
+permissions it has, and say plainly if it is an admin account: this server can
 only narrow what Jenkins already allows, never widen it.
 [docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md) lists the least
 permission each tool needs.
 
 ## Phase 3 — Create the namespace and the credentials Secret
 
-Enter the Jenkins user ID and API token in a trusted shell so neither value is
-echoed or pasted into chat. Do not put them in a file.
+Ask for the Jenkins user ID and its API token, then run this yourself so neither value is
+echoed. Do not put them in a file.
 
 ```bash
 kubectl create namespace jenkins-mcp
@@ -104,7 +105,7 @@ kubectl -n jenkins-mcp get secret jenkins-mcp-secrets \
   -o jsonpath='{.data.JENKINS_USERNAME}' | base64 -d | wc -c
 ```
 
-A non-zero length means the key is present. If you use External Secrets,
+A non-zero length means the key is present. If the person uses External Secrets,
 skip this phase and configure `jenkins.credentials.externalSecret.*` instead.
 
 ## Phase 4 — Install
@@ -128,7 +129,7 @@ jenkins:
       tokenKey: JENKINS_TOKEN
 
 mcp:
-  allowedJobs: "*"                     # narrow to the required folders
+  allowedJobs: "*"                     # narrow to the folders they named
   allowDestructive: false              # master gate for irreversible actions
   allowJobDelete: false
   allowAdminRequest: false
@@ -157,14 +158,14 @@ minibridge:
     enforce: true
 ```
 
-Review the rendered manifests before installing:
+Show the person the rendered manifests before installing:
 
 ```bash
 helm template jenkins-mcp oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
   --namespace jenkins-mcp --values values.yaml
 ```
 
-Then install the reviewed release:
+Then, with their approval:
 
 ```bash
 helm upgrade --install jenkins-mcp \
@@ -174,7 +175,7 @@ helm upgrade --install jenkins-mcp \
   --wait --timeout 5m
 ```
 
-For Docker instead, use `compose.yaml` at the repository root: copy
+If they chose Docker instead, use `compose.yaml` at the repository root: copy
 `.env.example` to `.env`, fill in `JENKINS_URL`, `JENKINS_USERNAME` and
 `JENKINS_TOKEN`, then `docker compose --profile minibridge up -d`. The
 `minibridge` profile runs the variant with the proxy; plain `docker compose up
@@ -206,12 +207,12 @@ kubectl -n jenkins-mcp logs deploy/jenkins-mcp-jenkins-mcp-server --tail=30
 ```
 
 If step 4 shows a 401, the token is wrong. A certificate error means a private
-CA: confirm it, and mount it with `jenkins.caBundle.existingSecret` rather than
+CA: ask, and mount it with `jenkins.caBundle.existingSecret` rather than
 disabling verification.
 
-## Phase 6 — Connect the MCP client
+## Phase 6 — Connect their AI harness
 
-Configure the chosen client on its side. The server speaks
+Ask which harness they use, and configure it on that side. The server speaks
 **Streamable HTTP** at the `/mcp` path; the surrounding configuration keys
 differ per harness, so use its own documentation rather than assuming a shape.
 
@@ -230,22 +231,22 @@ The endpoint is:
 
 If the harness runs outside the cluster and no ingress was configured, say so
 plainly: it cannot reach a ClusterIP service. The options are an ingress, a
-port-forward for testing, or a private network. Do not record an
+port-forward for testing, or a private network. Do not leave them with an
 endpoint that only works from inside.
 
-Confirm the connection by having the client list the available tools. With
+Confirm the connection by asking the harness to list the available tools. With
 the default values above, expect the destructive tools to be **absent** — that
 is the proxy working, not a fault.
 
-## Phase 7 — Record the deployment
+## Phase 7 — Hand over
 
-Record these operational details:
+Tell the person, in plain terms:
 
 - Which Jenkins account this uses and what it can do.
 - Which tools are available and which are denied.
 - Where the credentials live, and that rotating the token means updating the
   Secret and restarting the deployment.
-- Whether `mcp.allowedJobs` still needs narrowing to the required folders
+- That `mcp.allowedJobs` should be narrowed to the folders they actually need
   if it is still `*`.
 - Where to look when something breaks: start with
   `kubectl -n jenkins-mcp logs deploy/jenkins-mcp-jenkins-mcp-server`, then use
