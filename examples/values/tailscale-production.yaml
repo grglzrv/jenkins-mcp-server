@@ -61,6 +61,9 @@ tailscale:
 
 audit:
   fileEnabled: false
+  requiredForReadiness: false
+  maxFileBytes: 52428800
+  backupCount: 3
 
 networkPolicy:
   enabled: true

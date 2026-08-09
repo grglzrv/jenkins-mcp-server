@@ -118,10 +118,13 @@ spec:
             cpu: "1"
             memory: 512Mi
 
-        # Audit records go to process logs for collection. File output is
-        # deliberately disabled because the application does not rotate it.
+        # Audit records go to process logs for collection. File output is an
+        # optional, bounded copy and is deliberately disabled here.
         audit:
           fileEnabled: false
+          requiredForReadiness: false
+          maxFileBytes: 52428800
+          backupCount: 3
 
         networkPolicy:
           enabled: true

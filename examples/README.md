@@ -42,12 +42,16 @@ After rotating an existing or ESO-managed Secret,
 restart the Deployment so the process receives the new environment variables;
 chart-managed changes trigger that rollout automatically.
 
-Every shipped Helm values example states its security and networking intent
-explicitly. Destructive actions and file audit logging are off. Examples using
-an external, firewall-protected Jenkins URL leave NetworkPolicy disabled so DNS
-destinations are not blocked; Tailscale examples opt in and allow only the
-Tailscale namespace. If you enable the policy elsewhere, configure client
-namespace selectors and the Jenkins egress path before deploying it.
+Every shipped Helm values and Argo CD example states its security, audit, and
+networking intent explicitly. Destructive actions and file audit logging are
+off. The examples keep `requiredForReadiness: false` and declare the chart's
+50Mi active-file/three-backup retention, so changing `fileEnabled` is a visible,
+bounded choice. Set `requiredForReadiness: true` only when that file is the
+record of account and must fail closed. Examples using an external,
+firewall-protected Jenkins URL leave NetworkPolicy disabled so DNS destinations
+are not blocked; Tailscale examples opt in and allow only the Tailscale
+namespace. If you enable the policy elsewhere, configure client namespace
+selectors and the Jenkins egress path before deploying it.
 
 ## Networking and scaling
 

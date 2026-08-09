@@ -359,8 +359,8 @@ mcp:
   extraEnv: []
 
 audit:
-  # Audit records always go to process logs. File output is opt-in because the
-  # server does not rotate files; use a collector for the durable default path.
+  # Audit records always go to process logs. File output is an opt-in,
+  # size-rotated copy; use a collector for the durable default path.
   fileEnabled: false
   # Take the pod out of service when the audit file cannot be written. Off by
   # default: records also go to the process logs, so a failed file is a lost

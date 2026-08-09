@@ -70,6 +70,9 @@ minibridge:
 
 audit:
   fileEnabled: false
+  requiredForReadiness: false
+  maxFileBytes: 52428800
+  backupCount: 3
 
 networkPolicy:
   # Jenkins is external and protected independently, so policy is opt-in.
