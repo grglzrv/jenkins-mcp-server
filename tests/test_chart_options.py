@@ -1736,6 +1736,19 @@ def test_extra_env_guard_covers_every_app_and_minibridge_variable() -> None:
     minibridge_names = set(
         re.findall(r"^- name: ([A-Z][A-Z0-9_]*)$", helpers, flags=re.MULTILINE)
     )
+    # The entrypoint is the other consumer of unprefixed names. minibridge
+    # itself reads only MINIBRIDGE_* (viper.SetEnvPrefix("minibridge")), so
+    # TOOLS_DENY and its siblings exist because entrypoint.sh translates them.
+    # Deriving the list from the chart alone misses one added there first.
+    entrypoint = (ROOT / "docker/entrypoint.sh").read_text()
+    shell_builtins = {
+        "HOME", "HOSTNAME", "IFS", "PATH", "PWD", "SHELL", "SHLVL", "TERM", "USER",
+    }
+    entrypoint_names = {
+        name
+        for name in re.findall(r"\$\{?([A-Z][A-Z0-9_]{2,})", entrypoint)
+        if name not in shell_builtins
+    }
     exact_match = re.search(r"\$extraEnvExact := list ([^\n]+)", validate)
     assert exact_match, "the exact chart-owned environment list is missing"
     exact = set(re.findall(r'"([A-Z][A-Z0-9_]*)"', exact_match.group(1)))
@@ -1743,7 +1756,8 @@ def test_extra_env_guard_covers_every_app_and_minibridge_variable() -> None:
     def guarded(name: str) -> bool:
         return name.startswith(("JENKINS_", "MCP_", "MINIBRIDGE_")) or name in exact
 
-    unguarded = sorted(name for name in aliases | minibridge_names if not guarded(name))
+    owned = aliases | minibridge_names | entrypoint_names
+    unguarded = sorted(name for name in owned if not guarded(name))
     assert not unguarded, f"chart-owned environment names escape mcp.extraEnv: {unguarded}"
 
 
