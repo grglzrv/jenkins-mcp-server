@@ -2,6 +2,14 @@ name: Jenkins integration
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/**"
+      - "integration/**"
+      - "docker-compose.integration.yml"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - ".github/workflows/integration.yml"
   push:
     branches: [main]
     paths:
@@ -10,6 +18,7 @@ on:
       - "docker-compose.integration.yml"
       - "Dockerfile"
       - "pyproject.toml"
+      - ".github/workflows/integration.yml"
 
 permissions:
   contents: read

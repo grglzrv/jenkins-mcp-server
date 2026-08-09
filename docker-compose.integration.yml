@@ -27,8 +27,9 @@ services:
       MCP_PATH: /mcp
       MCP_ALLOW_ADMIN_REQUEST: "false"
       # This suite deliberately exercises stop_build and delete_job, which are
-      # gated off by default. Without these the calls are refused and the test
-      # silently proves nothing.
+      # gated off by default. The master switch and both per-action gates must
+      # be explicit; production defaults remain fail-closed.
+      MCP_ALLOW_DESTRUCTIVE: "true"
       MCP_ALLOW_JOB_DELETE: "true"
       MCP_ALLOW_BUILD_STOP: "true"
     ports: ["8000:8000", "8081:8081"]
