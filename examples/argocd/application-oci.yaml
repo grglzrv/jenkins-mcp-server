@@ -43,7 +43,7 @@ spec:
     chart: jenkins-mcp-server
     # Pin an exact version. A range or "*" would let a sync move you between
     # releases without review.
-    targetRevision: 2.3.3
+    targetRevision: 2.4.0
     helm:
       releaseName: jenkins-mcp
       # valuesObject is inline and easy to read. For larger setups, keep values
@@ -74,6 +74,7 @@ spec:
           allowedJobs: "AI/*,Platform/*"
           allowNodeWrite: false
           allowAdminRequest: false
+          allowDestructive: false
           # Deletion is irreversible; leave it off unless genuinely required.
           allowJobDelete: false
 
@@ -117,16 +118,16 @@ spec:
             cpu: "1"
             memory: 512Mi
 
-        # Audit records always go to stdout. The file is extra, on an emptyDir
-        # by default; set storage.type to pvc with an existing claim to keep it
-        # across restarts.
+        # Audit records go to stdout for collection. File output is deliberately
+        # disabled because the application does not rotate it.
         audit:
-          fileEnabled: true
-          storage:
-            type: emptyDir
+          fileEnabled: false
 
         networkPolicy:
           enabled: true
+          # Clients enter through the Tailscale ingress namespace.
+          allowSameNamespace: false
+          allowedNamespaces: [tailscale]
 
         tailscale:
           # Off by default in the chart; this deployment uses the tailnet.

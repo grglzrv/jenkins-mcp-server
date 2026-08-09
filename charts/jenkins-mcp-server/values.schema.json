@@ -644,10 +644,14 @@
       "additionalProperties": false,
       "required": [
         "enabled",
+        "allowSameNamespace",
         "allowInternetEgress"
       ],
       "properties": {
         "enabled": {
+          "type": "boolean"
+        },
+        "allowSameNamespace": {
           "type": "boolean"
         },
         "allowInternetEgress": {
@@ -1217,7 +1221,14 @@
               ]
             },
             "emptyDir": {
-              "type": "object"
+              "type": "object",
+              "properties": {
+                "sizeLimit": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "additionalProperties": false
             },
             "persistentVolumeClaim": {
               "type": "object",

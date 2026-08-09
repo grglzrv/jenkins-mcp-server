@@ -59,15 +59,19 @@ creates the credentials Secret.
 ```bash
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.3.3 \
+  --version 2.4.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --set jenkins.url=https://jenkins.example.com \
+  --set networkPolicy.allowInternetEgress=true \
   --set-string jenkins.credentials.create.jenkinsUserId='<actual-jenkins-login-id>' \
   --set-string jenkins.credentials.create.jenkinsApiToken='<jenkins-api-token>'
 ```
 
-That gives a ClusterIP Service reachable in-cluster at
+The explicit egress opt-in is needed because this example uses an external
+Jenkins hostname; omit it when Jenkins is reached through the Tailscale egress
+integration or replace it with a narrow `additionalEgress` rule. That gives a
+ClusterIP Service reachable by pods in the release namespace at
 `http://jenkins-mcp-jenkins-mcp-server.jenkins-mcp.svc.cluster.local:8000/mcp`.
 Installing without `jenkins.url` fails with a message saying so, rather than
 deploying something that cannot reach a Jenkins.
@@ -81,13 +85,25 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.3.3 \
+  --version 2.4.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
 ```
 
 For a public package, registry login is not needed for pulls.
+
+### Upgrading from 2.3
+
+2.4 changes three defaults: `mcp.allowDestructive=false`,
+`networkPolicy.enabled=true` with same-namespace ingress, and
+`audit.fileEnabled=false`. Existing releases that need job configuration
+updates, build stops, queue cancellation, or node offlining must explicitly opt
+back in to the master destructive switch. Clients in another namespace must be
+listed in `networkPolicy.allowedNamespaces`; external Jenkins endpoints need an
+explicit egress rule or `allowInternetEgress=true`. File audit users must set
+`audit.fileEnabled=true` and provide rotated or bounded storage. Audit JSONL
+continues to stdout in every configuration.
 
 ## Required Jenkins credentials
 
@@ -278,7 +294,7 @@ jenkins:
 | `mcp.allowedJobs` | `AI/*,Platform/*` |
 | `mcp.allowJobWrite` / `allowBuildWrite` | `true` |
 | `mcp.allowNodeWrite` / `allowAdminRequest` | `false` |
-| `mcp.allowDestructive` | `true` — master switch |
+| `mcp.allowDestructive` | **`false`** — master switch; all irreversible actions are opt-in |
 | `mcp.allowJobDelete` | **`false`** — irreversible, opt-in |
 | `mcp.allowJobUpdate` / `allowBuildStop` | `true` |
 
@@ -353,7 +369,10 @@ does not render direct-listener variables into the ConfigMap.
 | `ingress.annotations` | `{}` | Controller-specific; see `values.yaml` for examples |
 | `ingress.hostRule` | `null` | `null` decides from the class: Tailscale omits `rules[].host`, others need it |
 | `ingress.tls` / `tlsSecretName` | `true` / `""` | Tailscale issues its own certificate |
-| `networkPolicy.enabled` | `false` | Off by default: it selects peers by namespace label, and those differ per cluster | |
+| `networkPolicy.enabled` | `true` | Default-deny ingress/egress policy; DNS and enabled Tailscale egress are allowed |
+| `networkPolicy.allowSameNamespace` | `true` | Allows MCP clients in the release namespace; disable for a dedicated server namespace |
+| `networkPolicy.allowedNamespaces` | `[]` | Additional client namespaces, matched by `kubernetes.io/metadata.name` |
+| `networkPolicy.allowInternetEgress` | `false` | External Jenkins needs this or a narrower `additionalEgress` rule |
 | `tailscale.enabled` | `false` | The whole integration is opt-in. Configuring a sub-feature while it is false fails the render |
 | `tailscale.egress`, `magicDNS`, `proxyGroups` | disabled | See `values.yaml` |
 
@@ -366,8 +385,8 @@ loss; it does not migrate a pod's in-memory sessions during restart or eviction.
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `audit.fileEnabled` | `true` | Records always go to stdout as well, which is the durable path |
-| `audit.storage.type` | `emptyDir` | `pvc` needs `persistentVolumeClaim.claimName` |
+| `audit.fileEnabled` | `false` | Records always go to stdout; file output is opt-in and is not rotated by the application |
+| `audit.storage.type` | `emptyDir` | Bounded to 256Mi by default; `pvc` needs `persistentVolumeClaim.claimName` |
 
 ## Example values files
 
@@ -412,7 +431,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.3.3
+NEW_VERSION=2.4.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

@@ -45,7 +45,7 @@ spec:
               app.kubernetes.io/name: jenkins-mcp
       containers:
         - name: server
-          image: ghcr.io/grglzrv/jenkins-mcp-server:2.3.3
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.4.0
           imagePullPolicy: IfNotPresent
           args: ["--transport", "streamable-http"]
           envFrom:
@@ -94,14 +94,9 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
-            - name: data
-              mountPath: /data
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: data
-          emptyDir:
-            sizeLimit: 256Mi
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi

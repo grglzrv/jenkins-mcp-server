@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     allow_admin_request: bool = Field(default=False, alias="MCP_ALLOW_ADMIN_REQUEST")
     # Master switch for irreversible actions (job delete/update, build stop,
     # queue cancel, node offline). Setting this false disables all of them at once.
-    allow_destructive: bool = Field(default=True, alias="MCP_ALLOW_DESTRUCTIVE")
+    allow_destructive: bool = Field(default=False, alias="MCP_ALLOW_DESTRUCTIVE")
     # Deleting a job is irreversible, so it is opt-in even when job writes are on.
     allow_job_delete: bool = Field(default=False, alias="MCP_ALLOW_JOB_DELETE")
     allow_job_update: bool = Field(default=True, alias="MCP_ALLOW_JOB_UPDATE")

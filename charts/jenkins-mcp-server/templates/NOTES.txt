@@ -39,8 +39,15 @@ minibridge is in front of the server, {{ if .Values.minibridge.policer.enforce }
 Server policy in effect (applies with or without minibridge):
   Read only: {{ .Values.mcp.readOnly }}
   Allowed jobs: {{ .Values.mcp.allowedJobs }}
+  Destructive master switch: {{ .Values.mcp.allowDestructive }}{{ if not .Values.mcp.allowDestructive }} (job update/delete, build stop, queue cancel, and node offline are blocked){{ end }}
   Job delete: {{ .Values.mcp.allowJobDelete }}{{ if not .Values.mcp.allowJobDelete }} (irreversible, off by default){{ end }}
   Admin requests: {{ .Values.mcp.allowAdminRequest }}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowInternetEgress) (not .Values.tailscale.egress.enabled) }}
+
+NetworkPolicy egress is restricted to DNS and explicit additionalEgress rules.
+If Jenkins is outside the cluster, add a narrow rule or set
+networkPolicy.allowInternetEgress=true.
+{{- end }}
 {{- if not .Values.jenkins.verifyTls }}
 
 WARNING: jenkins.verifyTls is false. Any certificate is accepted on a

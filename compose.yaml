@@ -1,12 +1,11 @@
 services:
   server:
-    image: ghcr.io/grglzrv/jenkins-mcp-server:${JENKINS_MCP_VERSION:-2.3.3}
+    image: ghcr.io/grglzrv/jenkins-mcp-server:${JENKINS_MCP_VERSION:-2.4.0}
     env_file: .env
     ports:
       - "8000:8000"
       - "8081:8081"
     volumes:
-      - audit-data:/data
       - ./certs:/certs:ro
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -20,7 +19,7 @@ services:
   # `server` when policy enforcement at the proxy is required.
   minibridge:
     profiles: [minibridge]
-    image: ghcr.io/grglzrv/jenkins-mcp-server:${JENKINS_MCP_VERSION:-2.3.3}-minibridge
+    image: ghcr.io/grglzrv/jenkins-mcp-server:${JENKINS_MCP_VERSION:-2.4.0}-minibridge
     env_file: .env
     environment:
       MINIBRIDGE_MODE: aio
@@ -38,7 +37,6 @@ services:
       - "8000:8000"
       - "8080:8080"
     volumes:
-      - audit-data:/data
       - ./certs:/certs:ro
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -47,6 +45,3 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     restart: unless-stopped
-
-volumes:
-  audit-data:

@@ -13,13 +13,17 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Keep `MCP_ALLOW_ADMIN_REQUEST=false` unless a reviewed use case requires it.
 - Keep `MCP_ALLOW_JOB_DELETE=false` unless the agent genuinely needs to remove jobs;
   deletion is irreversible and is gated separately from `MCP_ALLOW_JOB_WRITE`.
-- Set `MCP_ALLOW_DESTRUCTIVE=false` to disable job deletion/update, build stops,
-  queue cancellation, and node offlining in one switch while leaving reads and
-  job creation/triggering available.
+- Keep the default `MCP_ALLOW_DESTRUCTIVE=false` unless irreversible operations
+  have an approved need. It disables job deletion/update, build stops, queue
+  cancellation, and node offlining while leaving reads and creation/triggering
+  available.
 - Keep node mutation disabled unless explicitly needed.
 - Put the `/mcp` endpoint behind an authenticated MCP gateway, service mesh, reverse proxy, or private network policy.
 - Require Hermes human approval for delete, configuration update, node state, build kill, and generic admin operations.
-- Forward audit JSONL and application logs to the central SIEM.
+- Keep the chart NetworkPolicy enabled; explicitly name client namespaces and
+  the narrow egress path to Jenkins.
+- Forward audit JSONL and application logs from stdout to the central SIEM. File
+  output is opt-in and requires external rotation or bounded storage.
 - Rotate the Jenkins API token and never commit `.env` or certificates.
 
 ## Secret handling

@@ -47,7 +47,7 @@ def client(pol: Policy) -> JenkinsClient:
 def test_job_delete_is_opt_in_even_with_job_write_enabled() -> None:
     """The whole point: create/update allowed, delete still refused."""
     with pytest.raises(PolicyError, match="job.delete"):
-        policy().require_destructive("job.delete", "AI/build")
+        policy(allow_destructive=True).require_destructive("job.delete", "AI/build")
 
 
 def test_job_write_alone_still_permits_creation() -> None:
@@ -55,7 +55,9 @@ def test_job_write_alone_still_permits_creation() -> None:
 
 
 def test_enabling_job_delete_permits_it() -> None:
-    policy(allow_job_delete=True).require_destructive("job.delete", "AI/build")
+    policy(allow_destructive=True, allow_job_delete=True).require_destructive(
+        "job.delete", "AI/build"
+    )
 
 
 # --- master switch --------------------------------------------------------
@@ -75,7 +77,7 @@ def test_master_switch_disables_every_destructive_action(action: str) -> None:
 
 @pytest.mark.parametrize("action", sorted(DESTRUCTIVE_ACTIONS))
 def test_all_destructive_actions_pass_when_fully_enabled(action: str) -> None:
-    pol = policy(allow_job_delete=True)
+    pol = policy(allow_destructive=True, allow_job_delete=True)
     pol.require_destructive(action, "AI/build")
 
 
@@ -94,13 +96,17 @@ def test_read_only_still_wins_over_destructive_flags() -> None:
 
 
 def test_category_gate_still_applies_to_destructive_actions() -> None:
-    pol = policy(allow_build_write=False, allow_build_stop=True)
+    pol = policy(
+        allow_destructive=True, allow_build_write=False, allow_build_stop=True
+    )
     with pytest.raises(PolicyError, match="build"):
         pol.require_destructive("build.stop", "AI/build")
 
 
 def test_job_allowlist_still_applies_to_destructive_actions() -> None:
-    pol = policy(job_patterns=["AI/*"], allow_job_delete=True)
+    pol = policy(
+        allow_destructive=True, job_patterns=["AI/*"], allow_job_delete=True
+    )
     with pytest.raises(PolicyError, match="not allowed"):
         pol.require_destructive("job.delete", "Production/secret")
 
@@ -155,7 +161,7 @@ def test_settings_expose_the_new_flags_with_safe_defaults() -> None:
         JENKINS_USERNAME="u",
         JENKINS_TOKEN="t",
     )  # type: ignore[call-arg]
-    assert settings.allow_destructive is True
+    assert settings.allow_destructive is False
     assert settings.allow_job_delete is False
     assert settings.allow_job_update is True
     assert settings.allow_build_stop is True

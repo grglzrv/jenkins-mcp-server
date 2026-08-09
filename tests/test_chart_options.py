@@ -49,7 +49,50 @@ def test_destructive_flags_exist_with_safe_defaults() -> None:
         assert key in mcp, f"{key} missing from values.yaml"
     # Deleting a job is irreversible, so it must not be on by default.
     assert mcp["allowJobDelete"] is False
-    assert mcp["allowDestructive"] is True
+    assert mcp["allowDestructive"] is False
+
+
+def test_240_security_defaults_are_consistent_across_runtime_and_deployments() -> None:
+    v = values()
+    assert v["mcp"]["allowDestructive"] is False
+    assert v["networkPolicy"]["enabled"] is True
+    assert v["networkPolicy"]["allowSameNamespace"] is True
+    assert v["networkPolicy"]["allowInternetEgress"] is False
+    assert v["audit"]["fileEnabled"] is False
+    assert v["audit"]["storage"]["emptyDir"]["sizeLimit"] == "256Mi"
+
+    config = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
+    policy = (ROOT / "src/jenkins_mcp_server/security.py").read_text()
+    assert 'default=False, alias="MCP_ALLOW_DESTRUCTIVE"' in config
+    assert "allow_destructive: bool = False" in policy
+
+    for path in [ROOT / ".env.example", ROOT / "deploy/kubernetes/base/config.env"]:
+        assert "MCP_ALLOW_DESTRUCTIVE=false" in path.read_text()
+    assert "audit-data" not in (ROOT / "compose.yaml").read_text()
+    raw_deployment = (ROOT / "deploy/kubernetes/base/deployment.yaml").read_text()
+    assert "mountPath: /data" not in raw_deployment
+
+
+def test_every_values_example_states_security_and_network_intent() -> None:
+    for path in sorted(EXAMPLES.glob("*.yaml")):
+        example = yaml.safe_load(path.read_text())
+        assert example["mcp"]["allowDestructive"] is False, path.name
+        assert example["audit"]["fileEnabled"] is False, path.name
+        policy = example["networkPolicy"]
+        assert policy["enabled"] is True, path.name
+        assert "allowSameNamespace" in policy, path.name
+        assert "allowInternetEgress" in policy, path.name
+
+
+def test_every_argocd_application_states_security_and_network_intent() -> None:
+    for path in sorted(ARGOCD.glob("application-*.yaml")):
+        application = yaml.safe_load(path.read_text())
+        values_object = application["spec"]["source"]["helm"]["valuesObject"]
+        assert values_object["mcp"]["allowDestructive"] is False, path.name
+        assert values_object["audit"]["fileEnabled"] is False, path.name
+        policy = values_object["networkPolicy"]
+        assert policy["enabled"] is True, path.name
+        assert "allowSameNamespace" in policy, path.name
 
 
 def test_destructive_flags_are_passed_to_the_container() -> None:
@@ -536,9 +579,14 @@ def test_config_env_covers_every_supported_setting() -> None:
             (ROOT / "src/jenkins_mcp_server/config.py").read_text(),
         )
     )
-    # Credentials and the optional CA bundle come from the Secret, not the ConfigMap.
+    # Credentials and the optional CA bundle come from the Secret. File audit is
+    # deliberately omitted so stdout stays the unbounded-safe default.
     from_secret = {"JENKINS_USERNAME", "JENKINS_TOKEN", "JENKINS_CA_BUNDLE"}
-    assert (src - cfg) <= from_secret, f"config.env is missing {src - cfg - from_secret}"
+    intentionally_unset = {"MCP_AUDIT_LOG_PATH"}
+    allowed_missing = from_secret | intentionally_unset
+    assert (src - cfg) <= allowed_missing, (
+        f"config.env is missing {src - cfg - allowed_missing}"
+    )
     assert not (cfg - src), f"config.env sets unknown variables: {cfg - src}"
 
 

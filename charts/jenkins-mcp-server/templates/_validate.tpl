@@ -245,6 +245,9 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if and .Values.autoscaling.enabled (lt (int .Values.autoscaling.maxReplicas) (int .Values.autoscaling.minReplicas)) }}
 {{- fail "autoscaling.maxReplicas must be greater than or equal to autoscaling.minReplicas." }}
 {{- end }}
+{{- if and .Values.audit.fileEnabled (not .Values.audit.path) }}
+{{- fail "audit.path is required when audit.fileEnabled=true." }}
+{{- end }}
 
 {{- /* User-supplied pod metadata must not replace selector labels or disable
        the checksums that trigger safe rollouts. */ -}}

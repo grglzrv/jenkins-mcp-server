@@ -18,6 +18,13 @@ spec:
       ports:
         - protocol: TCP
           port: {{ include "jenkins-mcp-server.healthPort" . }}
+    {{- if .Values.networkPolicy.allowSameNamespace }}
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ include "jenkins-mcp-server.mcpPort" . }}
+    {{- end }}
     {{- with .Values.networkPolicy.allowedNamespaces }}
     - from:
         {{- range . }}
