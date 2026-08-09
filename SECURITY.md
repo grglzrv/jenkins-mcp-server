@@ -25,9 +25,9 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
   explicitly name client namespaces and the narrow egress path to Jenkins.
   Leave it disabled when a firewall-protected external Jenkins URL is the
   intended boundary and cannot be represented safely by stable CIDRs.
-- Forward audit JSONL and application process logs to the central SIEM. File
-  output is opt-in, participates in readiness, and requires external rotation
-  or bounded storage.
+- Forward audit JSONL process logs to the central SIEM. File output is an
+  optional, size-rotated copy. Set `audit.requiredForReadiness=true` only when
+  the file is the record of account and losing it must fail closed.
 - Rotate the Jenkins API token and never commit `.env` or certificates.
 
 ## Secret handling

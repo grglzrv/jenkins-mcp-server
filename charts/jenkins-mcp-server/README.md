@@ -91,6 +91,14 @@ helm upgrade --install jenkins-mcp \
 
 For a public package, registry login is not needed for pulls.
 
+### Upgrading from 2.4.2
+
+Audit-file failures remain visible in `/readyz` but no longer remove the pod
+from Service endpoints by default. Set `audit.requiredForReadiness=true` where
+the file is the record of account. Chart-managed file output now rotates at
+50Mi with three backups; set both rotation values to zero only when an external
+rotation mechanism owns retention.
+
 ### Upgrading from 2.3 or 2.4.0
 
 2.4 keeps `mcp.allowDestructive=false` and `audit.fileEnabled=false`. Existing
@@ -98,7 +106,8 @@ releases that need job configuration updates, build stops, queue cancellation,
 or node offlining must explicitly opt back in to the master destructive switch.
 File audit users must set `audit.fileEnabled=true` and provide rotated or
 bounded storage. Audit JSONL continues in the process logs in every
-configuration, and a failed configured file destination degrades `/readyz`.
+configuration. A failed file remains visible in `/readyz`; set
+`audit.requiredForReadiness=true` only when that copy must gate service.
 
 2.4.0 briefly enabled NetworkPolicy by default. 2.4.1 restores the opt-in
 default because a default-deny egress policy cannot select an external Jenkins
@@ -394,7 +403,10 @@ Tailscale production example demonstrates the proxy pattern.
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `audit.fileEnabled` | `false` | Records always go to process logs; file output is opt-in, affects readiness if unwritable, and is not rotated by the application |
+| `audit.fileEnabled` | `false` | Records always go to process logs; file output is an optional redundant copy |
+| `audit.requiredForReadiness` | `false` | When true, an unhealthy configured file returns 503 from `/readyz`; requires `fileEnabled=true` |
+| `audit.maxFileBytes` | `52428800` | Rotate before the next record would take the active file above 50Mi; set this and `backupCount` to zero together to disable rotation |
+| `audit.backupCount` | `3` | Retain three rotated files in addition to the active file; rotation uses an inter-process lock for shared PVCs |
 | `audit.storage.type` | `emptyDir` | Bounded to 256Mi by default; `pvc` needs `persistentVolumeClaim.claimName` |
 
 ## Example values files

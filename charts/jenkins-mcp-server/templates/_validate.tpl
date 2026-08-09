@@ -144,6 +144,15 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- fail (printf "jenkins.caBundlePath (%s) and jenkins.caBundle.existingSecret (%s) are both set. caBundlePath wins and the mounted Secret is ignored. Use one." .Values.jenkins.caBundlePath $ca.existingSecret) }}
 {{- end }}
 
+{{- /* Audit readiness and rotation have no effect without file output. The
+       rotation pair must be enabled or disabled together. */ -}}
+{{- if and .Values.audit.requiredForReadiness (not .Values.audit.fileEnabled) }}
+{{- fail "audit.requiredForReadiness=true requires audit.fileEnabled=true; there is no audit file to require otherwise." }}
+{{- end }}
+{{- if ne (gt (int .Values.audit.maxFileBytes) 0) (gt (int .Values.audit.backupCount) 0) }}
+{{- fail "audit.maxFileBytes and audit.backupCount must either both be zero (rotation disabled) or both be positive." }}
+{{- end }}
+
 {{- /* minibridge settings do nothing unless the proxy is enabled. Silently
        ignoring guardrails or a tool policy is a security-relevant surprise. */ -}}
 {{- if not .Values.minibridge.enabled }}

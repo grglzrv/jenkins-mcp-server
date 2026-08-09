@@ -32,6 +32,11 @@ def readiness(
     # to the process logs.
     audit_ok = True
     if audit and audit.path:
+        # A health check is the only activity guaranteed while a pod is idle.
+        # Re-probe in a single background thread: a hung PVC must not delay the
+        # readiness response when the redundant file is explicitly optional.
+        if not audit.healthy:
+            audit.reprobe_in_background()
         audit_ok = audit.healthy
         checks["audit_log_writable"] = audit_ok
         if not audit_ok and audit.last_error:

@@ -1199,12 +1199,22 @@
     "audit": {
       "type": "object",
       "additionalProperties": false,
+      "required": [
+        "fileEnabled",
+        "requiredForReadiness",
+        "path",
+        "maxFileBytes",
+        "backupCount",
+        "storage"
+      ],
       "properties": {
         "fileEnabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Write a redundant JSONL audit copy to a file in addition to process logs."
         },
         "path": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "storage": {
           "type": "object",
@@ -1242,7 +1252,19 @@
           }
         },
         "requiredForReadiness": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Fail readiness when configured audit file output is unhealthy."
+        },
+        "maxFileBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Rotate the active audit file before the next record would exceed this size; zero disables rotation when backupCount is also zero."
+        },
+        "backupCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Number of rotated audit files to retain; zero disables rotation when maxFileBytes is also zero."
         }
       }
     },

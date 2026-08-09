@@ -136,6 +136,8 @@ mcp:
 
 audit:
   fileEnabled: false                   # process-log JSONL remains enabled
+  # When enabling the file, defaults retain an active 50Mi file + 3 backups.
+  requiredForReadiness: false          # true only if the file must fail closed
 
 networkPolicy:
   # Disabled for a firewall-protected external Jenkins URL. Enable only after

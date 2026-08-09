@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 from jenkins_mcp_server.audit import AuditLogger
@@ -58,29 +59,34 @@ def test_unwritable_audit_file_does_not_take_the_pod_out_of_service(tmp_path) ->
     Records also reach the process logs, which is the durable path in a
     cluster. Failing readiness here removes every replica from the Service at
     once, because a shared PVC is one volume and identically sized emptyDirs
-    fill at the same rate under the same load.
+    can fail together under similar load.
     """
+    audit = _broken_audit(tmp_path)
     settings = Settings(
         JENKINS_URL="https://jenkins.test",
         JENKINS_USERNAME="u",
         JENKINS_TOKEN="t",
+        MCP_AUDIT_LOG_PATH=audit.path,
     )
-    ready, payload = readiness(settings, _broken_audit(tmp_path))
+    ready, payload = readiness(settings, audit)
     assert ready is True
     # The failure must still be visible to whoever looks.
     assert payload["checks"]["audit_log_writable"] is False
-    assert "audit_log_error" in payload["checks"]
+    assert payload["checks"]["audit_log_error"] == "NotADirectoryError"
+    assert str(tmp_path) not in str(payload)
 
 
 def test_audit_can_be_made_required_for_readiness(tmp_path) -> None:
     """Where the file is the record of account, the operator can demand it."""
+    audit = _broken_audit(tmp_path)
     settings = Settings(
         JENKINS_URL="https://jenkins.test",
         JENKINS_USERNAME="u",
         JENKINS_TOKEN="t",
+        MCP_AUDIT_LOG_PATH=audit.path,
         MCP_AUDIT_REQUIRED_FOR_READINESS=True,
     )
-    ready, payload = readiness(settings, _broken_audit(tmp_path))
+    ready, payload = readiness(settings, audit)
     assert ready is False
     assert payload["status"] == "not_ready"
 
@@ -93,11 +99,56 @@ def test_a_healthy_audit_file_is_reported_and_stays_ready(tmp_path) -> None:
             JENKINS_URL="https://jenkins.test",
             JENKINS_USERNAME="u",
             JENKINS_TOKEN="t",
+            MCP_AUDIT_LOG_PATH=audit.path,
             MCP_AUDIT_REQUIRED_FOR_READINESS=required,
         )
         ready, payload = readiness(settings, audit)
         assert ready is True
         assert payload["checks"]["audit_log_writable"] is True
+
+
+def test_readiness_reprobes_and_recovers_an_idle_audit_file(tmp_path) -> None:
+    audit = _broken_audit(tmp_path)
+    settings = Settings(
+        JENKINS_URL="https://jenkins.test",
+        JENKINS_USERNAME="u",
+        JENKINS_TOKEN="t",
+        MCP_AUDIT_LOG_PATH=audit.path,
+        MCP_AUDIT_REQUIRED_FOR_READINESS=True,
+    )
+    assert readiness(settings, audit)[0] is False
+
+    blocker = tmp_path / "file"
+    blocker.unlink()
+    deadline = time.monotonic() + 1
+    while not audit.healthy and time.monotonic() < deadline:
+        readiness(settings, audit)
+        time.sleep(0.01)
+    ready, payload = readiness(settings, audit)
+    assert ready is True
+    assert payload["checks"]["audit_log_writable"] is True
+    assert "audit_log_error" not in payload["checks"]
+
+
+def test_optional_audit_reprobe_never_blocks_readiness(tmp_path) -> None:
+    audit = _broken_audit(tmp_path)
+    settings = Settings(
+        JENKINS_URL="https://jenkins.test",
+        JENKINS_USERNAME="u",
+        JENKINS_TOKEN="t",
+        MCP_AUDIT_LOG_PATH=audit.path,
+    )
+    audit._io_lock.acquire()
+    try:
+        started = time.monotonic()
+        ready, payload = readiness(settings, audit)
+        elapsed = time.monotonic() - started
+    finally:
+        audit._io_lock.release()
+
+    assert ready is True
+    assert payload["checks"]["audit_log_writable"] is False
+    assert elapsed < 0.1
 
 
 def test_missing_jenkins_configuration_still_fails_readiness() -> None:
