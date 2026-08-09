@@ -2,10 +2,13 @@
 {{- if and (ne .Values.podDisruptionBudget.minAvailable nil) (ne .Values.podDisruptionBudget.maxUnavailable nil) }}
 {{- fail "configure only one of podDisruptionBudget.minAvailable or podDisruptionBudget.maxUnavailable" }}
 {{- end }}
+{{- if and (eq .Values.podDisruptionBudget.minAvailable nil) (eq .Values.podDisruptionBudget.maxUnavailable nil) }}
+{{- fail "configure one of podDisruptionBudget.minAvailable or podDisruptionBudget.maxUnavailable when the PodDisruptionBudget is enabled" }}
+{{- end }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "jenkins-mcp-server.fullname" . }}
+  name: {{ include "jenkins-mcp-server.fullname" . | quote }}
   labels:
     {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
 spec:

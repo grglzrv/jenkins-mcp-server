@@ -89,6 +89,13 @@ jobs:
       - uses: azure/setup-helm@v5
         with:
           version: v4.2.3
+      - name: Install kubeconform
+        env:
+          KUBECONFORM_VERSION: v0.8.0
+        run: |
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" kubeconform
+          install "$RUNNER_TEMP/kubeconform" /usr/local/bin/kubeconform
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -165,6 +172,8 @@ jobs:
             helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
               -f "$f" --set jenkins.credentials.create.jenkinsApiToken=ci-placeholder > /dev/null
           done
+      - name: Strictly validate every rendered chart manifest
+        run: ./scripts/validate_helm_renders.sh
       - name: Build the kustomize targets
         run: |
           for d in base overlays/production minibridge; do

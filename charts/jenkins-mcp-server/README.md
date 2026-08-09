@@ -59,7 +59,7 @@ creates the credentials Secret.
 ```bash
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.3.2 \
+  --version 2.3.3 \
   --namespace jenkins-mcp \
   --create-namespace \
   --set jenkins.url=https://jenkins.example.com \
@@ -81,7 +81,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.3.2 \
+  --version 2.3.3 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -151,8 +151,10 @@ fails the render rather than silently producing nothing.
 ## Values reference
 
 Only the keys most people change. `values.yaml` documents every option inline,
-and `values.schema.json` validates them — an unknown key fails the render rather
-than being silently ignored.
+and `values.schema.json` validates them. Unknown chart-owned keys, including
+nested typos, fail the render rather than being silently ignored; documented
+Kubernetes/ESO pass-through objects such as annotations, resources, provider,
+and pod scheduling fields remain open by design.
 
 ### Connection
 
@@ -205,6 +207,10 @@ jenkins:
 Selecting any source other than `create` means disabling `create`, since
 exactly one may be enabled.
 
+The two credential environment variables must resolve to distinct Secret keys.
+The chart rejects a split reference whose Secret name and key are identical for
+both fields, and it rejects deprecated chart-managed key overrides that collide.
+
 The chart-managed source exposes purpose-based credential values and writes
 them to the stable runtime Secret keys `JENKINS_USERNAME` and `JENKINS_TOKEN`:
 
@@ -244,7 +250,10 @@ rotation because environment variables in a running process are immutable.
 target key names. `targetUsernameKey` and `targetTokenKey` must differ. The two
 remote keys may match only when `usernameRemoteProperty` and
 `tokenRemoteProperty` select different fields from one structured remote
-secret. For the normal explicit-data form, keep the complete contract visible:
+secret. Every `extraData[].secretKey` must also be unique. ESO creation and
+deletion policies are checked as a compatible pair; `CreateOrMerge` requires
+the `external-secrets.io/v1` API. For the normal explicit-data form, keep the
+complete contract visible:
 
 ```yaml
 jenkins:
@@ -323,6 +332,7 @@ does not render direct-listener variables into the ConfigMap.
 | `podDisruptionBudget.minAvailable` | `1` | Must be below the minimum pod count, or drains block. Enforced |
 | `revisionHistoryLimit` | `5` | |
 | `probes.*` | enabled | Startup, readiness, liveness |
+| `test.image.*` | `busybox:1.37`, `IfNotPresent` | Image used only by `helm test`; override for a private registry or mirror |
 | `terminationGracePeriodSeconds` | `30` | |
 | `nodeSelector`, `tolerations`, `affinity`, `topologySpreadConstraints`, `priorityClassName`, `podAnnotations`, `podLabels`, `extraVolumes`, `extraVolumeMounts` | standard | |
 | `podSecurityContext`, `securityContext` | hardened | Non-root uid 10001, read-only root filesystem, all capabilities dropped, seccomp `RuntimeDefault` |
@@ -402,7 +412,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.3.2
+NEW_VERSION=2.3.3
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

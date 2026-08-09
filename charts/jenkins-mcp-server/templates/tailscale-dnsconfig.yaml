@@ -2,7 +2,7 @@
 apiVersion: tailscale.com/v1alpha1
 kind: DNSConfig
 metadata:
-  name: {{ .Values.tailscale.magicDNS.name }}
+  name: {{ .Values.tailscale.magicDNS.name | quote }}
   labels:
     {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
 spec:

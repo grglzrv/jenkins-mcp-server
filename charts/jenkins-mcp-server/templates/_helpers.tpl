@@ -23,14 +23,23 @@
 helm.sh/chart: {{ include "jenkins-mcp-server.chart" . }}
 {{ include "jenkins-mcp-server.selectorLabels" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
 app.kubernetes.io/part-of: jenkins-mcp-server
 app.kubernetes.io/component: mcp-server
 {{- end }}
 
+{{- define "jenkins-mcp-server.testLabels" -}}
+helm.sh/chart: {{ include "jenkins-mcp-server.chart" . | quote }}
+{{ include "jenkins-mcp-server.selectorLabels" . }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+app.kubernetes.io/part-of: {{ "jenkins-mcp-server" | quote }}
+app.kubernetes.io/component: {{ "helm-test" | quote }}
+{{- end }}
+
 {{- define "jenkins-mcp-server.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "jenkins-mcp-server.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/instance: {{ .Release.Name | quote }}
 {{- end }}
 
 {{- define "jenkins-mcp-server.serviceAccountName" -}}
@@ -149,9 +158,9 @@ every secret arrives via secretKeyRef so nothing sensitive lives in values.
 - name: MINIBRIDGE_MODE
   value: {{ eq $mb.mode "http" | ternary "aio" "backend" | quote }}
 - name: MINIBRIDGE_LISTEN
-  value: ":{{ $mb.port }}"
+  value: {{ printf ":%v" $mb.port | quote }}
 - name: MINIBRIDGE_HEALTH_LISTEN
-  value: ":{{ $mb.healthPort }}"
+  value: {{ printf ":%v" $mb.healthPort | quote }}
 - name: MINIBRIDGE_ENDPOINT_MCP
   value: {{ .Values.mcp.path | quote }}
 {{- with $mb.log.level }}
@@ -170,19 +179,19 @@ every secret arrives via secretKeyRef so nothing sensitive lives in values.
   value: {{ $mb.mcp.useTempDir | quote }}
 {{- if $mb.tls.enabled }}
 - name: MINIBRIDGE_TLS_SERVER_CERT
-  value: /tls/{{ $mb.tls.certKey }}
+  value: {{ printf "/tls/%s" $mb.tls.certKey | quote }}
 - name: MINIBRIDGE_TLS_SERVER_KEY
-  value: /tls/{{ $mb.tls.keyKey }}
+  value: {{ printf "/tls/%s" $mb.tls.keyKey | quote }}
 {{- if or $mb.tls.passSecretKey $mb.tls.pass.valueFrom.name }}
 - name: MINIBRIDGE_TLS_SERVER_KEY_PASS
   valueFrom:
     secretKeyRef:
-      name: {{ default $mb.tls.existingSecret $mb.tls.pass.valueFrom.name }}
-      key: {{ default $mb.tls.passSecretKey $mb.tls.pass.valueFrom.key }}
+      name: {{ default $mb.tls.existingSecret $mb.tls.pass.valueFrom.name | quote }}
+      key: {{ default $mb.tls.passSecretKey $mb.tls.pass.valueFrom.key | quote }}
 {{- end }}
 {{- with $mb.tls.clientCASecretKey }}
 - name: MINIBRIDGE_TLS_SERVER_CLIENT_CA
-  value: /tls/{{ . }}
+  value: {{ printf "/tls/%s" . | quote }}
 {{- end }}
 {{- end }}
 - name: MINIBRIDGE_POLICER_ENFORCE
@@ -200,8 +209,8 @@ every secret arrives via secretKeyRef so nothing sensitive lives in values.
 - name: MINIBRIDGE_POLICER_HTTP_BEARER_TOKEN
   valueFrom:
     secretKeyRef:
-      name: {{ . }}
-      key: {{ $mb.policer.http.token.secretKey }}
+      name: {{ . | quote }}
+      key: {{ $mb.policer.http.token.secretKey | quote }}
 {{- end }}
 {{- else if $mb.policer.rego.enabled }}
 - name: MINIBRIDGE_POLICER_TYPE
@@ -221,7 +230,7 @@ every secret arrives via secretKeyRef so nothing sensitive lives in values.
 - name: BASIC_AUTH_SECRET
   valueFrom:
     secretKeyRef:
-      name: {{ required "minibridge.basicAuth.existingSecret is required when basicAuth is enabled" $mb.basicAuth.existingSecret }}
-      key: {{ $mb.basicAuth.secretKey }}
+      name: {{ required "minibridge.basicAuth.existingSecret is required when basicAuth is enabled" $mb.basicAuth.existingSecret | quote }}
+      key: {{ required "minibridge.basicAuth.secretKey is required when basicAuth is enabled" $mb.basicAuth.secretKey | quote }}
 {{- end }}
 {{- end -}}

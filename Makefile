@@ -3,7 +3,7 @@ VERSION ?= $(shell cat VERSION)
 CHART := charts/jenkins-mcp-server
 IMAGE ?= ghcr.io/grglzrv/jenkins-mcp-server
 
-.PHONY: install lint typecheck test coverage build verify-version version helm-lint helm-template helm-package docker-build integration validate-manifests clean
+.PHONY: install lint typecheck test coverage build verify-version version helm-lint helm-template helm-validate helm-package docker-build integration validate-manifests clean
 
 install:
 	python -m pip install -e '.[dev]'
@@ -40,6 +40,9 @@ helm-lint:
 helm-template:
 	helm template jenkins-mcp $(CHART) --namespace jenkins-mcp --set jenkins.url=https://jenkins.example.com --set jenkins.credentials.create.jenkinsUserId=local --set jenkins.credentials.create.jenkinsApiToken=local-placeholder > /tmp/jenkins-mcp.yaml
 	helm template jenkins-mcp $(CHART) --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/jenkins-mcp-production.yaml
+
+helm-validate:
+	./scripts/validate_helm_renders.sh $(CHART)
 
 helm-package:
 	mkdir -p dist

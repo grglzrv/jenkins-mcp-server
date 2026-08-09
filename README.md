@@ -231,7 +231,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.3.2 \
+  --version 2.3.3 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -263,6 +263,10 @@ must be different; the two remote keys may be the same when properties select
 different fields from one structured secret. The username remote value is the
 same Jenkins login/User search-filter ID described above, and the API token must
 belong to that account.
+Split references may not point both fields at the same Secret key. External
+Secrets extra target keys must be unique, and its creation/deletion policy pair
+must be supported by the selected ESO API version. Minibridge client-auth and
+remote-policer credentials must never reuse either Jenkins credential key.
 Changing chart-managed credentials rolls the pods automatically; Kubernetes
 does not update environment variables in running pods, so rotate existing or
 ESO-managed credentials with a workload restart.
@@ -514,7 +518,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.3.2
+NEW_VERSION=2.3.3
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 

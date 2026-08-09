@@ -4,7 +4,7 @@ metadata:
   # Numeric values pass through `int` before quoting. Helm renders a large
   # number such as 1000000 as "1e+06" otherwise, which the server rejects at
   # startup, and every pod crash-loops.
-  name: {{ include "jenkins-mcp-server.fullname" . }}
+  name: {{ include "jenkins-mcp-server.fullname" . | quote }}
   labels:
     {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
 data:

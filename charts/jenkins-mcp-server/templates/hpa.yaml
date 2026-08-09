@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "jenkins-mcp-server.fullname" . }}
+  name: {{ include "jenkins-mcp-server.fullname" . | quote }}
   labels:
     {{- include "jenkins-mcp-server.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "jenkins-mcp-server.fullname" . }}
+    name: {{ include "jenkins-mcp-server.fullname" . | quote }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:

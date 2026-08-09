@@ -269,6 +269,13 @@ jobs:
       - uses: azure/setup-helm@v5
         with:
           version: v4.2.3
+      - name: Install kubeconform
+        env:
+          KUBECONFORM_VERSION: v0.8.0
+        run: |
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" kubeconform
+          install "$RUNNER_TEMP/kubeconform" /usr/local/bin/kubeconform
       - name: Lint, render, and package
         run: |
           helm lint --strict charts/jenkins-mcp-server \
@@ -286,6 +293,7 @@ jobs:
             --set jenkins.credentials.create.jenkinsApiToken=release-placeholder > /tmp/default.yaml
           helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/production.yaml
           helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/external-secrets-gcp-workload-identity.yaml > /tmp/gcp.yaml
+          ./scripts/validate_helm_renders.sh
           mkdir -p dist
           helm package charts/jenkins-mcp-server --destination dist
           sha256sum dist/*.tgz > dist/SHA256SUMS
