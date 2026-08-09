@@ -117,8 +117,11 @@ jobs:
           grep -q "jenkins.url is required" /tmp/nourl.yaml
       - name: Render default chart
         run: |
+          # The chart creates the Secret by default, so a render needs
+          # credentials as well as the URL.
           helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
             --set jenkins.url=https://jenkins.example.com \
+<<<<<<< Updated upstream
             --set jenkins.credentials.create.jenkinsUserId=ci \
             --set jenkins.credentials.create.jenkinsApiToken=ci-placeholder > /tmp/default.yaml
       - name: Render major-version-2 credential compatibility
@@ -145,6 +148,10 @@ jobs:
             echo "expected mixed current and deprecated credentials to fail"
             exit 1
           fi
+=======
+            --set jenkins.credentials.create.username=ci \
+            --set jenkins.credentials.create.token=ci-placeholder > /tmp/default.yaml
+>>>>>>> Stashed changes
       - name: Render production example
         run: helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/production.yaml
       - name: Render Minibridge Streamable HTTP with a custom endpoint
