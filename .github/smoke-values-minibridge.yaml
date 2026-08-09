@@ -54,3 +54,11 @@ resources:
 
 mcp:
   allowedJobs: "*"
+
+# Minibridge exposes its own health endpoint, while server audit JSONL remains
+# in process logs. Keep the optional file copy explicit and disabled here.
+audit:
+  fileEnabled: false
+  requiredForReadiness: false
+  maxFileBytes: 52428800
+  backupCount: 3

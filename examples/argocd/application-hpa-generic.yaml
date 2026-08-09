@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 2.4.2
+    targetRevision: 2.5.0
     helm:
       releaseName: jenkins-mcp
       valuesObject:
@@ -45,6 +45,9 @@ spec:
 
         audit:
           fileEnabled: false
+          requiredForReadiness: false
+          maxFileBytes: 52428800
+          backupCount: 3
 
         networkPolicy:
           # Jenkins is external and protected independently. Enable this only

@@ -40,6 +40,66 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.5.0] - 2026-08-09
+
+### Highlights
+
+- An unwritable audit file no longer removes every replica from service.
+
+### New Features
+
+- `audit.requiredForReadiness` (`MCP_AUDIT_REQUIRED_FOR_READINESS`, default
+  `false`) makes a writable audit file a readiness condition, for deployments
+  where the file is the record of account rather than a redundant copy.
+- Optional audit-file output supports bounded size rotation through
+  `audit.maxFileBytes` / `MCP_AUDIT_MAX_BYTES` and `audit.backupCount` /
+  `MCP_AUDIT_BACKUP_COUNT`. The chart retains an active 50Mi file and three
+  backups by default, below its 256Mi `emptyDir` limit.
+
+### Improvements
+
+- `/readyz` reports `audit_log_writable` and, when it fails, `audit_log_error`
+  whether or not the check is required, so the problem stays visible either way.
+- A failed audit path is actively re-probed by readiness until it recovers,
+  even when no Jenkins action occurs. Error details stay in process logs while
+  `/readyz` exposes only the exception class, not internal filesystem paths.
+
+### Bug Fixes
+
+- A failed audit-file write took the pod out of service. Records also go to the
+  process logs, which the chart already documents as the durable path, so the
+  file is a redundant copy. Failing readiness on it removed every replica at
+  once: a shared PVC is one volume, and identically sized `emptyDir` volumes can
+  fail together under similar load. That turned a recoverable disk condition
+  into a total outage while the process-log audit trail itself was intact.
+
+### Breaking Changes
+
+- The default readiness behavior changes for deployments that enable audit-file
+  output: a failed redundant copy is reported but does not return 503. Set
+  `audit.requiredForReadiness: true` before upgrading when the file must fail
+  closed.
+
+### Known Issues
+
+- Rotation is size-based and does not compress backups. Size the configured
+  file and backup count for the required retention, or collect process logs.
+
+### Security
+
+- Audit records are unaffected: they are written to the process logs before the
+  file, so nothing that was recorded before is lost now. Deployments that treat
+  the file as the record of account should set `audit.requiredForReadiness:
+  true` to keep failing closed.
+- Audit files and rotation locks are created with owner-only permissions, and
+  readiness no longer returns raw operating-system error strings.
+
+### Upgrade Notes
+
+- Existing file-audit deployments that require fail-closed behavior must set
+  `audit.requiredForReadiness: true`. Set both rotation values to zero only when
+  an external rotation mechanism owns retention.
+
 ## [2.4.2] - 2026-08-09
 
 ### Highlights

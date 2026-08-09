@@ -24,9 +24,32 @@ def readiness(
     }
     if settings.jenkins_ca_bundle:
         checks["jenkins_ca_bundle_exists"] = Path(settings.jenkins_ca_bundle).is_file()
+    # Reported either way so the failure is visible in /readyz, but only
+    # required when the operator has asked for it. Gating readiness on the file
+    # turns a full audit volume into a service outage: every replica fails the
+    # check at once, whether they share a PVC or fill identically sized
+    # emptyDirs at the same rate, while the records themselves are still going
+    # to the process logs.
+    audit_ok = True
     if audit and audit.path:
-        checks["audit_log_writable"] = audit.healthy
-    ready = all(bool(value) for value in checks.values())
+        # A health check is the only activity guaranteed while a pod is idle.
+        # Re-probe in a single background thread: a hung PVC must not delay the
+        # readiness response when the redundant file is explicitly optional.
+        if not audit.healthy:
+            audit.reprobe_in_background()
+        audit_ok = audit.healthy
+        checks["audit_log_writable"] = audit_ok
+        if not audit_ok and audit.last_error:
+            checks["audit_log_error"] = audit.last_error
+
+    required = [
+        value
+        for name, value in checks.items()
+        if name not in {"audit_log_writable", "audit_log_error"}
+    ]
+    ready = all(bool(value) for value in required)
+    if settings.audit_required_for_readiness:
+        ready = ready and audit_ok
     return ready, {"status": "ready" if ready else "not_ready", "checks": checks}
 
 

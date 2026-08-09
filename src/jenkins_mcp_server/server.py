@@ -31,7 +31,11 @@ def create_client(
         allow_job_update=settings.allow_job_update,
         allow_build_stop=settings.allow_build_stop,
     )
-    audit_logger = audit or AuditLogger(settings.audit_log_path)
+    audit_logger = audit or AuditLogger(
+        settings.audit_log_path,
+        settings.audit_max_bytes,
+        settings.audit_backup_count,
+    )
     if audit is None:
         audit_logger.probe()
     return JenkinsClient(settings, policy, audit_logger)
@@ -39,7 +43,12 @@ def create_client(
 
 @lru_cache
 def get_audit_logger() -> AuditLogger:
-    audit = AuditLogger(get_settings().audit_log_path)
+    settings = get_settings()
+    audit = AuditLogger(
+        settings.audit_log_path,
+        settings.audit_max_bytes,
+        settings.audit_backup_count,
+    )
     audit.probe()
     return audit
 

@@ -64,3 +64,11 @@ mcp:
   allowJobUpdate: true
   allowBuildStop: true
   allowedJobs: "*"
+
+# This job tests Jenkins tools through Minibridge, not optional file storage.
+# Keep the process-log audit path and declare the file policy explicitly.
+audit:
+  fileEnabled: false
+  requiredForReadiness: false
+  maxFileBytes: 52428800
+  backupCount: 3

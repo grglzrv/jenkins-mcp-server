@@ -84,6 +84,9 @@ mcp:
 
 audit:
   fileEnabled: false
+  requiredForReadiness: false
+  maxFileBytes: 52428800
+  backupCount: 3
 
 networkPolicy:
   # Disabled so the external Jenkins hostname remains reachable. When enabling,

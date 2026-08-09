@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import stat
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -70,6 +71,37 @@ def test_settings_reject_invalid_operational_limits(name: str, value: int) -> No
         make_settings(**{name: value})
 
 
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"MCP_AUDIT_REQUIRED_FOR_READINESS": True},
+        {"MCP_AUDIT_MAX_BYTES": 1024},
+        {"MCP_AUDIT_BACKUP_COUNT": 2},
+        {"MCP_AUDIT_MAX_BYTES": 1024, "MCP_AUDIT_BACKUP_COUNT": 2},
+        {
+            "MCP_AUDIT_LOG_PATH": "/data/audit.jsonl",
+            "MCP_AUDIT_MAX_BYTES": 1024,
+        },
+    ],
+)
+def test_settings_reject_incomplete_audit_configuration(
+    overrides: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError, match="AUDIT|audit"):
+        make_settings(**overrides)
+
+
+def test_settings_accept_complete_rotated_audit_configuration() -> None:
+    configured = make_settings(
+        MCP_AUDIT_LOG_PATH="/data/audit.jsonl",
+        MCP_AUDIT_REQUIRED_FOR_READINESS=True,
+        MCP_AUDIT_MAX_BYTES=1024,
+        MCP_AUDIT_BACKUP_COUNT=2,
+    )
+    assert configured.audit_max_bytes == 1024
+    assert configured.audit_backup_count == 2
+
+
 def test_audit_file_output(tmp_path: Path) -> None:
     path = tmp_path / "audit" / "events.jsonl"
     AuditLogger(path).emit("job.create", "success", job="demo")
@@ -78,6 +110,51 @@ def test_audit_file_output(tmp_path: Path) -> None:
     assert record["outcome"] == "success"
     assert record["job"] == "demo"
     assert record["ts"].endswith("+00:00")
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_audit_identity_fields_cannot_be_overridden() -> None:
+    record = json.loads(
+        AuditLogger._line(
+            "build.trigger",
+            "success",
+            {"ts": "forged", "status": 201},
+        )
+    )
+    assert record["action"] == "build.trigger"
+    assert record["outcome"] == "success"
+    assert record["ts"] != "forged"
+
+
+def test_audit_file_rotation_is_bounded_and_keeps_valid_jsonl(tmp_path: Path) -> None:
+    path = tmp_path / "audit.jsonl"
+    audit = AuditLogger(path, max_bytes=240, backup_count=2)
+    audit.probe()
+    assert path.read_bytes() == b""
+
+    for number in range(12):
+        audit.emit("build.trigger", "success", number=number)
+
+    files = [path, path.with_name("audit.jsonl.1"), path.with_name("audit.jsonl.2")]
+    assert all(candidate.is_file() for candidate in files)
+    assert not path.with_name("audit.jsonl.3").exists()
+    seen: list[int] = []
+    for candidate in files:
+        for line in candidate.read_text(encoding="utf-8").splitlines():
+            seen.append(json.loads(line)["number"])
+    assert 11 in seen
+    assert len(seen) < 12
+
+
+@pytest.mark.parametrize("values", [(-1, 1), (1, -1), (1, 0), (0, 1)])
+def test_audit_logger_rejects_invalid_rotation_pairs(values: tuple[int, int]) -> None:
+    with pytest.raises(ValueError):
+        AuditLogger(Path("audit.jsonl"), max_bytes=values[0], backup_count=values[1])
+
+
+def test_audit_logger_rejects_rotation_without_a_path() -> None:
+    with pytest.raises(ValueError, match="path"):
+        AuditLogger(max_bytes=1024, backup_count=2)
 
 
 def test_health_server_endpoints() -> None:

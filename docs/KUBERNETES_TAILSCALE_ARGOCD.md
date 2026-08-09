@@ -38,6 +38,12 @@ MCP server Pod
 6. Create the Jenkins credential Secret through your secret manager.
 7. Choose the plain image or the `-minibridge` Kustomize overlay. The latter is
    one bundled container and blocks `@destructive` in the shipped example.
+8. Choose the audit sink deliberately. The raw manifests keep the optional file
+   copy disabled and emit JSONL to process logs. If you add a writable audit
+   volume and `MCP_AUDIT_LOG_PATH`, set positive `MCP_AUDIT_MAX_BYTES` and
+   `MCP_AUDIT_BACKUP_COUNT` values together. Set
+   `MCP_AUDIT_REQUIRED_FOR_READINESS=true` only when that file is the record of
+   account and a write failure must remove the pod from Service endpoints.
 
 ## CoreDNS
 
@@ -120,6 +126,14 @@ kubectl rollout status deployment/jenkins-mcp -n jenkins-mcp
 kubectl get proxygroup,dnsconfig
 kubectl get ingress,svc,pods -n jenkins-mcp
 kubectl logs -n jenkins-mcp deploy/jenkins-mcp
+kubectl exec -n jenkins-mcp deploy/jenkins-mcp -- \
+  python -c "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8081/readyz')))"
 ```
+
+When file audit is enabled, the readiness payload always reports
+`audit_log_writable`. A false value returns HTTP 503 only in fail-closed mode;
+otherwise it stays visible while process-log auditing and MCP traffic continue.
+The Minibridge deployment exposes its own `/` health endpoint instead, so use
+the server process logs to monitor audit-file degradation in that mode.
 
 From a tagged Hermes node, verify TLS and the MCP endpoint with the MCP Inspector or Hermes itself. A plain browser GET is not a valid MCP protocol test.

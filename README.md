@@ -233,7 +233,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.4.2 \
+  --version 2.5.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -252,7 +252,10 @@ not unexpectedly blocked. Enable it only after modeling both MCP client ingress
 and Jenkins egress; the Tailscale example supplies a narrowly selectable proxy
 path. Destructive server actions and file audit logging are also off by default.
 Audit JSONL always remains available in the process logs (stderr for stdio
-transport). If configured file output fails, `/readyz` reports the degradation.
+transport). If configured file output fails, `/readyz` reports the degradation;
+it gates traffic only when `audit.requiredForReadiness=true`. Chart-managed file
+output rotates at 50Mi with three backups by default, keeping the file set below
+the default 256Mi `emptyDir` limit.
 
 The chart-managed source is enabled by default so Helm can create the Secret
 without a separate pre-install step. Set
@@ -529,7 +532,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.4.2
+NEW_VERSION=2.5.0
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 

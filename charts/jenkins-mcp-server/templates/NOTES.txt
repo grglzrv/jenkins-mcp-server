@@ -42,6 +42,17 @@ Server policy in effect (applies with or without minibridge):
   Destructive master switch: {{ .Values.mcp.allowDestructive }}{{ if not .Values.mcp.allowDestructive }} (job update/delete, build stop, queue cancel, and node offline are blocked){{ end }}
   Job delete: {{ .Values.mcp.allowJobDelete }}{{ if not .Values.mcp.allowJobDelete }} (irreversible, off by default){{ end }}
   Admin requests: {{ .Values.mcp.allowAdminRequest }}
+{{- if .Values.audit.fileEnabled }}
+
+Audit file copy:
+  Path: {{ .Values.audit.path }}
+  Required for readiness: {{ .Values.audit.requiredForReadiness }}
+  Rotation: {{ if and (gt (int .Values.audit.maxFileBytes) 0) (gt (int .Values.audit.backupCount) 0) }}{{ .Values.audit.maxFileBytes }} bytes, {{ .Values.audit.backupCount }} backups{{ else }}disabled; an external retention mechanism is required{{ end }}
+  Storage: {{ .Values.audit.storage.type }}
+{{- else }}
+
+Audit file copy is disabled; JSONL audit records remain in process logs.
+{{- end }}
 {{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowInternetEgress) (not .Values.tailscale.egress.enabled) }}
 
 NetworkPolicy egress is restricted to DNS and explicit additionalEgress rules.

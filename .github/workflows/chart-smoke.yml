@@ -117,6 +117,30 @@ jobs:
           echo "ready replicas: ${ready:-0}"
           [ "${ready:-0}" -ge 1 ]
 
+      - name: Audit file configuration is live and healthy
+        run: |
+          for pod in $(kubectl -n jenkins-mcp get pods \
+            -l app.kubernetes.io/instance=jenkins-mcp \
+            -o name); do
+            echo "checking $pod"
+            kubectl -n jenkins-mcp exec -i "$pod" -- python - <<'PY'
+          import json, os, stat, urllib.request
+          from pathlib import Path
+
+          assert os.environ["MCP_AUDIT_REQUIRED_FOR_READINESS"] == "true"
+          assert os.environ["MCP_AUDIT_MAX_BYTES"] == "65536"
+          assert os.environ["MCP_AUDIT_BACKUP_COUNT"] == "2"
+          path = Path(os.environ["MCP_AUDIT_LOG_PATH"])
+          lock = path.with_name(path.name + ".lock")
+          assert path.is_file() and lock.is_file()
+          assert stat.S_IMODE(path.stat().st_mode) == 0o600
+          assert stat.S_IMODE(lock.stat().st_mode) == 0o600
+          payload = json.load(urllib.request.urlopen("http://127.0.0.1:8081/readyz"))
+          assert payload["status"] == "ready"
+          assert payload["checks"]["audit_log_writable"] is True
+          PY
+          done
+
       - name: Helm test
         # Exercises the chart's own test pod, which reaches the health endpoint
         # through the Service. This is also the check that proves the

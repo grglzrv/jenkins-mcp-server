@@ -62,6 +62,9 @@ def test_241_security_defaults_are_consistent_across_runtime_and_deployments() -
     assert v["networkPolicy"]["allowSameNamespace"] is True
     assert v["networkPolicy"]["allowInternetEgress"] is False
     assert v["audit"]["fileEnabled"] is False
+    assert v["audit"]["requiredForReadiness"] is False
+    assert v["audit"]["maxFileBytes"] == 52_428_800
+    assert v["audit"]["backupCount"] == 3
     assert v["audit"]["storage"]["emptyDir"]["sizeLimit"] == "256Mi"
 
     config = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
@@ -111,6 +114,33 @@ def test_destructive_flags_are_passed_to_the_container() -> None:
     configmap = (CHART / "templates/configmap.yaml").read_text()
     for env in DESTRUCTIVE_ENV:
         assert env in configmap, f"{env} not wired into the ConfigMap"
+
+
+def test_audit_health_and_rotation_are_wired_and_validated() -> None:
+    configmap = (CHART / "templates/configmap.yaml").read_text()
+    for env in [
+        "MCP_AUDIT_LOG_PATH",
+        "MCP_AUDIT_REQUIRED_FOR_READINESS",
+        "MCP_AUDIT_MAX_BYTES",
+        "MCP_AUDIT_BACKUP_COUNT",
+    ]:
+        assert env in configmap
+
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    assert "requiredForReadiness=true requires audit.fileEnabled=true" in validate
+    assert "maxFileBytes and audit.backupCount" in validate
+
+    audit_schema = schema()["properties"]["audit"]
+    for key in [
+        "fileEnabled",
+        "requiredForReadiness",
+        "path",
+        "maxFileBytes",
+        "backupCount",
+        "storage",
+    ]:
+        assert key in audit_schema["properties"]
+        assert key in audit_schema["required"]
 
 
 def test_destructive_flags_are_in_the_schema() -> None:
@@ -594,7 +624,14 @@ def test_config_env_covers_every_supported_setting() -> None:
     # Credentials and the optional CA bundle come from the Secret. File audit is
     # deliberately omitted so process logs stay the unbounded-safe default.
     from_secret = {"JENKINS_USERNAME", "JENKINS_TOKEN", "JENKINS_CA_BUNDLE"}
-    intentionally_unset = {"MCP_AUDIT_LOG_PATH"}
+    # File health and rotation only have meaning when a path is set, so they are
+    # unset here for the same reason.
+    intentionally_unset = {
+        "MCP_AUDIT_LOG_PATH",
+        "MCP_AUDIT_REQUIRED_FOR_READINESS",
+        "MCP_AUDIT_MAX_BYTES",
+        "MCP_AUDIT_BACKUP_COUNT",
+    }
     allowed_missing = from_secret | intentionally_unset
     assert (src - cfg) <= allowed_missing, (
         f"config.env is missing {src - cfg - allowed_missing}"

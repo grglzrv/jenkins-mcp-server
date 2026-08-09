@@ -46,3 +46,12 @@ resources:
 
 mcp:
   allowedJobs: "AI/*,Platform/*"
+
+# Exercise the complete file-audit path in a real cluster. The unit tests use
+# tiny limits to force rotation; this smoke verifies the chart-created volume,
+# environment wiring, permissions, startup probe, and fail-closed readiness.
+audit:
+  fileEnabled: true
+  requiredForReadiness: true
+  maxFileBytes: 65536
+  backupCount: 2

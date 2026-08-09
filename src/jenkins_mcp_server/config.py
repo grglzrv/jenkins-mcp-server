@@ -54,6 +54,20 @@ class Settings(BaseSettings):
     allowed_jobs: str = Field(default="*", alias="MCP_ALLOWED_JOBS")
     max_log_bytes: int = Field(default=1_000_000, ge=1, alias="MCP_MAX_LOG_BYTES")
     audit_log_path: Path | None = Field(default=None, alias="MCP_AUDIT_LOG_PATH")
+    audit_max_bytes: int = Field(default=0, ge=0, alias="MCP_AUDIT_MAX_BYTES")
+    audit_backup_count: int = Field(
+        default=0,
+        ge=0,
+        le=100,
+        alias="MCP_AUDIT_BACKUP_COUNT",
+    )
+    # Whether an unwritable audit file should take the pod out of service.
+    # Off by default: records also go to the process logs, which is the durable
+    # path in a cluster, so a failed redundant copy should not stop the server
+    # answering requests it can still serve and audit.
+    audit_required_for_readiness: bool = Field(
+        default=False, alias="MCP_AUDIT_REQUIRED_FOR_READINESS"
+    )
 
     @field_validator("jenkins_url")
     @classmethod
@@ -76,8 +90,8 @@ class Settings(BaseSettings):
         return value.rstrip("/") or "/mcp"
 
     @model_validator(mode="after")
-    def _check_tls_settings(self) -> Settings:
-        """Reject a CA bundle combined with verification disabled.
+    def _check_cross_field_settings(self) -> Settings:
+        """Reject contradictory TLS and audit settings.
 
         The two settings contradict each other, and honouring either one would
         be a guess about intent, so fail instead of guessing.
@@ -89,6 +103,18 @@ class Settings(BaseSettings):
                 "Remove the bundle to disable verification, or set "
                 "JENKINS_VERIFY_TLS=true to verify against it."
             )
+        if self.audit_required_for_readiness and not self.audit_log_path:
+            raise ValueError(
+                "MCP_AUDIT_REQUIRED_FOR_READINESS requires MCP_AUDIT_LOG_PATH"
+            )
+        rotation_values = (self.audit_max_bytes, self.audit_backup_count)
+        if bool(rotation_values[0]) != bool(rotation_values[1]):
+            raise ValueError(
+                "MCP_AUDIT_MAX_BYTES and MCP_AUDIT_BACKUP_COUNT must either both "
+                "be zero or both be positive"
+            )
+        if any(rotation_values) and not self.audit_log_path:
+            raise ValueError("audit rotation requires MCP_AUDIT_LOG_PATH")
         return self
 
     @property
