@@ -130,8 +130,19 @@ jenkins:
 
 mcp:
   allowedJobs: "*"                     # narrow to the folders they named
+  allowDestructive: false              # master gate for irreversible actions
   allowJobDelete: false
   allowAdminRequest: false
+
+audit:
+  fileEnabled: false                   # stdout remains enabled
+
+networkPolicy:
+  enabled: true
+  allowSameNamespace: true
+  # This example's Jenkins URL is external. Prefer a narrower egress rule when
+  # its address range is known, or use the documented Tailscale egress path.
+  allowInternetEgress: true
 
 minibridge:
   enabled: true

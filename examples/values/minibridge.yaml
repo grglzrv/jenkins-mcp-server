@@ -24,6 +24,7 @@ jenkins:
 # Server-side policy still applies underneath minibridge and cannot be bypassed.
 mcp:
   allowedJobs: "AI/*,Platform/*"
+  allowDestructive: false
   allowJobDelete: false
   allowAdminRequest: false
 
@@ -66,3 +67,11 @@ minibridge:
   policer:
     # false logs violations and lets traffic through, useful when rolling out.
     enforce: true
+
+audit:
+  fileEnabled: false
+
+networkPolicy:
+  enabled: true
+  allowSameNamespace: true
+  allowInternetEgress: true

@@ -25,6 +25,7 @@ def policy(**overrides: object) -> Policy:
         "allow_admin_request": False,
         "job_patterns": ["*"],
         # These suites exercise destructive paths, so opt in explicitly.
+        "allow_destructive": True,
         "allow_job_delete": True,
     }
     values.update(overrides)

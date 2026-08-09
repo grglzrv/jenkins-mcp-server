@@ -24,7 +24,7 @@ class Policy:
     allow_node_write: bool
     allow_admin_request: bool
     job_patterns: list[str]
-    allow_destructive: bool = True
+    allow_destructive: bool = False
     allow_job_delete: bool = False
     allow_job_update: bool = True
     allow_build_stop: bool = True

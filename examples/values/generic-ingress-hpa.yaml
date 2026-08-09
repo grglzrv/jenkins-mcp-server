@@ -80,3 +80,14 @@ resources:
 
 mcp:
   allowedJobs: "AI/*,Platform/*"
+  allowDestructive: false
+
+audit:
+  fileEnabled: false
+
+networkPolicy:
+  enabled: true
+  allowSameNamespace: true
+  # Adjust to the namespace used by your ingress controller.
+  allowedNamespaces: [ingress-nginx]
+  allowInternetEgress: true

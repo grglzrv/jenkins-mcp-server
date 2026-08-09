@@ -42,6 +42,12 @@ After rotating an existing or ESO-managed Secret,
 restart the Deployment so the process receives the new environment variables;
 chart-managed changes trigger that rollout automatically.
 
+Every shipped Helm values example states the 2.4 security defaults explicitly:
+destructive actions and file audit logging are off, and NetworkPolicy is on.
+Examples using an external Jenkins URL opt in to internet egress; Tailscale
+examples instead allow only the Tailscale namespace. Adjust client namespace
+selectors before deploying rather than disabling the policy.
+
 ## Networking and scaling
 
 | Example | What it shows |
@@ -82,7 +88,7 @@ README, so users of either installation path see the same transport contract.
 | `../deploy/kubernetes/base` | Plain Deployment, Service, PDB and NetworkPolicy. Add an ingress overlay when external access is required. |
 | `../deploy/kubernetes/overlays/production` | The base plus the Tailscale proxy group, egress Service and DNSConfig. |
 | `../deploy/kubernetes/minibridge` | Kustomize overlay putting minibridge in front of the base. |
-| `../deploy/kubernetes/minibridge/standalone-deployment.yaml` | One self-contained file: Secret, ConfigMap, Deployment, Service. |
+| `../deploy/kubernetes/minibridge/standalone-deployment.yaml` | One self-contained file: Secret, ConfigMap, Deployment, Service, NetworkPolicy. |
 | `../deploy/kubernetes/secret.example.yaml` | Shape of the credentials Secret. |
 | `../deploy/kubernetes/external-secret-gcp.example.yaml` | Raw `ExternalSecret` for GCP Secret Manager. |
 
@@ -119,4 +125,6 @@ single-container Minibridge variant. Copy `.env.example` to `.env`, set the
 Jenkins URL and credentials, then run `docker compose up server` or
 `docker compose --profile minibridge up minibridge`. The Minibridge profile
 blocks only `@destructive` and leaves all other tool groups available.
-Its published endpoint is Streamable HTTP at `http://localhost:8000/mcp`.
+The server's own destructive master switch is also off. Audit logs go to stdout
+without an unbounded named volume. Its published endpoint is Streamable HTTP at
+`http://localhost:8000/mcp`.

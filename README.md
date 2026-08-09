@@ -231,7 +231,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.3.3 \
+  --version 2.4.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -243,6 +243,12 @@ ID and API token Secret references, a chart-managed development Secret, or
 External Secrets Operator. See
 [`per-field-secret-refs.yaml`](examples/values/per-field-secret-refs.yaml) for
 the split-secret form.
+
+The chart enables a default-deny NetworkPolicy. Same-namespace clients can
+reach MCP, while external Jenkins egress stays blocked until values explicitly
+enable it or provide a narrow rule; the Tailscale example supplies its own
+proxy egress. Destructive server actions and file audit logging are also off by
+default. Audit JSONL always remains available on stdout.
 
 The chart-managed source is enabled by default so Helm can create the Secret
 without a separate pre-install step. Set
@@ -402,7 +408,7 @@ removed from discovery as well as refused on call.
 | --- | --- |
 | Non-root, least privilege | uid 10001, all capabilities dropped, no privilege escalation, `RuntimeDefault` seccomp |
 | Immutable runtime | Read-only root filesystem with explicit writable mounts |
-| Irreversible actions opt-in | `delete_job` and `jenkins_admin_request` off by default; job paths are a glob allowlist and traversal segments are rejected |
+| Irreversible actions opt-in | The master destructive switch, job deletion, and administrator requests are off by default; job paths are a glob allowlist and traversal segments are rejected |
 | Version pinning | Minibridge pinned to a release archive and checksum-verified at build |
 | SBOM and provenance | Attestations published for every image and release asset |
 | Continuous scanning | CodeQL, `pip-audit` and dependency review on every change |
@@ -425,6 +431,7 @@ Applied in-process, so it holds whether or not the proxy is deployed.
 | --- | --- | --- |
 | `mcp.allowedJobs` | `AI/*,Platform/*` | Glob allowlist of job paths. Traversal segments are rejected |
 | `mcp.readOnly` | `false` | Refuses every write tool |
+| `mcp.allowDestructive` | **`false`** | Master gate for job updates/deletes, build stops, queue cancellation, and node offlining |
 | `mcp.allowJobDelete` | **`false`** | `delete_job` is opt-in; deletion is irreversible |
 | `mcp.allowAdminRequest` | **`false`** | `jenkins_admin_request` is opt-in |
 | `mcp.allowNodeWrite` | `false` | `set_node_offline` |
@@ -518,7 +525,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.3.3
+NEW_VERSION=2.4.0
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 

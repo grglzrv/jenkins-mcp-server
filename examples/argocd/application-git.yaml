@@ -49,6 +49,13 @@ spec:
               tokenKey: JENKINS_TOKEN
         mcp:
           allowedJobs: "AI/*,Platform/*"
+          allowDestructive: false
+        audit:
+          fileEnabled: false
+        networkPolicy:
+          enabled: true
+          allowSameNamespace: false
+          allowedNamespaces: [tailscale]
         service:
           # Keep all requests in one stateful MCP session on its owning pod.
           sessionAffinity:

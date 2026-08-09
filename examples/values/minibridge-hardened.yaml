@@ -28,6 +28,7 @@ jenkins:
 mcp:
   readOnly: true
   allowedJobs: "AI/*"
+  allowDestructive: false
 
 service:
   # Minibridge sessions are process-local; keep requests on the initializing pod.
@@ -72,3 +73,11 @@ minibridge:
     keyKey: tls.key
     # Set to enable mTLS, with the CA in the same Secret.
     clientCASecretKey: ""
+
+audit:
+  fileEnabled: false
+
+networkPolicy:
+  enabled: true
+  allowSameNamespace: true
+  allowInternetEgress: true

@@ -146,14 +146,17 @@ podDisruptionBudget:
   maxUnavailable: null
 
 networkPolicy:
-  # Off by default. A NetworkPolicy selects peers by namespace label, and those
-  # labels differ per cluster, so a policy written for someone else's cluster
-  # silently blocks traffic rather than failing loudly. Enable it once the
-  # namespaces below match yours.
-  enabled: false
+  # Enabled by default. Pods in this release's namespace can reach MCP; add
+  # other client namespaces explicitly below. Egress is fail-closed except for
+  # DNS and an enabled Tailscale proxy, so external Jenkins URLs also need an
+  # explicit egress rule or allowInternetEgress: true.
+  enabled: true
+  # Permit client pods in the release namespace to reach MCP. Disable this for
+  # a dedicated server namespace, then list only the real client namespaces.
+  allowSameNamespace: true
   # Namespaces allowed to reach the MCP port, by their
   # kubernetes.io/metadata.name label. Empty allows no namespace, which with
-  # enabled: true means only the chart's own health and test traffic.
+  # allowSameNamespace: false means only the chart's health/test traffic.
   #   allowedNamespaces: ["agents", "tailscale"]
   allowedNamespaces: []
   # Allow egress to the public internet. Not needed when Jenkins is in-cluster
@@ -336,10 +339,10 @@ mcp:
   allowNodeWrite: false
   allowAdminRequest: false
   # Destructive (irreversible) actions: job delete/update, build stop, queue
-  # cancel, node offline. allowDestructive is the master switch — set it false
-  # to disable all of them at once regardless of the per-action flags below.
+  # cancel, node offline. allowDestructive is the master switch and defaults
+  # false; opt in only after reviewing the individual operations below.
   # Each action must clear its category flag above AND its flag here.
-  allowDestructive: true
+  allowDestructive: false
   # Deleting a job cannot be undone, so it stays opt-in even with
   # allowJobWrite: true. Set true only if the agent must remove jobs.
   allowJobDelete: false
@@ -352,13 +355,16 @@ mcp:
   extraEnv: []
 
 audit:
-  fileEnabled: true
+  # Audit records always go to stdout. File output is opt-in because the server
+  # does not rotate files; use a log collector for the durable default path.
+  fileEnabled: false
   path: /data/audit.jsonl
   storage:
     # emptyDir keeps audit records for the pod's lifetime only. Records are
     # always written to stdout as well, so a log pipeline is the durable path.
     type: emptyDir
-    emptyDir: {}
+    emptyDir:
+      sizeLimit: 256Mi
     # Required when type is pvc. The claim must already exist.
     persistentVolumeClaim:
       claimName: ""

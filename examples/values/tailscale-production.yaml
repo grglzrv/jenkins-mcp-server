@@ -2,7 +2,7 @@ replicaCount: 2
 
 image:
   repository: ghcr.io/grglzrv/jenkins-mcp-server
-  tag: "2.3.3"
+  tag: "2.4.0"
 
 service:
   # Streamable HTTP session state is process-local; keep requests on one pod.
@@ -42,6 +42,7 @@ mcp:
   allowBuildWrite: true
   allowNodeWrite: false
   allowAdminRequest: false
+  allowDestructive: false
   allowedJobs: "AI/*,Platform/*"
 
 tailscale:
@@ -57,3 +58,13 @@ tailscale:
     proxyGroup: jenkins-egress
   proxyGroups:
     create: false
+
+audit:
+  fileEnabled: false
+
+networkPolicy:
+  enabled: true
+  # MCP clients and Jenkins egress proxies enter through this namespace.
+  allowSameNamespace: false
+  allowedNamespaces: [tailscale]
+  allowInternetEgress: false

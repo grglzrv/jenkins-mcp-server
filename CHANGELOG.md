@@ -40,6 +40,75 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.4.0] - 2026-08-09
+
+### Highlights
+
+- Safer deployment defaults make destructive Jenkins operations, unrestricted
+  network reachability, and unrotated audit files explicit opt-ins.
+
+### New Features
+
+- Added `networkPolicy.allowSameNamespace` so the default-deny policy can keep
+  same-namespace clients working without opening MCP to every namespace.
+- Added a bounded `audit.storage.emptyDir.sizeLimit` value, defaulting to
+  `256Mi`, for installations that opt back into file audit logging.
+
+### Improvements
+
+- Enabled NetworkPolicy by default with DNS, Helm-test health traffic,
+  same-namespace MCP ingress, and enabled Tailscale egress modeled explicitly.
+- Updated all Helm values examples and Argo CD Applications to state their
+  destructive-action, audit, client-ingress, and Jenkins-egress intent.
+- Updated the main README, chart README, security guide, onboarding guide,
+  examples guide, Tailscale/Argo CD guide, Compose stack, and raw Kubernetes
+  manifests for the new defaults and migration path.
+- Added a NetworkPolicy to the standalone Minibridge manifest and removed the
+  unused audit data mount from the raw Deployment and Compose defaults.
+
+### Bug Fixes
+
+- Corrected the GCP Workload Identity example, whose comment said destructive
+  actions were disabled while its value enabled them.
+- Prevented fresh runtime and chart deployments from enabling job updates,
+  build stops, queue cancellation, or node offlining through an implicit master
+  switch.
+- Avoided unbounded file growth on default `emptyDir` and Compose volumes; audit
+  JSONL continues to be emitted to stdout.
+
+### Breaking Changes
+
+- `MCP_ALLOW_DESTRUCTIVE` and `mcp.allowDestructive` now default to `false`.
+- `networkPolicy.enabled` now defaults to `true`; clients outside the release
+  namespace and non-Tailscale Jenkins egress require explicit rules.
+- `audit.fileEnabled` now defaults to `false`; file consumers must opt in and
+  provide rotated or bounded storage.
+
+### Known Issues
+
+- Kubernetes NetworkPolicy cannot select an external Jenkins endpoint by DNS
+  name. Use a stable `ipBlock`, a private-network proxy such as the documented
+  Tailscale egress Service, or the broader `allowInternetEgress` opt-in.
+
+### Security
+
+- Irreversible Jenkins actions now fail closed unless the master switch and the
+  corresponding category/action gates are all enabled.
+- MCP ingress and server egress are isolated by default; same-namespace client
+  access is the only general ingress allowance.
+- Stdout is now the default audit sink, avoiding a silently growing local file.
+
+### Upgrade Notes
+
+- Before upgrading from 2.3, explicitly set `mcp.allowDestructive=true` only if
+  existing automation genuinely needs irreversible operations.
+- Add client namespaces to `networkPolicy.allowedNamespaces`; configure
+  `additionalEgress`, Tailscale egress, or `allowInternetEgress=true` for the
+  Jenkins endpoint. Set `allowSameNamespace=false` for a dedicated server
+  namespace.
+- Set `audit.fileEnabled=true` only when a file consumer is required, and retain
+  the 256Mi emptyDir bound or supply a PVC with external rotation.
+
 ## [2.3.3] - 2026-08-09
 
 ### Highlights

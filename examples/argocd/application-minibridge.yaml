@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 2.3.3
+    targetRevision: 2.4.0
     helm:
       releaseName: jenkins-mcp
       valuesObject:
@@ -37,8 +37,17 @@ spec:
         # bypassed by a client.
         mcp:
           allowedJobs: "AI/*,Platform/*"
+          allowDestructive: false
           allowJobDelete: false
           allowAdminRequest: false
+
+        audit:
+          fileEnabled: false
+
+        networkPolicy:
+          enabled: true
+          allowSameNamespace: false
+          allowedNamespaces: [tailscale]
 
         minibridge:
           enabled: true

@@ -53,6 +53,7 @@ data:
   MCP_ALLOWED_JOBS: "AI/*,Platform/*"
   MCP_ALLOW_NODE_WRITE: "false"
   MCP_ALLOW_ADMIN_REQUEST: "false"
+  MCP_ALLOW_DESTRUCTIVE: "false"
   MCP_ALLOW_JOB_DELETE: "false"
 
   # Minibridge owns the public MCP 2025-03-26 Streamable HTTP listener. Jenkins
@@ -106,7 +107,7 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:2.3.3-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.4.0-minibridge
           imagePullPolicy: IfNotPresent
           # No args: the entrypoint follows Acuvity's single-container pattern:
           # public Streamable HTTP in Minibridge, private stdio to Jenkins.
@@ -182,3 +183,40 @@ spec:
     - name: health
       port: 8080
       targetPort: health
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jenkins-mcp-minibridge
+  namespace: jenkins-mcp
+  labels:
+    app.kubernetes.io/name: jenkins-mcp-minibridge
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: jenkins-mcp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: jenkins-mcp-minibridge
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # The placeholder Jenkins URL above uses external HTTPS. Replace this with
+    # a narrower destination selector/CIDR or the Tailscale egress pattern for
+    # production.
+    - ports:
+        - protocol: TCP
+          port: 443
