@@ -169,7 +169,7 @@ def test_extra_env_cannot_override_credentials_or_chart_policy() -> None:
         'hasPrefix "JENKINS_"',
         'hasPrefix "MCP_"',
         'hasPrefix "MINIBRIDGE_"',
-        'eq $name "OTEL_EXPORTER_OTLP_ENDPOINT"',
+        'eq $upper "OTEL_EXPORTER_OTLP_ENDPOINT"',
     ]:
         assert reserved in validate
     assert "duplicates another extraEnv entry" in validate
@@ -1707,3 +1707,19 @@ def test_documented_values_blocks_match_the_current_schema() -> None:
                     assert existing.get(key), (
                         f"{doc}: enabled existingSecret must explicitly set {key}"
                     )
+
+
+def test_extra_env_guard_rejects_chart_owned_names_in_any_case() -> None:
+    """The server reads settings case-sensitively, so a lowercase spelling of a
+    chart-owned name would be accepted here and then do nothing at runtime.
+    Rejecting it reports the mistake instead of shipping an inert value.
+    """
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    assert "upper $name" in validate
+    assert "in any capitalisation" in validate
+
+
+def test_settings_are_case_sensitive() -> None:
+    """Guards the source-side half of the same defence."""
+    config = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
+    assert "case_sensitive=True" in config

@@ -10,35 +10,84 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.6.2] - 2026-08-09
+
+### Highlights
+
+- A lowercase environment variable can no longer override the credentials and
+  policy the chart validated.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- `mcp.extraEnv` rejects chart-owned names in any capitalisation, so a spelling
+  that would have had no effect is reported instead of shipped.
+
+### Bug Fixes
+
+- Settings were read case-insensitively, which is the pydantic-settings default.
+  `mcp.extraEnv` blocked only the uppercase spellings, so an entry named
+  `jenkins_token` passed the chart guard and then replaced the token supplied by
+  the Secret. Settings are now matched case-sensitively. Documented uppercase
+  names are unaffected.
+
+### Breaking Changes
+
+- None for documented configuration. A deployment that relied on a lowercase
+  environment variable being read must rename it to the documented uppercase
+  spelling.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Closes a bypass of the 2.6.0 control that prevents Helm values replacing
+  Jenkins credentials or security policy. `mcp.extraEnv` entries such as
+  `jenkins_token`, `mcp_read_only` and `mcp_allowed_jobs` were accepted and took
+  effect at runtime, so an operator with values access could substitute
+  credentials or disable the job allowlist without touching the Secret. The fix
+  is applied in the server, which decides, and in the chart, which reports.
+
+### Upgrade Notes
+
+- If a values file sets a lowercase chart-owned name in `mcp.extraEnv`, the
+  render now fails and names the entry. Remove it and use the corresponding
+  `jenkins.*`, `mcp.*`, `audit.*` or `minibridge.*` value.
 
 ## [2.6.1] - 2026-08-09
 

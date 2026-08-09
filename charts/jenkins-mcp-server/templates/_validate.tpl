@@ -70,8 +70,13 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- if has $name $extraEnvNames }}
 {{- fail (printf "mcp.extraEnv[%d].name (%s) duplicates another extraEnv entry; environment variable names must be unique." $i $name) }}
 {{- end }}
-{{- if or (hasPrefix "JENKINS_" $name) (hasPrefix "MCP_" $name) (hasPrefix "MINIBRIDGE_" $name) (eq $name "OTEL_EXPORTER_OTLP_ENDPOINT") }}
-{{- fail (printf "mcp.extraEnv[%d].name (%s) is managed by the chart and cannot be overridden through extraEnv. Use the corresponding jenkins.*, mcp.*, audit.*, or minibridge.* value instead." $i $name) }}
+{{- /* Compared upper-cased: the server reads its settings case-sensitively, so
+       a lowercase spelling of a chart-owned name is silently inert rather than
+       applied. Rejecting it here reports the mistake instead of shipping a
+       value that never takes effect. */ -}}
+{{- $upper := upper $name -}}
+{{- if or (hasPrefix "JENKINS_" $upper) (hasPrefix "MCP_" $upper) (hasPrefix "MINIBRIDGE_" $upper) (eq $upper "OTEL_EXPORTER_OTLP_ENDPOINT") }}
+{{- fail (printf "mcp.extraEnv[%d].name (%s) is managed by the chart and cannot be set through extraEnv, in any capitalisation. Use the corresponding jenkins.*, mcp.*, audit.*, or minibridge.* value instead." $i $name) }}
 {{- end }}
 {{- $extraEnvNames = append $extraEnvNames $name -}}
 {{- end }}
