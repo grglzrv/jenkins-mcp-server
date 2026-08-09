@@ -264,6 +264,38 @@ def test_compose_offers_plain_and_single_container_minibridge_deployments():
         assert "no-new-privileges:true" in service["security_opt"]
 
 
+def test_jenkins_integration_enables_every_destructive_gate_it_exercises():
+    """The live suite stops a build and deletes its disposable job.
+
+    The 2.4 master gate intentionally overrides the older per-action flags.
+    Keeping all three explicit here prevents production-safe defaults from
+    silently turning the integration test into an expected policy denial.
+    """
+    compose = load("docker-compose.integration.yml")[0]
+    environment = compose["services"]["mcp"]["environment"]
+    assert environment["MCP_ALLOW_DESTRUCTIVE"] == "true"
+    assert environment["MCP_ALLOW_BUILD_STOP"] == "true"
+    assert environment["MCP_ALLOW_JOB_DELETE"] == "true"
+
+
+def test_jenkins_integration_runs_before_merge_when_relevant_code_changes():
+    workflow = yaml.load(
+        (ROOT / ".github/workflows/integration.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    triggers = workflow["on"]
+    expected_paths = {
+        "src/**",
+        "integration/**",
+        "docker-compose.integration.yml",
+        "Dockerfile",
+        "pyproject.toml",
+        ".github/workflows/integration.yml",
+    }
+    assert set(triggers["pull_request"]["paths"]) == expected_paths
+    assert set(triggers["push"]["paths"]) == expected_paths
+
+
 def test_license_and_security_documents_are_present_and_current():
     license_text = (ROOT / "LICENSE").read_text()
     assert "MIT License" in license_text
