@@ -40,4 +40,5 @@ data:
   MCP_MAX_LOG_BYTES: {{ .Values.mcp.maxLogBytes | int | quote }}
   {{- if .Values.audit.fileEnabled }}
   MCP_AUDIT_LOG_PATH: {{ .Values.audit.path | quote }}
+  MCP_AUDIT_REQUIRED_FOR_READINESS: {{ .Values.audit.requiredForReadiness | quote }}
   {{- end }}

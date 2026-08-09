@@ -594,7 +594,9 @@ def test_config_env_covers_every_supported_setting() -> None:
     # Credentials and the optional CA bundle come from the Secret. File audit is
     # deliberately omitted so process logs stay the unbounded-safe default.
     from_secret = {"JENKINS_USERNAME", "JENKINS_TOKEN", "JENKINS_CA_BUNDLE"}
-    intentionally_unset = {"MCP_AUDIT_LOG_PATH"}
+    # MCP_AUDIT_REQUIRED_FOR_READINESS only has meaning when a path is set, so
+    # it is unset here for the same reason.
+    intentionally_unset = {"MCP_AUDIT_LOG_PATH", "MCP_AUDIT_REQUIRED_FOR_READINESS"}
     allowed_missing = from_secret | intentionally_unset
     assert (src - cfg) <= allowed_missing, (
         f"config.env is missing {src - cfg - allowed_missing}"

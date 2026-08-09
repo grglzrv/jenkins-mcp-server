@@ -40,6 +40,55 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.5.0] - 2026-08-09
+
+### Highlights
+
+- An unwritable audit file no longer removes every replica from service.
+
+### New Features
+
+- `audit.requiredForReadiness` (`MCP_AUDIT_REQUIRED_FOR_READINESS`, default
+  `false`) makes a writable audit file a readiness condition, for deployments
+  where the file is the record of account rather than a redundant copy.
+
+### Improvements
+
+- `/readyz` reports `audit_log_writable` and, when it fails, `audit_log_error`
+  whether or not the check is required, so the problem stays visible either way.
+
+### Bug Fixes
+
+- A failed audit-file write took the pod out of service. Records also go to the
+  process logs, which the chart already documents as the durable path, so the
+  file is a redundant copy. Failing readiness on it removed every replica at
+  once: a shared PVC is one volume, and identically sized `emptyDir` volumes
+  fill at the same rate under the same load. The audit file has no rotation, so
+  with `audit.fileEnabled` a long-running deployment reaches the size limit
+  eventually. That turned a recoverable disk condition into a total outage while
+  the audit trail itself was intact.
+
+### Breaking Changes
+
+- None. Deployments that want the previous behaviour set
+  `audit.requiredForReadiness: true`.
+
+### Known Issues
+
+- The audit file still has no rotation. Where it is enabled, size it for the
+  retention you need or collect from the process logs instead.
+
+### Security
+
+- Audit records are unaffected: they are written to the process logs before the
+  file, so nothing that was recorded before is lost now. Deployments that treat
+  the file as the record of account should set `audit.requiredForReadiness:
+  true` to keep failing closed.
+
+### Upgrade Notes
+
+- No action required.
+
 ## [2.4.2] - 2026-08-09
 
 ### Highlights

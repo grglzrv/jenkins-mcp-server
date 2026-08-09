@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     allowed_jobs: str = Field(default="*", alias="MCP_ALLOWED_JOBS")
     max_log_bytes: int = Field(default=1_000_000, ge=1, alias="MCP_MAX_LOG_BYTES")
     audit_log_path: Path | None = Field(default=None, alias="MCP_AUDIT_LOG_PATH")
+    # Whether an unwritable audit file should take the pod out of service.
+    # Off by default: records also go to the process logs, which is the durable
+    # path in a cluster, so a failed redundant copy should not stop the server
+    # answering requests it can still serve and audit.
+    audit_required_for_readiness: bool = Field(
+        default=False, alias="MCP_AUDIT_REQUIRED_FOR_READINESS"
+    )
 
     @field_validator("jenkins_url")
     @classmethod

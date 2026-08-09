@@ -362,6 +362,12 @@ audit:
   # Audit records always go to process logs. File output is opt-in because the
   # server does not rotate files; use a collector for the durable default path.
   fileEnabled: false
+  # Take the pod out of service when the audit file cannot be written. Off by
+  # default: records also go to the process logs, so a failed file is a lost
+  # redundant copy rather than a lost audit trail, and failing readiness would
+  # take every replica out at once when a shared volume fills. Turn it on where
+  # the file is the record of account.
+  requiredForReadiness: false
   path: /data/audit.jsonl
   storage:
     # emptyDir keeps audit records for the pod's lifetime only. Records are

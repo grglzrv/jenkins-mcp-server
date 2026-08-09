@@ -28,14 +28,84 @@ def test_readiness_fails_when_ca_missing(tmp_path: Path) -> None:
     assert payload["checks"]["jenkins_ca_bundle_exists"] is False
 
 
-def test_readiness_degrades_when_configured_audit_file_is_unwritable(
-    tmp_path: Path,
-) -> None:
+def test_probe_reports_an_unwritable_audit_file(tmp_path: Path) -> None:
+    """probe() must detect the problem at startup, before any action runs.
+
+    Whether that failure should also stop the pod serving traffic is a separate
+    decision, covered by the readiness tests below.
+    """
     blocker = tmp_path / "not-a-directory"
     blocker.write_text("x", encoding="utf-8")
     audit = AuditLogger(blocker / "audit.jsonl")
     audit.probe()
 
-    ready, payload = readiness(settings(), audit)
-    assert ready is False
+    assert audit.healthy is False
+    _, payload = readiness(settings(), audit)
     assert payload["checks"]["audit_log_writable"] is False
+
+
+def _broken_audit(tmp_path):
+    blocker = tmp_path / "file"
+    blocker.write_text("not a directory", encoding="utf-8")
+    audit = AuditLogger(blocker / "nested" / "audit.log")
+    audit.emit("build.trigger", "success", status=201)
+    return audit
+
+
+def test_unwritable_audit_file_does_not_take_the_pod_out_of_service(tmp_path) -> None:
+    """A failed redundant copy should not end the pod's ability to serve.
+
+    Records also reach the process logs, which is the durable path in a
+    cluster. Failing readiness here removes every replica from the Service at
+    once, because a shared PVC is one volume and identically sized emptyDirs
+    fill at the same rate under the same load.
+    """
+    settings = Settings(
+        JENKINS_URL="https://jenkins.test",
+        JENKINS_USERNAME="u",
+        JENKINS_TOKEN="t",
+    )
+    ready, payload = readiness(settings, _broken_audit(tmp_path))
+    assert ready is True
+    # The failure must still be visible to whoever looks.
+    assert payload["checks"]["audit_log_writable"] is False
+    assert "audit_log_error" in payload["checks"]
+
+
+def test_audit_can_be_made_required_for_readiness(tmp_path) -> None:
+    """Where the file is the record of account, the operator can demand it."""
+    settings = Settings(
+        JENKINS_URL="https://jenkins.test",
+        JENKINS_USERNAME="u",
+        JENKINS_TOKEN="t",
+        MCP_AUDIT_REQUIRED_FOR_READINESS=True,
+    )
+    ready, payload = readiness(settings, _broken_audit(tmp_path))
+    assert ready is False
+    assert payload["status"] == "not_ready"
+
+
+def test_a_healthy_audit_file_is_reported_and_stays_ready(tmp_path) -> None:
+    audit = AuditLogger(tmp_path / "audit.jsonl")
+    audit.emit("build.trigger", "success", status=201)
+    for required in (False, True):
+        settings = Settings(
+            JENKINS_URL="https://jenkins.test",
+            JENKINS_USERNAME="u",
+            JENKINS_TOKEN="t",
+            MCP_AUDIT_REQUIRED_FOR_READINESS=required,
+        )
+        ready, payload = readiness(settings, audit)
+        assert ready is True
+        assert payload["checks"]["audit_log_writable"] is True
+
+
+def test_missing_jenkins_configuration_still_fails_readiness() -> None:
+    """The change must not weaken the checks that gate a working server."""
+    settings = Settings(
+        JENKINS_URL="https://jenkins.test",
+        JENKINS_USERNAME="",
+        JENKINS_TOKEN="t",
+    )
+    ready, _ = readiness(settings)
+    assert ready is False
