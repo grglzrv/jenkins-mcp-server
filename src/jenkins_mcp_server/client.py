@@ -18,6 +18,17 @@ class JenkinsError(RuntimeError):
 
 TRAVERSAL_SEGMENTS = {".", ".."}
 
+# Methods safe to replay. A retried GET costs a round trip; a retried POST can
+# queue a second build, because a 502 from a proxy or a read timeout does not
+# say whether Jenkins acted on the first attempt.
+IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+# 429 is the one status a non-idempotent request may be retried on: it states
+# the request was rejected without being processed.
+NOT_PROCESSED_STATUSES = frozenset({429})
+
+RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
+
 # Response headers withheld from admin_request callers. The MCP client is not
 # the authenticated party: Jenkins issues the session to this server, and
 # forwarding those values hands a caller a usable session and CSRF token.
@@ -69,6 +80,10 @@ class JenkinsClient:
         self._crumb: tuple[str, str] | None = None
         # Set when the controller has no crumb issuer, so the probe runs once.
         self._crumb_disabled = False
+        # Concurrent writes would otherwise each fetch their own crumb: eight
+        # parallel triggers meant eight crumb requests against a controller
+        # that is often the slow part.
+        self._crumb_lock = asyncio.Lock()
 
     async def close(self) -> None:
         await self.http.aclose()
@@ -78,16 +93,48 @@ class JenkinsClient:
             return self._crumb
         if self._crumb_disabled:
             return None
-        response = await self.http.get("/crumbIssuer/api/json")
-        if response.status_code == 404:
-            # CSRF protection is off on this controller. Remember it, otherwise
-            # every write pays for a 404 round trip first.
-            self._crumb_disabled = True
-            return None
-        response.raise_for_status()
-        data = response.json()
-        self._crumb = (data["crumbRequestField"], data["crumb"])
-        return self._crumb
+        async with self._crumb_lock:
+            # Re-check: another waiter may have fetched it while we queued.
+            if self._crumb is not None:
+                return self._crumb
+            if self._crumb_disabled:
+                return None
+            try:
+                response = await self.http.get("/crumbIssuer/api/json")
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                raise JenkinsError(f"Could not reach the Jenkins crumb issuer: {exc}") from exc
+            if response.status_code == 404:
+                # CSRF protection is off on this controller. Remember it,
+                # otherwise every write pays for a 404 round trip first.
+                self._crumb_disabled = True
+                return None
+            if response.status_code >= 400:
+                # Surfacing httpx.HTTPStatusError here leaks the transport
+                # exception type through tools that only document JenkinsError.
+                raise JenkinsError(
+                    f"Jenkins crumb issuer returned {response.status_code}. "
+                    "Check that the account can authenticate."
+                )
+            data = response.json()
+            try:
+                self._crumb = (data["crumbRequestField"], data["crumb"])
+            except (KeyError, TypeError) as exc:
+                raise JenkinsError(
+                    f"Unexpected crumb issuer response: {data!r}"
+                ) from exc
+            return self._crumb
+
+    def _may_retry(self, method: str, status_code: int) -> bool:
+        """Whether replaying this request risks applying it twice.
+
+        Jenkins has no idempotency key, so a replayed POST is a second build,
+        a second job deletion, a second node update.
+        """
+        if status_code not in RETRYABLE_STATUSES:
+            return False
+        if method.upper() in IDEMPOTENT_METHODS:
+            return True
+        return status_code in NOT_PROCESSED_STATUSES
 
     async def request(
         self,
@@ -146,8 +193,10 @@ class JenkinsClient:
                         request_headers[crumb[0]] = crumb[1]
                         continue
 
-                retryable = response.status_code in {429, 502, 503, 504}
-                if retryable and attempt < self.settings.jenkins_max_retries:
+                if (
+                    self._may_retry(method, response.status_code)
+                    and attempt < self.settings.jenkins_max_retries
+                ):
                     await asyncio.sleep(min(2**attempt, 5))
                     attempt += 1
                     continue
@@ -164,7 +213,13 @@ class JenkinsClient:
                 )
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
                 last_error = exc
-                if attempt >= self.settings.jenkins_max_retries:
+                # A connect error means nothing was sent, so replaying is safe
+                # for any method. A timeout or a read error can arrive after
+                # Jenkins accepted the request, so only replay safe methods.
+                safe_to_replay = method.upper() in IDEMPOTENT_METHODS or isinstance(
+                    exc, httpx.ConnectError | httpx.ConnectTimeout
+                )
+                if not safe_to_replay or attempt >= self.settings.jenkins_max_retries:
                     break
                 await asyncio.sleep(min(2**attempt, 5))
                 attempt += 1

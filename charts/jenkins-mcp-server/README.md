@@ -59,7 +59,7 @@ creates the credentials Secret.
 ```bash
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.4.1 \
+  --version 2.5.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --set jenkins.url=https://jenkins.example.com \
@@ -83,7 +83,7 @@ the Tailscale integration are all opt-in. See the values reference below.
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.4.1 \
+  --version 2.5.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
@@ -438,7 +438,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.4.1
+NEW_VERSION=2.5.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

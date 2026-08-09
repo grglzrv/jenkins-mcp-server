@@ -1,10 +1,13 @@
 """Regression tests for path-traversal, log pagination, and CSRF crumb handling."""
 
+import asyncio
+import logging
+
 import httpx
 import pytest
 
 from jenkins_mcp_server.audit import AuditLogger
-from jenkins_mcp_server.client import JenkinsClient, _job_path
+from jenkins_mcp_server.client import JenkinsClient, JenkinsError, _job_path
 from jenkins_mcp_server.config import Settings
 from jenkins_mcp_server.security import Policy, PolicyError
 
@@ -353,3 +356,157 @@ async def test_admin_request_withholds_session_and_csrf_headers() -> None:
     # Harmless headers still pass through, so the tool stays useful.
     assert "x-jenkins" in names
     await jc.close()
+
+
+# --- retry safety ----------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [502, 503, 504])
+async def test_write_is_not_replayed_on_a_gateway_error(status: int) -> None:
+    """A 502 does not say whether Jenkins acted on the request.
+
+    Replaying a build trigger queues a second build, and the tool then reports
+    success, so the duplicate is invisible to the caller.
+    """
+    attempts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        attempts.append(request.url.path)
+        return httpx.Response(status, text="gateway")
+
+    jc = client(handler, JENKINS_MAX_RETRIES=3)
+    with pytest.raises(JenkinsError):
+        await jc.build("demo")
+    assert len(attempts) == 1, f"build was replayed {len(attempts)} times"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_write_is_not_replayed_after_a_read_timeout() -> None:
+    """A read timeout can arrive after Jenkins accepted the request."""
+    attempts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        attempts.append(request.url.path)
+        raise httpx.ReadTimeout("late response", request=request)
+
+    jc = client(handler, JENKINS_MAX_RETRIES=3)
+    with pytest.raises(JenkinsError):
+        await jc.build("demo")
+    assert len(attempts) == 1
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_write_is_replayed_on_429_which_states_it_was_not_processed() -> None:
+    attempts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        attempts.append(request.url.path)
+        if len(attempts) < 2:
+            return httpx.Response(429)
+        return httpx.Response(201, headers={"Location": "/queue/1"})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=3)
+    assert (await jc.build("demo"))["queued"] is True
+    assert len(attempts) == 2
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_reads_still_retry_on_transient_failures() -> None:
+    """The fix must not remove retries where replaying is harmless."""
+    attempts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(request.url.path)
+        if len(attempts) < 3:
+            return httpx.Response(503)
+        return httpx.Response(200, json={"jobs": []})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=3)
+    await jc.list_jobs()
+    assert len(attempts) == 3
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_writes_share_one_crumb_request() -> None:
+    """Eight parallel writes should not each fetch their own crumb."""
+    crumb_requests: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            crumb_requests.append(request.url.path)
+            await asyncio.sleep(0.02)
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        return httpx.Response(201, headers={"Location": "/queue/1"})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    await asyncio.gather(*(jc.build(f"job{i}") for i in range(8)))
+    assert len(crumb_requests) == 1, f"{len(crumb_requests)} crumb requests"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_crumb_issuer_errors_surface_as_jenkins_errors() -> None:
+    """Tools document JenkinsError; httpx types should not leak through."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(401, text="unauthorized")
+        return httpx.Response(201)
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(JenkinsError, match="crumb issuer returned 401"):
+        await jc.build("demo")
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_audit_write_failure_does_not_fail_a_completed_action(
+    tmp_path, caplog
+) -> None:
+    """emit() runs after Jenkins acted, so raising misreports a success.
+
+    The caller would see a failure for a build that was queued, and would
+    reasonably trigger it again.
+    """
+    unwritable = tmp_path / "file" / "nested" / "audit.log"
+    unwritable.parent.parent.write_text("not a directory", encoding="utf-8")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        return httpx.Response(201, headers={"Location": "/queue/1"})
+
+    jc = JenkinsClient(
+        settings(),
+        policy(),
+        AuditLogger(unwritable),
+        transport=httpx.MockTransport(handler),
+    )
+    with caplog.at_level(logging.ERROR):
+        result = await jc.build("demo")
+    assert result["queued"] is True
+    assert "not writable" in caplog.text
+    await jc.close()
+
+
+def test_audit_reports_an_unwritable_path_once(tmp_path, caplog) -> None:
+    """A per-action error log would drown the records it is meant to protect."""
+    unwritable = tmp_path / "file" / "nested" / "audit.log"
+    unwritable.parent.parent.write_text("not a directory", encoding="utf-8")
+
+    audit = AuditLogger(unwritable)
+    with caplog.at_level(logging.ERROR):
+        for _ in range(5):
+            audit.emit("build.trigger", "success", status=201)
+    assert caplog.text.count("not writable") == 1

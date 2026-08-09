@@ -10,35 +10,86 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.5.0] - 2026-08-09
+
+### Highlights
+
+- A transient gateway error or timeout no longer causes a second build to be
+  queued.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Concurrent writes now share a single crumb request. Eight parallel triggers
+  previously issued eight requests to the crumb issuer, which is often the
+  slowest part of a controller.
+- Crumb issuer failures raise `JenkinsError` with a message naming the status,
+  instead of leaking `httpx.HTTPStatusError` through tools that document only
+  `JenkinsError`.
+
+### Bug Fixes
+
+- `trigger_build`, `delete_job`, `stop_build` and every other write were
+  replayed on 502, 503, 504 and on read timeouts. None of those says whether
+  Jenkins acted on the first attempt, and Jenkins has no idempotency key, so a
+  replay could queue a second build while the tool reported a single success.
+  Only idempotent methods are retried on those conditions now. Writes are still
+  retried on 429, which states the request was rejected without being
+  processed, and on connection errors, where nothing was sent.
+- An unwritable audit path no longer fails the tool call. `emit` runs after the
+  Jenkins request has completed, so raising reported a failure for an action
+  that had already succeeded, inviting the caller to repeat it. The record still
+  goes to stdout, and the path problem is logged once per process.
+
+### Breaking Changes
+
+- None. Writes fail faster on gateway errors, which is the intended correction:
+  the previous behaviour hid duplicates rather than preventing them.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- None.
+
+### Upgrade Notes
+
+- No action required.
 
 ## [2.4.1] - 2026-08-09
 
