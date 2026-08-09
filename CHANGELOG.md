@@ -10,23 +10,84 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None.
+- None yet.
 
 ### New Features
 
-- None.
+- None yet.
 
 ### Improvements
 
-- None.
+- None yet.
 
 ### Bug Fixes
 
-- None.
+- None yet.
 
 ### Breaking Changes
 
-- None.
+- None yet.
+
+### Known Issues
+
+- None yet.
+
+### Security
+
+- None yet.
+
+### Upgrade Notes
+
+- None yet.
+
+## [2.6.0] - 2026-08-09
+
+### Highlights
+
+- Jenkins API, job-config, and crumb responses are now streamed through a
+  configurable 10 MB safety bound instead of being buffered without a limit.
+
+### New Features
+
+- `mcp.maxResponseBytes` (`MCP_MAX_RESPONSE_BYTES`, default 10 MB) limits every
+  complete Jenkins response independently of the smaller, truncating console
+  and administrator-response limit.
+
+### Improvements
+
+- HTTP errors now give targeted hints for authentication failures, permission
+  or crumb failures, and unexpected proxy/SSO redirects.
+- A new troubleshooting guide covers health semantics, external Jenkins DNS,
+  firewalls and egress policies, TLS, redirects, layered tool policy, audit
+  degradation, and multi-replica session affinity.
+- The main and chart READMEs, onboarding, compatibility documentation, every
+  Helm and Argo CD example, raw manifests, standalone Minibridge deployment,
+  and k3s smoke values document the same operational limits and diagnostics.
+- The live credential smoke matrix now covers split username/token Secret refs
+  and verifies that existing-Secret rotation takes effect after the documented
+  Deployment restart without transferring Secret ownership to Helm.
+
+### Bug Fixes
+
+- Jenkins JSON, XML, and crumb responses could consume unbounded process memory.
+  Oversized complete responses now fail predictably, while console/admin text
+  retains its documented bounded-truncation behavior.
+- Malformed Jenkins API JSON leaked a decoder exception. It is now reported as
+  a stable `JenkinsError` naming the affected endpoint.
+- Troubleshooting incorrectly said TLS verification failures occurred at
+  startup and that server-side `mcp.allow*` flags removed tools from discovery.
+  TLS is exercised on Jenkins calls; only Minibridge tool policy filters
+  `tools/list`, while server policy rejects unauthorized calls.
+- `mcp.extraEnv` could silently override the validated Jenkins credential
+  source or chart-owned policy/proxy variables because explicit environment
+  entries take precedence over `envFrom`. Reserved names and duplicates now
+  fail the chart render.
+
+### Breaking Changes
+
+- `mcp.extraEnv` no longer accepts chart-owned `JENKINS_*`, `MCP_*`, or
+  `MINIBRIDGE_*` names, `OTEL_EXPORTER_OTLP_ENDPOINT`, or duplicate names.
+  These entries previously overrode the chart's validated values silently.
 
 ### Known Issues
 
@@ -34,11 +95,20 @@ from the matching version entry after CI validates it.
 
 ### Security
 
-- None.
+- Bounded upstream responses reduce memory-exhaustion risk from unexpectedly
+  large or intermediary-generated Jenkins payloads.
+- Helm values can no longer replace Jenkins credentials or security policy
+  through a duplicate `mcp.extraEnv` entry after passing source validation.
 
 ### Upgrade Notes
 
-- No action required.
+- No action is required. If a measured legitimate Jenkins API or job-config
+  response exceeds 10 MB, raise `mcp.maxResponseBytes` deliberately; prefer a
+  narrower folder/query where possible.
+- Review `mcp.extraEnv` before upgrading. Move any chart-owned variable to its
+  corresponding `jenkins.*`, `mcp.*`, `audit.*`, or `minibridge.*` value;
+  ordinary extras such as `HTTP_PROXY`, `NO_PROXY`, and `SSL_CERT_FILE` remain
+  supported.
 
 ## [2.5.0] - 2026-08-09
 

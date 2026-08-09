@@ -130,6 +130,7 @@ jobs:
           assert os.environ["MCP_AUDIT_REQUIRED_FOR_READINESS"] == "true"
           assert os.environ["MCP_AUDIT_MAX_BYTES"] == "65536"
           assert os.environ["MCP_AUDIT_BACKUP_COUNT"] == "2"
+          assert os.environ["MCP_MAX_RESPONSE_BYTES"] == "10000000"
           path = Path(os.environ["MCP_AUDIT_LOG_PATH"])
           lock = path.with_name(path.name + ".lock")
           assert path.is_file() and lock.is_file()
@@ -276,7 +277,7 @@ jobs:
           helm uninstall managed --namespace credentials-managed --wait
           kubectl -n credentials-managed wait --for=delete secret/$secret --timeout=60s
 
-      - name: Existing Secret is read but never owned or deleted
+      - name: Existing Secret rotates after restart and is never owned or deleted
         run: |
           kubectl create namespace credentials-existing
           kubectl -n credentials-existing create secret generic supplied-credentials \
@@ -297,8 +298,44 @@ jobs:
             --set podDisruptionBudget.enabled=false \
             --wait --timeout 5m
           [ "$(kubectl -n credentials-existing exec deployment/existing-jenkins-mcp-server -- python -c 'import os; print(os.environ["JENKINS_TOKEN"])')" = existing-token ]
+          kubectl -n credentials-existing create secret generic supplied-credentials \
+            --from-literal=custom-user=existing-user \
+            --from-literal=custom-token=existing-token-v2 \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n credentials-existing rollout restart deployment/existing-jenkins-mcp-server
+          kubectl -n credentials-existing rollout status deployment/existing-jenkins-mcp-server --timeout=180s
+          [ "$(kubectl -n credentials-existing exec deployment/existing-jenkins-mcp-server -- python -c 'import os; print(os.environ["JENKINS_TOKEN"])')" = existing-token-v2 ]
           helm uninstall existing --namespace credentials-existing --wait
           kubectl -n credentials-existing get secret supplied-credentials
+
+      - name: Split Secret refs are read independently and never owned
+        run: |
+          kubectl create namespace credentials-split
+          kubectl -n credentials-split create secret generic supplied-user \
+            --from-literal=login-id=split-user
+          kubectl -n credentials-split create secret generic supplied-token \
+            --from-literal=api-token=split-token
+          helm install split charts/jenkins-mcp-server \
+            --namespace credentials-split \
+            --set jenkins.url=https://jenkins.smoke.invalid \
+            --set jenkins.credentials.create.enabled=false \
+            --set jenkins.credentials.secretKeyRefs.enabled=true \
+            --set jenkins.credentials.secretKeyRefs.username.name=supplied-user \
+            --set jenkins.credentials.secretKeyRefs.username.key=login-id \
+            --set jenkins.credentials.secretKeyRefs.token.name=supplied-token \
+            --set jenkins.credentials.secretKeyRefs.token.key=api-token \
+            --set image.repository=jenkins-mcp-server \
+            --set image.tag=credentials-smoke \
+            --set image.pullPolicy=Never \
+            --set replicaCount=1 \
+            --set podDisruptionBudget.enabled=false \
+            --wait --timeout 5m
+          deployment=split-jenkins-mcp-server
+          [ "$(kubectl -n credentials-split exec deployment/$deployment -- python -c 'import os; print(os.environ["JENKINS_USERNAME"])')" = split-user ]
+          [ "$(kubectl -n credentials-split exec deployment/$deployment -- python -c 'import os; print(os.environ["JENKINS_TOKEN"])')" = split-token ]
+          helm uninstall split --namespace credentials-split --wait
+          kubectl -n credentials-split get secret supplied-user
+          kubectl -n credentials-split get secret supplied-token
 
       - name: Install pinned External Secrets Operator
         run: |
@@ -399,7 +436,7 @@ jobs:
           kubectl get externalsecrets,secretstores -A || true
           kubectl get pods -A -o wide || true
           kubectl -n external-secrets logs deployment/external-secrets --tail=150 || true
-          for namespace in credentials-managed credentials-existing credentials-eso; do
+          for namespace in credentials-managed credentials-existing credentials-split credentials-eso; do
             kubectl -n "$namespace" describe pods 2>/dev/null || true
           done
 

@@ -145,6 +145,32 @@ jobs:
             echo "expected mixed current and deprecated credentials to fail"
             exit 1
           fi
+      - name: Reject extraEnv credential and policy overrides
+        run: |
+          for name in JENKINS_TOKEN MCP_ALLOW_DESTRUCTIVE MINIBRIDGE_TOOLS_DENY OTEL_EXPORTER_OTLP_ENDPOINT; do
+            if helm template jenkins-mcp charts/jenkins-mcp-server \
+              --set jenkins.url=https://jenkins.example.com \
+              --set-string jenkins.credentials.create.jenkinsUserId=ci \
+              --set-string jenkins.credentials.create.jenkinsApiToken=ci-placeholder \
+              --set-string "mcp.extraEnv[0].name=$name" \
+              --set-string 'mcp.extraEnv[0].value=override' > /tmp/extra-env.yaml 2>&1; then
+              echo "expected reserved extraEnv name $name to fail"
+              exit 1
+            fi
+            grep -q "is managed by the chart" /tmp/extra-env.yaml
+          done
+          if helm template jenkins-mcp charts/jenkins-mcp-server \
+            --set jenkins.url=https://jenkins.example.com \
+            --set-string jenkins.credentials.create.jenkinsUserId=ci \
+            --set-string jenkins.credentials.create.jenkinsApiToken=ci-placeholder \
+            --set-string 'mcp.extraEnv[0].name=HTTP_PROXY' \
+            --set-string 'mcp.extraEnv[0].value=http://proxy-a' \
+            --set-string 'mcp.extraEnv[1].name=HTTP_PROXY' \
+            --set-string 'mcp.extraEnv[1].value=http://proxy-b' > /tmp/extra-env.yaml 2>&1; then
+            echo "expected duplicate extraEnv names to fail"
+            exit 1
+          fi
+          grep -q "duplicates another extraEnv entry" /tmp/extra-env.yaml
       - name: Render production example
         run: helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp -f examples/values/tailscale-production.yaml > /tmp/production.yaml
       - name: Render Minibridge Streamable HTTP with a custom endpoint

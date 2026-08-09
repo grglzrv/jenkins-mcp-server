@@ -59,7 +59,7 @@ creates the credentials Secret.
 ```bash
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.5.0 \
+  --version 2.6.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --set jenkins.url=https://jenkins.example.com \
@@ -77,19 +77,48 @@ deploying something that cannot reach a Jenkins.
 Exposing it outside the cluster, running it behind minibridge, autoscaling and
 the Tailscale integration are all opt-in. See the values reference below.
 
+## Troubleshooting
+
+`/healthz` proves the process is running; `/readyz` validates configuration,
+the CA file, and optional audit-file health. Readiness does not call Jenkins, so
+a ready pod can still be blocked by DNS, a firewall, NetworkPolicy, a proxy, or
+Jenkins authentication. The chart leaves NetworkPolicy disabled because a
+standard policy cannot safely select an external Jenkins DNS name.
+
+| Symptom | Check |
+| --- | --- |
+| DNS, connection, or timeout error | Jenkins URL/context path, cluster DNS, firewall allowlist, and egress policy/gateway |
+| Unexpected 302/303 | Missing Jenkins context path or proxy/SSO redirecting API-token traffic to login |
+| 401 | The API token belongs to the configured username; restart the Deployment after rotating an existing/ESO Secret |
+| Writes return crumb-related 403 | Proxy header preservation and Strict Crumb Issuer's *check client IP* setting |
+| Tool absent from `tools/list` | Minibridge `tools.allow`/`tools.deny`; server `mcp.allow*` flags refuse calls but do not hide tools |
+| `MCP_MAX_RESPONSE_BYTES` error | Narrow the query/folder, or raise `mcp.maxResponseBytes` for a measured legitimate response |
+
+See the repository's [complete troubleshooting guide](https://github.com/grglzrv/jenkins-mcp-server/blob/main/docs/TROUBLESHOOTING.md)
+for commands, audit readiness, session affinity, TLS, and policy-layer details.
+
 ## Install from GHCR
 
 ```bash
 helm registry login ghcr.io -u grglzrv
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.5.0 \
+  --version 2.6.0 \
   --namespace jenkins-mcp \
   --create-namespace \
   --values values-production.yaml
 ```
 
 For a public package, registry login is not needed for pulls.
+
+### Upgrading from 2.5
+
+No action is required. Jenkins API, job-config, and crumb responses now have a
+10 MB streamed safety bound. If a measured legitimate response is larger,
+increase `mcp.maxResponseBytes`; prefer narrowing a folder query first.
+Review `mcp.extraEnv` and move any chart-owned `JENKINS_*`, `MCP_*`, or
+`MINIBRIDGE_*` override to its typed chart value. Proxy and trust variables such
+as `HTTP_PROXY`, `NO_PROXY`, and `SSL_CERT_FILE` remain supported.
 
 ### Upgrading from 2.4.2
 
@@ -196,6 +225,7 @@ and pod scheduling fields remain open by design.
 Neither CA setting is needed for a publicly issued certificate, which covers
 Let's Encrypt, any commercial CA, and Tailscale: the container's trust store
 already validates those. Reach for one only when a startup error mentions
+an unreadable `JENKINS_CA_BUNDLE`, or when a Jenkins call reports
 `certificate verify failed` or `self-signed certificate`, and add the CA rather
 than setting `verifyTls: false` — the latter accepts any certificate on a
 connection carrying a Jenkins API token. Setting `verifyTls: false` together
@@ -270,6 +300,9 @@ chart does not control. Deprecated
 pod-template checksum and roll the Deployment automatically. Existing Secrets
 and ESO targets update independently of Helm; restart the Deployment after a
 rotation because environment variables in a running process are immutable.
+Credential and chart policy variables cannot be replaced through
+`mcp.extraEnv`; use the typed credential, `mcp`, `audit`, or `minibridge` value
+instead. Duplicate extra environment-variable names also fail the render.
 
 `externalSecret.dataFrom` and `extraData` are mutually exclusive. With
 `dataFrom`, the synchronized Secret must still contain the two configured
@@ -307,7 +340,9 @@ jenkins:
 | `mcp.allowDestructive` | **`false`** — master switch; all irreversible actions are opt-in |
 | `mcp.allowJobDelete` | **`false`** — irreversible, opt-in |
 | `mcp.allowJobUpdate` / `allowBuildStop` | `true` |
+| `mcp.maxResponseBytes` | `10000000` — hard streamed-response limit for complete Jenkins API, config, and crumb responses |
 | `mcp.maxLogBytes` | `1000000` — hard streamed-response limit for console and administrator calls |
+| `mcp.extraEnv` | `[]` — additional variables such as `HTTP_PROXY`; chart-owned `JENKINS_*`, `MCP_*`, `MINIBRIDGE_*`, and the OTEL endpoint cannot be overridden here |
 
 ### minibridge proxy, optional
 
@@ -452,7 +487,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.5.0
+NEW_VERSION=2.6.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

@@ -119,7 +119,8 @@ depend on it.
 - Build trigger, parameterized builds, running-build discovery, stop/terminate/kill.
 - Queue inspection and cancellation.
 - Node inspection and optional online/offline management.
-- Progressively streamed console logs with a hard response-memory limit.
+- Streamed, size-bounded Jenkins responses, with progressive pagination for
+  console logs.
 - Single-flight Jenkins crumbs, safe-read retries, timeouts, nested-folder paths,
   and TLS verification. Writes retry only failures known to occur before sending.
 - Read-only mode, job allowlists covering discovery and mutations,
@@ -233,7 +234,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.5.0 \
+  --version 2.6.0 \
   --namespace jenkins-mcp \
   --values examples/values/tailscale-production.yaml
 ```
@@ -478,16 +479,21 @@ limitations are in [SECURITY.md](SECURITY.md).
 
 ## 🩺 Troubleshooting
 
-Symptoms seen in practice, with the configuration that causes each.
+The checks below cover the most common failures. The full guide includes
+Kubernetes commands, external-Jenkins networking, health semantics, proxy/SSO
+redirects, session affinity, and response limits:
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Every call returns 401 | The token is wrong, revoked, or belongs to a different user | Reissue the API token and update the Secret |
-| `certificate verify failed` at startup | Jenkins uses a private or self-signed CA | Set `jenkins.caBundle.existingSecret`. Do not disable `verifyTls` |
+| Every Jenkins call returns 401 | The username/API-token pair is invalid or mismatched | Rotate the token and update the Secret; it must belong to `JENKINS_USERNAME` |
+| `certificate verify failed` on a Jenkins call | Jenkins uses a private or self-signed CA | Set `jenkins.caBundle.existingSecret`. Keep `verifyTls` enabled |
+| DNS, connection, or timeout error | The pod cannot reach the external Jenkins URL | Check the URL/context path, DNS, firewall allowlist, and any egress policy or gateway |
 | Reads succeed, every write returns 403 | Strict Crumb Issuer with *check client IP*: the crumb is bound to a source address that changes behind SNAT or an egress proxy | Disable the IP check, or exclude this server |
 | `get_job_config` fails, everything else works | The account has `Job/Read` but not `Job/ExtendedRead` | Grant `Job/ExtendedRead` |
 | `trigger_build` rejected on a parameterised job | Triggered with no `parameters` at all, which uses `/build` | Pass `parameters`; an empty object is enough and uses the job's defaults |
-| A tool is missing from `tools/list` | It is denied by `minibridge.tools`, or disabled by an `mcp.allow*` setting | Intended behaviour. Check both before assuming a fault |
+| A tool is missing from `tools/list` | It is denied by `minibridge.tools` | Check Minibridge `tools.allow`/`tools.deny`; server `mcp.allow*` flags refuse calls but do not hide tools |
+| A visible tool returns a policy error | An in-process `mcp.*` policy gate denied the operation | Check read-only mode, job scope, category, destructive master, and operation flags |
 
 Plugin, permission, proxy and scale details are in
 [docs/JENKINS_COMPATIBILITY.md](docs/JENKINS_COMPATIBILITY.md).
@@ -532,7 +538,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.5.0
+NEW_VERSION=2.6.0
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 

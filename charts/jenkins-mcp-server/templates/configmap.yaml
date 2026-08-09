@@ -37,6 +37,7 @@ data:
   MCP_ALLOW_JOB_UPDATE: {{ .Values.mcp.allowJobUpdate | quote }}
   MCP_ALLOW_BUILD_STOP: {{ .Values.mcp.allowBuildStop | quote }}
   MCP_ALLOWED_JOBS: {{ .Values.mcp.allowedJobs | quote }}
+  MCP_MAX_RESPONSE_BYTES: {{ .Values.mcp.maxResponseBytes | int | quote }}
   MCP_MAX_LOG_BYTES: {{ .Values.mcp.maxLogBytes | int | quote }}
   {{- if .Values.audit.fileEnabled }}
   MCP_AUDIT_LOG_PATH: {{ .Values.audit.path | quote }}

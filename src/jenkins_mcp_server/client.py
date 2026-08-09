@@ -176,7 +176,12 @@ class JenkinsClient:
             if self._crumb_disabled:
                 return None
             try:
-                response = await self.http.get("/crumbIssuer/api/json")
+                response = await self._send(
+                    "GET",
+                    "/crumbIssuer/api/json",
+                    {},
+                    self.settings.max_response_bytes,
+                )
             except httpx.TransportError as exc:
                 raise JenkinsError(f"Could not reach the Jenkins crumb issuer: {exc}") from exc
             if response.status_code == 404:
@@ -190,6 +195,11 @@ class JenkinsClient:
                 raise JenkinsError(
                     f"Jenkins crumb issuer returned {response.status_code}. "
                     "Check that the account can authenticate."
+                )
+            if response.extensions.get("jenkins_mcp_truncated", False):
+                raise JenkinsError(
+                    "Jenkins crumb issuer response exceeded MCP_MAX_RESPONSE_BYTES "
+                    f"({self.settings.max_response_bytes} bytes)"
                 )
             try:
                 data = response.json()
@@ -295,6 +305,7 @@ class JenkinsClient:
         headers: dict[str, str] | None = None,
         expected: tuple[int, ...] = (200,),
         response_limit: int | None = None,
+        allow_truncated: bool = False,
     ) -> httpx.Response:
         method_upper = method.upper()
         request_headers = dict(headers or {})
@@ -333,9 +344,30 @@ class JenkinsClient:
                     method,
                     path,
                     request_kwargs,
-                    response_limit,
+                    response_limit
+                    if response_limit is not None
+                    else self.settings.max_response_bytes,
                 )
                 if response.status_code in expected:
+                    if (
+                        response.extensions.get("jenkins_mcp_truncated", False)
+                        and not allow_truncated
+                    ):
+                        limit = (
+                            response_limit
+                            if response_limit is not None
+                            else self.settings.max_response_bytes
+                        )
+                        await self.audit.emit_async(
+                            action,
+                            "failure",
+                            status="response_too_large",
+                            path=path,
+                        )
+                        raise JenkinsError(
+                            "Jenkins response exceeded MCP_MAX_RESPONSE_BYTES "
+                            f"({limit} bytes)"
+                        )
                     await self.audit.emit_async(
                         action,
                         "success",
@@ -384,8 +416,25 @@ class JenkinsClient:
                     status=response.status_code,
                     path=path,
                 )
+                if 300 <= response.status_code < 400:
+                    hint = (
+                        " Unexpected redirect; check the JENKINS_URL context path, "
+                        "reverse-proxy authentication, and SSO bypass for API tokens."
+                    )
+                elif response.status_code == 401:
+                    hint = (
+                        " Authentication failed; verify JENKINS_USERNAME and its API token."
+                    )
+                elif response.status_code == 403:
+                    hint = (
+                        " Check Jenkins permissions and whether a proxy preserves the "
+                        "crumb header and client address."
+                    )
+                else:
+                    hint = ""
+                detail = f": {body}" if body else ""
                 raise JenkinsError(
-                    f"Jenkins returned {response.status_code}: {body}"
+                    f"Jenkins returned {response.status_code}{detail}.{hint}".rstrip()
                 )
             except httpx.TransportError as exc:
                 last_error = exc
@@ -427,7 +476,12 @@ class JenkinsClient:
             action="api.get",
             params=params,
         )
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise JenkinsError(
+                f"Jenkins returned malformed JSON for {endpoint}"
+            ) from exc
 
     async def list_jobs(self, folder: str | None = None) -> Any:
         if folder and not self.policy.allows_job_or_descendant(folder):
@@ -606,6 +660,7 @@ class JenkinsClient:
             action="build.console",
             params={"start": start},
             response_limit=self.settings.max_log_bytes,
+            allow_truncated=True,
         )
         raw = response.content
         truncated = bool(response.extensions.get("jenkins_mcp_truncated", False))
@@ -744,6 +799,7 @@ class JenkinsClient:
             headers={"Content-Type": content_type},
             expected=tuple(range(200, 400)),
             response_limit=self.settings.max_log_bytes,
+            allow_truncated=True,
         )
         return {
             "status": response.status_code,

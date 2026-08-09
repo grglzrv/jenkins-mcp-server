@@ -50,6 +50,7 @@ def test_destructive_flags_exist_with_safe_defaults() -> None:
     # Deleting a job is irreversible, so it must not be on by default.
     assert mcp["allowJobDelete"] is False
     assert mcp["allowDestructive"] is False
+    assert mcp["maxResponseBytes"] == 10_000_000
 
 
 def test_241_security_defaults_are_consistent_across_runtime_and_deployments() -> None:
@@ -89,6 +90,7 @@ def test_every_values_example_states_security_and_network_intent() -> None:
     for path in sorted(EXAMPLES.glob("*.yaml")):
         example = yaml.safe_load(path.read_text())
         assert example["mcp"]["allowDestructive"] is False, path.name
+        assert example["mcp"]["maxResponseBytes"] == 10_000_000, path.name
         assert example["audit"]["fileEnabled"] is False, path.name
         policy = example["networkPolicy"]
         expected_enabled = path.name == "tailscale-production.yaml"
@@ -102,6 +104,7 @@ def test_every_argocd_application_states_security_and_network_intent() -> None:
         application = yaml.safe_load(path.read_text())
         values_object = application["spec"]["source"]["helm"]["valuesObject"]
         assert values_object["mcp"]["allowDestructive"] is False, path.name
+        assert values_object["mcp"]["maxResponseBytes"] == 10_000_000, path.name
         assert values_object["audit"]["fileEnabled"] is False, path.name
         policy = values_object["networkPolicy"]
         expected_enabled = path.name != "application-hpa-generic.yaml"
@@ -155,6 +158,24 @@ def test_chart_env_names_match_the_settings_aliases() -> None:
     config_src = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
     for env in DESTRUCTIVE_ENV:
         assert f'alias="{env}"' in config_src, f"{env} has no matching Settings alias"
+
+
+def test_extra_env_cannot_override_credentials_or_chart_policy() -> None:
+    """Explicit env entries come after envFrom and would silently win."""
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    for reserved in [
+        'hasPrefix "JENKINS_"',
+        'hasPrefix "MCP_"',
+        'hasPrefix "MINIBRIDGE_"',
+        'eq $name "OTEL_EXPORTER_OTLP_ENDPOINT"',
+    ]:
+        assert reserved in validate
+    assert "duplicates another extraEnv entry" in validate
+    extra_env = schema()["properties"]["mcp"]["properties"]["extraEnv"]
+    assert extra_env["items"]["required"] == ["name"]
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "Reject extraEnv credential and policy overrides" in workflow
+    assert "expected reserved extraEnv name" in workflow
 
 
 # --- ExternalSecret -------------------------------------------------------
@@ -262,7 +283,8 @@ def test_secret_rotation_contracts_are_explicit_and_smoked() -> None:
     for marker in [
         "credential-sources:",
         "Helm-managed Secret is owned, rotated, and deleted",
-        "Existing Secret is read but never owned or deleted",
+        "Existing Secret rotates after restart and is never owned or deleted",
+        "Split Secret refs are read independently and never owned",
         "ESO Kubernetes provider syncs and rotates credentials",
         "external-secrets/external-secrets",
         "provider.kubernetes.remoteNamespace",
@@ -1251,6 +1273,11 @@ def test_smoke_values_disable_what_the_cluster_lacks() -> None:
     # The NetworkPolicy must stay on: the helm test reaching the Service through
     # it is a large part of what the smoke test proves.
     assert v["networkPolicy"]["enabled"] is True
+    for path in sorted((ROOT / ".github").glob("smoke-values*.yaml")):
+        smoke_values = yaml.safe_load(path.read_text())
+        assert smoke_values["mcp"]["maxResponseBytes"] == 10_000_000, path.name
+    workflow = (ROOT / ".github/workflows/chart-smoke.yml").read_text()
+    assert 'os.environ["MCP_MAX_RESPONSE_BYTES"] == "10000000"' in workflow
 
 
 def test_chart_readme_documents_kubernetes_support() -> None:
@@ -1286,7 +1313,13 @@ def test_numeric_env_values_are_not_rendered_in_scientific_notation() -> None:
     values. Only a real install surfaced it; rendering looked fine.
     """
     cm = (CHART / "templates/configmap.yaml").read_text()
-    for key in ["maxLogBytes", "mcp.port", "healthPort", "maxRetries"]:
+    for key in [
+        "maxResponseBytes",
+        "maxLogBytes",
+        "mcp.port",
+        "healthPort",
+        "maxRetries",
+    ]:
         # Assignment lines only. A comment mentioning the value is not a render.
         line = next(
             ln
@@ -1304,11 +1337,17 @@ def test_settings_reject_scientific_notation_so_the_cast_matters() -> None:
         JENKINS_URL="https://j.test", JENKINS_USERNAME="u", JENKINS_TOKEN="t"
     )
     assert Settings(**base, MCP_MAX_LOG_BYTES="1000000").max_log_bytes == 1000000
+    assert (
+        Settings(**base, MCP_MAX_RESPONSE_BYTES="10000000").max_response_bytes
+        == 10000000
+    )
     import pydantic
     import pytest
 
     with pytest.raises(pydantic.ValidationError):
         Settings(**base, MCP_MAX_LOG_BYTES="1e+06")
+    with pytest.raises(pydantic.ValidationError):
+        Settings(**base, MCP_MAX_RESPONSE_BYTES="1e+07")
 
 
 # --- neutral defaults -----------------------------------------------------

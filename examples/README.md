@@ -53,6 +53,12 @@ are not blocked; Tailscale examples opt in and allow only the Tailscale
 namespace. If you enable the policy elsewhere, configure client namespace
 selectors and the Jenkins egress path before deploying it.
 
+The examples also state `mcp.maxResponseBytes: 10000000`. This bounds complete
+Jenkins API, job-config, and crumb responses independently of the smaller
+console/admin text limit. Increase it only for a measured legitimate response;
+the [troubleshooting guide](../docs/TROUBLESHOOTING.md) explains how to
+distinguish that case from a proxy login page or malformed controller response.
+
 ## Networking and scaling
 
 | Example | What it shows |

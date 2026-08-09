@@ -183,6 +183,11 @@ If they chose Docker instead, use `compose.yaml` at the repository root: copy
 
 ## Phase 5 — Verify it works
 
+Remember that `/readyz` validates local configuration and optional audit-file
+health; it does not call Jenkins. If the pod is ready but a tool fails, follow
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for external Jenkins DNS,
+firewall/NetworkPolicy, TLS, proxy/SSO, policy, and session-affinity checks.
+
 Do not report success before all four pass.
 
 ```bash
@@ -243,8 +248,9 @@ Tell the person, in plain terms:
   Secret and restarting the deployment.
 - That `mcp.allowedJobs` should be narrowed to the folders they actually need
   if it is still `*`.
-- Where to look when something breaks:
-  `kubectl -n jenkins-mcp logs deploy/jenkins-mcp-jenkins-mcp-server`.
+- Where to look when something breaks: start with
+  `kubectl -n jenkins-mcp logs deploy/jenkins-mcp-jenkins-mcp-server`, then use
+  [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 Suggest two follow-ups worth doing once it works: narrowing `allowedJobs`, and
 reducing the Jenkins account's permissions to the least the enabled tools need.

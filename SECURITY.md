@@ -9,6 +9,9 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Use HTTPS to Jenkins and keep `JENKINS_VERIFY_TLS=true`.
 - Mount the enterprise CA through `JENKINS_CA_BUNDLE`.
 - Use a dedicated Jenkins service account and API token.
+- Select exactly one `jenkins.credentials` source. `mcp.extraEnv` rejects
+  chart-owned `JENKINS_*`, `MCP_*`, and `MINIBRIDGE_*` names so a later explicit
+  environment entry cannot replace the validated credential or policy values.
 - Restrict `MCP_ALLOWED_JOBS` to controlled folders. It filters job discovery,
   queue and running-build visibility, and job/build mutations.
 - Keep `MCP_ALLOW_ADMIN_REQUEST=false` unless a reviewed use case requires it.
@@ -28,6 +31,9 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Forward audit JSONL process logs to the central SIEM. File output is an
   optional, size-rotated copy. Set `audit.requiredForReadiness=true` only when
   the file is the record of account and losing it must fail closed.
+- Keep `MCP_MAX_RESPONSE_BYTES` bounded. Raise the 10 MB default only for a
+  measured legitimate Jenkins API or job-config response; narrow folder
+  queries first.
 - Rotate the Jenkins API token and never commit `.env` or certificates.
 
 ## Secret handling

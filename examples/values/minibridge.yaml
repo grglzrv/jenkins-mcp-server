@@ -24,6 +24,7 @@ jenkins:
 # Server-side policy still applies underneath minibridge and cannot be bypassed.
 mcp:
   allowedJobs: "AI/*,Platform/*"
+  maxResponseBytes: 10000000
   allowDestructive: false
   allowJobDelete: false
   allowAdminRequest: false

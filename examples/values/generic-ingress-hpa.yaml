@@ -80,6 +80,7 @@ resources:
 
 mcp:
   allowedJobs: "AI/*,Platform/*"
+  maxResponseBytes: 10000000
   allowDestructive: false
 
 audit:

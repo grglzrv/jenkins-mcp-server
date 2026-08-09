@@ -28,6 +28,7 @@ jenkins:
 mcp:
   readOnly: true
   allowedJobs: "AI/*"
+  maxResponseBytes: 10000000
   allowDestructive: false
 
 service:

@@ -53,6 +53,9 @@ data:
 
   # Server-side policy. Enforced in-process, independent of minibridge.
   MCP_ALLOWED_JOBS: "AI/*,Platform/*"
+  # Bound complete Jenkins API/config responses separately from console text.
+  MCP_MAX_RESPONSE_BYTES: "10000000"
+  MCP_MAX_LOG_BYTES: "1000000"
   MCP_ALLOW_NODE_WRITE: "false"
   MCP_ALLOW_ADMIN_REQUEST: "false"
   MCP_ALLOW_DESTRUCTIVE: "false"
@@ -115,7 +118,7 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:2.5.0-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.6.0-minibridge
           imagePullPolicy: IfNotPresent
           # No args: the entrypoint follows Acuvity's single-container pattern:
           # public Streamable HTTP in Minibridge, private stdio to Jenkins.
