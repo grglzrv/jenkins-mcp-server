@@ -588,10 +588,15 @@ from the matching version entry after CI validates it.
 
 ### Upgrade Notes
 
-- No values migration is required from 2.3.1. A release using the same target
-  key for both fields must correct that invalid mapping before upgrading.
+- No values migration is required from 2.3.0. Version 2.3.1 was not published;
+  its documented example updates first shipped in 2.3.2. A release using the
+  same target key for both fields must correct that invalid mapping before
+  upgrading.
 
 ## [2.3.1] - 2026-08-08
+
+> This version was not published or tagged. The changes below first shipped in
+> 2.3.2.
 
 ### Highlights
 
