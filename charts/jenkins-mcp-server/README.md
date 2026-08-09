@@ -51,65 +51,51 @@ the chart's declared minimum.
 
 ## Quick start
 
-The chart assumes nothing about the cluster: no ingress controller, no
-Tailscale, no service mesh. The default `create.enabled=true` path needs only
-the Jenkins URL, the exact LDAP-backed Jenkins user ID, and its API token; Helm
-creates the credentials Secret.
+The chart assumes no ingress controller, Tailscale installation, or service
+mesh. For a production-shaped install, create the credentials Secret outside
+Helm and reference it explicitly:
 
 ```bash
+kubectl create namespace jenkins-mcp
+kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
+  --from-literal=JENKINS_USERNAME='<actual-jenkins-login-id>' \
+  --from-literal=JENKINS_TOKEN='<jenkins-api-token>'
+
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.6.0 \
+  --version 2.6.1 \
   --namespace jenkins-mcp \
-  --create-namespace \
-  --set jenkins.url=https://jenkins.example.com \
-  --set-string jenkins.credentials.create.jenkinsUserId='<actual-jenkins-login-id>' \
-  --set-string jenkins.credentials.create.jenkinsApiToken='<jenkins-api-token>'
+  --set-string jenkins.url=https://jenkins.example.com \
+  --set jenkins.credentials.create.enabled=false \
+  --set jenkins.credentials.existingSecret.enabled=true \
+  --set-string jenkins.credentials.existingSecret.name=jenkins-mcp-secrets \
+  --set-string jenkins.credentials.existingSecret.usernameKey=JENKINS_USERNAME \
+  --set-string jenkins.credentials.existingSecret.tokenKey=JENKINS_TOKEN
 ```
 
-NetworkPolicy is disabled by default so a normal external, firewall-protected
-Jenkins URL remains reachable. The install gives a ClusterIP Service reachable
-by pods in the release namespace at
+Replace the URL with the exact external Jenkins base URL, including any context
+path. NetworkPolicy is disabled by default so a firewall-protected external
+controller remains reachable. The install gives a ClusterIP Service at
 `http://jenkins-mcp-jenkins-mcp-server.jenkins-mcp.svc.cluster.local:8000/mcp`.
 Installing without `jenkins.url` fails with a message saying so, rather than
 deploying something that cannot reach a Jenkins.
 
 Exposing it outside the cluster, running it behind minibridge, autoscaling and
-the Tailscale integration are all opt-in. See the values reference below.
+the Tailscale integration are all opt-in. Public GHCR packages do not require
+`helm registry login`; see the values reference below for every option.
 
 ## Troubleshooting
 
 `/healthz` proves the process is running; `/readyz` validates configuration,
 the CA file, and optional audit-file health. Readiness does not call Jenkins, so
 a ready pod can still be blocked by DNS, a firewall, NetworkPolicy, a proxy, or
-Jenkins authentication. The chart leaves NetworkPolicy disabled because a
-standard policy cannot safely select an external Jenkins DNS name.
-
-| Symptom | Check |
-| --- | --- |
-| DNS, connection, or timeout error | Jenkins URL/context path, cluster DNS, firewall allowlist, and egress policy/gateway |
-| Unexpected 302/303 | Missing Jenkins context path or proxy/SSO redirecting API-token traffic to login |
-| 401 | The API token belongs to the configured username; restart the Deployment after rotating an existing/ESO Secret |
-| Writes return crumb-related 403 | Proxy header preservation and Strict Crumb Issuer's *check client IP* setting |
-| Tool absent from `tools/list` | Minibridge `tools.allow`/`tools.deny`; server `mcp.allow*` flags refuse calls but do not hide tools |
-| `MCP_MAX_RESPONSE_BYTES` error | Narrow the query/folder, or raise `mcp.maxResponseBytes` for a measured legitimate response |
+Jenkins authentication. A 403 without a crumb message is a Jenkins permission
+failure; only a crumb-related 403 calls for proxy or Strict Crumb Issuer checks.
 
 See the repository's [complete troubleshooting guide](https://github.com/grglzrv/jenkins-mcp-server/blob/main/docs/TROUBLESHOOTING.md)
-for commands, audit readiness, session affinity, TLS, and policy-layer details.
-
-## Install from GHCR
-
-```bash
-helm registry login ghcr.io -u grglzrv
-helm upgrade --install jenkins-mcp \
-  oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.6.0 \
-  --namespace jenkins-mcp \
-  --create-namespace \
-  --values values-production.yaml
-```
-
-For a public package, registry login is not needed for pulls.
+for commands and the complete symptom guide covering external Jenkins
+networking, audit readiness, session affinity, TLS, response limits, and both
+policy layers.
 
 ### Upgrading from 2.5
 
@@ -487,7 +473,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.6.0
+NEW_VERSION=2.6.1
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

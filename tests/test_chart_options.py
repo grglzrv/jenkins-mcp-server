@@ -97,6 +97,8 @@ def test_every_values_example_states_security_and_network_intent() -> None:
         assert policy["enabled"] is expected_enabled, path.name
         assert "allowSameNamespace" in policy, path.name
         assert "allowInternetEgress" in policy, path.name
+        uses_tailscale = path.name == "tailscale-production.yaml"
+        assert example["jenkins"]["url"].endswith(".ts.net") is uses_tailscale, path.name
 
 
 def test_every_argocd_application_states_security_and_network_intent() -> None:
@@ -216,9 +218,9 @@ def test_external_secret_exposes_creation_options() -> None:
     assert es["secretStore"]["create"] is False
     assert es["enabled"] is False
 
-    external_schema = schema()["properties"]["jenkins"]["properties"][
-        "credentials"
-    ]["properties"]["externalSecret"]
+    external_schema = schema()["properties"]["jenkins"]["properties"]["credentials"]["properties"][
+        "externalSecret"
+    ]
     for key in [
         "targetUsernameKey",
         "targetTokenKey",
@@ -262,9 +264,9 @@ def test_credential_sources_own_their_key_names() -> None:
     assert "existingSecret.usernameKey" not in secret
     assert "existingSecret.tokenKey" not in secret
 
-    create_schema = schema()["properties"]["jenkins"]["properties"][
-        "credentials"
-    ]["properties"]["create"]
+    create_schema = schema()["properties"]["jenkins"]["properties"]["credentials"]["properties"][
+        "create"
+    ]
     # The template conditionally requires one complete current/legacy pair.
     # Keeping only enabled at schema level lets --reuse-values upgrades from
     # 2.1 and 2.2 reach that compatibility logic.
@@ -298,9 +300,7 @@ def test_secret_rotation_contracts_are_explicit_and_smoked() -> None:
 def test_values_and_production_example_still_match_schema() -> None:
     base = values()
     jsonschema.validate(base, schema())
-    production = yaml.safe_load(
-        (ROOT / "examples/values/tailscale-production.yaml").read_text()
-    )
+    production = yaml.safe_load((ROOT / "examples/values/tailscale-production.yaml").read_text())
 
     def merge(a, b):
         if isinstance(a, dict) and isinstance(b, dict):
@@ -352,9 +352,7 @@ def test_gcp_cluster_store_reference_carries_a_namespace() -> None:
     """ClusterSecretStore has no namespace of its own, so ESO needs one here."""
     es = gcp_example()["jenkins"]["credentials"]["externalSecret"]
     assert es["secretStore"]["kind"] == "ClusterSecretStore"
-    ref = es["secretStore"]["provider"]["gcpsm"]["auth"]["workloadIdentity"][
-        "serviceAccountRef"
-    ]
+    ref = es["secretStore"]["provider"]["gcpsm"]["auth"]["workloadIdentity"]["serviceAccountRef"]
     assert ref.get("namespace"), "ClusterSecretStore serviceAccountRef needs a namespace"
 
 
@@ -431,18 +429,14 @@ def test_secret_examples_cover_all_four_credential_paths() -> None:
 
 
 def test_enabled_existing_secret_values_are_explicit() -> None:
-    files = sorted(EXAMPLES.glob("*.yaml")) + sorted(
-        (ROOT / ".github").glob("smoke-values*.yaml")
-    )
+    files = sorted(EXAMPLES.glob("*.yaml")) + sorted((ROOT / ".github").glob("smoke-values*.yaml"))
     for path in files:
         document = yaml.safe_load(path.read_text())
         existing = document["jenkins"]["credentials"].get("existingSecret", {})
         if not existing.get("enabled"):
             continue
         assert existing.get("name"), f"{path.relative_to(ROOT)}: missing name"
-        assert existing.get("usernameKey"), (
-            f"{path.relative_to(ROOT)}: missing usernameKey"
-        )
+        assert existing.get("usernameKey"), f"{path.relative_to(ROOT)}: missing usernameKey"
         assert existing.get("tokenKey"), f"{path.relative_to(ROOT)}: missing tokenKey"
 
 
@@ -464,9 +458,7 @@ def test_enabled_managed_and_external_secret_values_are_explicit() -> None:
                 "usernameRemoteKey",
                 "tokenRemoteKey",
             ]:
-                assert external.get(key), (
-                    f"{path.relative_to(ROOT)}: missing externalSecret.{key}"
-                )
+                assert external.get(key), f"{path.relative_to(ROOT)}: missing externalSecret.{key}"
             assert external["targetUsernameKey"] != external["targetTokenKey"], (
                 f"{path.relative_to(ROOT)}: External Secret target keys must differ"
             )
@@ -579,8 +571,7 @@ def test_per_field_credential_refs_are_wired_and_validated() -> None:
     helpers = (CHART / "templates/_helpers.tpl").read_text()
     deployment = (CHART / "templates/deployment.yaml").read_text()
     validate = (CHART / "templates/_validate.tpl").read_text()
-    for helper in ["usernameSecretName", "usernameSecretKey",
-                   "tokenSecretName", "tokenSecretKey"]:
+    for helper in ["usernameSecretName", "usernameSecretKey", "tokenSecretName", "tokenSecretKey"]:
         assert helper in helpers
         assert helper in deployment
     assert "exactly one jenkins.credentials source may be enabled" in validate
@@ -604,39 +595,39 @@ def test_minibridge_examples_demonstrate_both_policy_shapes() -> None:
 
 def test_minibridge_v080_environment_names_and_secret_pass_ref() -> None:
     helpers = (CHART / "templates/_helpers.tpl").read_text()
-    for env in ["MINIBRIDGE_POLICER_HTTP_URL",
-                "MINIBRIDGE_POLICER_HTTP_BEARER_TOKEN",
-                "MINIBRIDGE_POLICER_HTTP_CA",
-                "MINIBRIDGE_MCP_USE_TEMPDIR"]:
+    for env in [
+        "MINIBRIDGE_POLICER_HTTP_URL",
+        "MINIBRIDGE_POLICER_HTTP_BEARER_TOKEN",
+        "MINIBRIDGE_POLICER_HTTP_CA",
+        "MINIBRIDGE_MCP_USE_TEMPDIR",
+    ]:
         assert env in helpers
-    for obsolete in ["MINIBRIDGE_POLICER_URL", "MINIBRIDGE_POLICER_TOKEN",
-                     "MINIBRIDGE_POLICER_CA"]:
+    for obsolete in ["MINIBRIDGE_POLICER_URL", "MINIBRIDGE_POLICER_TOKEN", "MINIBRIDGE_POLICER_CA"]:
         assert f"name: {obsolete}\n" not in helpers
     assert "tls.pass.valueFrom.name" in helpers
     assert "tls.pass.valueFrom.key" in helpers
 
 
 def test_raw_minibridge_manifests_support_read_only_root_filesystems() -> None:
-    for path in [DEPLOY / "minibridge/kustomization.yaml",
-                 DEPLOY / "minibridge/standalone-deployment.yaml"]:
+    for path in [
+        DEPLOY / "minibridge/kustomization.yaml",
+        DEPLOY / "minibridge/standalone-deployment.yaml",
+    ]:
         text = path.read_text()
         assert "/home/app/.config" in text
         assert "minibridge-config" in text
-    assert "MINIBRIDGE_ENDPOINT_MCP=/mcp" in (
-        DEPLOY / "minibridge/minibridge.env"
-    ).read_text()
-    assert "MINIBRIDGE_ENDPOINT_MCP: /mcp" in (
-        DEPLOY / "minibridge/standalone-deployment.yaml"
-    ).read_text()
+    assert "MINIBRIDGE_ENDPOINT_MCP=/mcp" in (DEPLOY / "minibridge/minibridge.env").read_text()
+    assert (
+        "MINIBRIDGE_ENDPOINT_MCP: /mcp"
+        in (DEPLOY / "minibridge/standalone-deployment.yaml").read_text()
+    )
 
 
 def test_config_env_covers_every_supported_setting() -> None:
     """The raw manifests drifted from the app once; keep them in step."""
     import re
 
-    cfg = set(
-        re.findall(r"^([A-Z_]+)=", (DEPLOY / "base/config.env").read_text(), re.M)
-    )
+    cfg = set(re.findall(r"^([A-Z_]+)=", (DEPLOY / "base/config.env").read_text(), re.M))
     src = set(
         re.findall(
             r'alias="(MCP_[A-Z_]+|JENKINS_[A-Z_]+)"',
@@ -655,9 +646,7 @@ def test_config_env_covers_every_supported_setting() -> None:
         "MCP_AUDIT_BACKUP_COUNT",
     }
     allowed_missing = from_secret | intentionally_unset
-    assert (src - cfg) <= allowed_missing, (
-        f"config.env is missing {src - cfg - allowed_missing}"
-    )
+    assert (src - cfg) <= allowed_missing, f"config.env is missing {src - cfg - allowed_missing}"
     assert not (cfg - src), f"config.env sets unknown variables: {cfg - src}"
 
 
@@ -681,9 +670,7 @@ def test_minibridge_overlay_and_standalone_exist_and_parse() -> None:
 def test_tailscale_directory_is_a_kustomization() -> None:
     """Overlays reference the directory; referencing files across dirs fails."""
     assert (DEPLOY / "tailscale/kustomization.yaml").is_file()
-    production = yaml.safe_load(
-        (DEPLOY / "overlays/production/kustomization.yaml").read_text()
-    )
+    production = yaml.safe_load((DEPLOY / "overlays/production/kustomization.yaml").read_text())
     assert "../../tailscale" in production["resources"]
     assert not any(r.endswith(".yaml") for r in production["resources"])
     tailscale = yaml.safe_load((DEPLOY / "tailscale/kustomization.yaml").read_text())
@@ -726,9 +713,7 @@ def test_argocd_applications_make_session_affinity_explicit() -> None:
         "sessionAffinityConfig": {"clientIP": {"timeoutSeconds": 600}},
     }
     for f, app in applications():
-        configured = app["spec"]["source"]["helm"]["valuesObject"]["service"][
-            "sessionAffinity"
-        ]
+        configured = app["spec"]["source"]["helm"]["valuesObject"]["service"]["sessionAffinity"]
         assert configured == expected, f"{f.name} hides the production routing policy"
 
 
@@ -746,9 +731,9 @@ def test_argocd_applications_ignore_the_operator_rewritten_ingress_host() -> Non
     """Without this Argo CD reports permanent OutOfSync against Tailscale."""
     for f, app in applications():
         diffs = app["spec"].get("ignoreDifferences", [])
-        assert any(
-            d.get("kind") == "Ingress" for d in diffs
-        ), f"{f.name} is missing the Ingress ignoreDifferences"
+        assert any(d.get("kind") == "Ingress" for d in diffs), (
+            f"{f.name} is missing the Ingress ignoreDifferences"
+        )
 
 
 def test_minibridge_argocd_example_enables_the_proxy() -> None:
@@ -795,7 +780,6 @@ def test_hermes_examples_use_the_current_http_mcp_schema() -> None:
         assert jenkins["timeout"] == 60, path
 
 
-
 # --- autoscaling and ingress ---------------------------------------------
 
 
@@ -840,10 +824,7 @@ def test_rendered_templates_have_no_duplicate_yaml_keys() -> None:
     import re
 
     dep = (CHART / "templates/deployment.yaml").read_text()
-    top = [
-        m.group(1)
-        for m in re.finditer(r"^  ([a-zA-Z]+):", dep, re.M)
-    ]
+    top = [m.group(1) for m in re.finditer(r"^  ([a-zA-Z]+):", dep, re.M)]
     assert len(top) == len(set(top)), f"duplicate keys in deployment.yaml: {top}"
 
 
@@ -906,9 +887,9 @@ def test_cross_field_validation_covers_credential_aliases_and_ranges() -> None:
 
     service_types = schema()["properties"]["service"]["properties"]["type"]["enum"]
     assert "ExternalName" not in service_types
-    policies = schema()["properties"]["jenkins"]["properties"]["credentials"][
-        "properties"
-    ]["externalSecret"]["properties"]["creationPolicy"]["enum"]
+    policies = schema()["properties"]["jenkins"]["properties"]["credentials"]["properties"][
+        "externalSecret"
+    ]["properties"]["creationPolicy"]["enum"]
     assert "CreateOrMerge" in policies
 
 
@@ -951,8 +932,14 @@ def test_minibridge_settings_are_not_silently_ignored() -> None:
     """Configuring guardrails while the proxy is off enforces nothing."""
     validate = (CHART / "templates/_validate.tpl").read_text()
     assert "minibridge.enabled is false" in validate
-    for key in ["tools.deny", "tools.allow", "methodsDeny", "guardrails",
-                "basicAuth.enabled", "tls.enabled"]:
+    for key in [
+        "tools.deny",
+        "tools.allow",
+        "methodsDeny",
+        "guardrails",
+        "basicAuth.enabled",
+        "tls.enabled",
+    ]:
         assert key in validate, f"{key} is not covered by the ignored-settings guard"
 
 
@@ -1042,9 +1029,7 @@ def test_production_values_make_session_affinity_explicit() -> None:
         "minibridge.yaml",
         "minibridge-hardened.yaml",
     ]:
-        configured = yaml.safe_load((EXAMPLES / name).read_text())["service"][
-            "sessionAffinity"
-        ]
+        configured = yaml.safe_load((EXAMPLES / name).read_text())["service"]["sessionAffinity"]
         assert configured == expected, name
 
 
@@ -1052,9 +1037,9 @@ def test_component_label_does_not_change_immutable_selectors() -> None:
     """Add workload identity without making existing Deployment selectors drift."""
     helpers = (CHART / "templates/_helpers.tpl").read_text()
     assert "app.kubernetes.io/component: mcp-server" in helpers
-    selector = helpers.split(
-        '{{- define "jenkins-mcp-server.selectorLabels" -}}', 1
-    )[1].split("{{- end }}", 1)[0]
+    selector = helpers.split('{{- define "jenkins-mcp-server.selectorLabels" -}}', 1)[1].split(
+        "{{- end }}", 1
+    )[0]
     assert "app.kubernetes.io/component" not in selector
     deployment = (CHART / "templates/deployment.yaml").read_text()
     assert "app.kubernetes.io/component: mcp-server" in deployment
@@ -1065,8 +1050,13 @@ def test_jenkins_compatibility_is_documented() -> None:
     doc = ROOT / "docs/JENKINS_COMPATIBILITY.md"
     assert doc.is_file()
     text = doc.read_text()
-    for topic in ["lts-jdk21", "cloudbees-folder", "workflow-multibranch",
-                  "API token", "Job/Delete"]:
+    for topic in [
+        "lts-jdk21",
+        "cloudbees-folder",
+        "workflow-multibranch",
+        "API token",
+        "Job/Delete",
+    ]:
         assert topic in text, f"compatibility doc should cover {topic}"
     assert "JENKINS_COMPATIBILITY.md" in (ROOT / "README.md").read_text()
 
@@ -1076,17 +1066,22 @@ def test_documented_endpoints_match_the_client() -> None:
 
     client = (ROOT / "src/jenkins_mcp_server/client.py").read_text()
     doc = (ROOT / "docs/JENKINS_COMPATIBILITY.md").read_text()
-    for endpoint in ["crumbIssuer", "createItem", "doDelete", "toggleOffline",
-                     "progressiveText", "cancelItem", "config.xml"]:
+    for endpoint in [
+        "crumbIssuer",
+        "createItem",
+        "doDelete",
+        "toggleOffline",
+        "progressiveText",
+        "cancelItem",
+        "config.xml",
+    ]:
         assert endpoint in client, f"{endpoint} no longer used by the client"
         assert endpoint in doc, f"{endpoint} missing from the compatibility doc"
 
 
 def test_autoscaling_argocd_example_ignores_replicas() -> None:
     """Otherwise Argo CD fights the HPA and reports permanent OutOfSync."""
-    app = yaml.safe_load(
-        (ARGOCD / "application-hpa-generic.yaml").read_text()
-    )
+    app = yaml.safe_load((ARGOCD / "application-hpa-generic.yaml").read_text())
     v = app["spec"]["source"]["helm"]["valuesObject"]
     assert v["autoscaling"]["enabled"] is True
     diffs = app["spec"]["ignoreDifferences"]
@@ -1114,8 +1109,14 @@ def test_compatibility_matrix_lists_concrete_versions() -> None:
 
 def test_plugin_blockers_are_documented() -> None:
     doc = (ROOT / "docs/JENKINS_COMPATIBILITY.md").read_text()
-    for blocker in ["cloudbees-folder", "Strict Crumb Issuer", "Job/ExtendedRead",
-                    "buildWithParameters", "script approval", "path prefix"]:
+    for blocker in [
+        "cloudbees-folder",
+        "Strict Crumb Issuer",
+        "Job/ExtendedRead",
+        "buildWithParameters",
+        "script approval",
+        "path prefix",
+    ]:
         assert blocker in doc, f"{blocker} should be covered as a known blocker"
 
 
@@ -1132,7 +1133,9 @@ def test_no_stale_version_pins_anywhere() -> None:
 
     result = subprocess.run(
         ["python3", str(ROOT / "scripts/check_version.py")],
-        capture_output=True, text=True, cwd=ROOT,
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
     )
     assert result.returncode == 0, result.stderr
 
@@ -1150,8 +1153,15 @@ def test_version_bump_updates_every_pin_and_detects_future_unmanaged_files(
         ROOT,
         copied,
         ignore=shutil.ignore_patterns(
-            ".git", ".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache",
-            "pytest-of-root", "__pycache__", "build", "dist",
+            ".git",
+            ".venv",
+            ".mypy_cache",
+            ".pytest_cache",
+            ".ruff_cache",
+            "pytest-of-root",
+            "__pycache__",
+            "build",
+            "dist",
         ),
     )
     # Model a maintainer completing the fresh Unreleased template before the
@@ -1179,7 +1189,7 @@ def test_version_bump_updates_every_pin_and_detects_future_unmanaged_files(
         text=True,
     )
     assert check.returncode == 0, check.stderr
-    assert "22 managed version pins in 17 files" in check.stdout
+    assert "21 managed version pins in 17 files" in check.stdout
 
     future = copied / "future/deployment.md"
     future.parent.mkdir()
@@ -1207,8 +1217,7 @@ def test_smoke_workflow_and_values_exist() -> None:
     assert wf.is_file() and vals.is_file()
     text = wf.read_text()
     # The value of a cluster test is what only an API server can tell you.
-    for step in ["helm install", "helm test", "helm upgrade", "helm uninstall",
-                 "rollout status"]:
+    for step in ["helm install", "helm test", "helm upgrade", "helm uninstall", "rollout status"]:
         assert step in text, f"smoke test should cover {step}"
 
 
@@ -1235,16 +1244,14 @@ def test_version_changes_publish_automatically_and_idempotently() -> None:
     assert "paths:\n      - VERSION" in text
     assert "releases/tags/${TAG}" in text
     assert "needs.validate.outputs.publish == 'true'" in text
-    assert "--target \"${RELEASE_TARGET}\"" in text
+    assert '--target "${RELEASE_TARGET}"' in text
     # Branch and reusable runs have no tag event for metadata-action to infer.
     for pattern in ["{{version}}", "{{major}}.{{minor}}", "{{major}}"]:
         assert f"pattern={pattern},value=${{{{ needs.validate.outputs.version }}}}" in text
 
 
 def test_release_backfill_is_ordered_and_uses_exact_sources() -> None:
-    backfill = yaml.safe_load(
-        (ROOT / ".github/workflows/backfill-releases.yml").read_text()
-    )
+    backfill = yaml.safe_load((ROOT / ".github/workflows/backfill-releases.yml").read_text())
     jobs = backfill["jobs"]
     expected = {
         "release-1-18": "1a6db437cefc08530d2b79fa1190d7b732112dc8",
@@ -1293,8 +1300,8 @@ def test_helm_test_pod_uses_the_effective_port_and_path() -> None:
     """Use the effective endpoint and tolerate Service propagation latency."""
     text = (CHART / "templates/tests/test-connection.yaml").read_text()
     assert ".Values.mcp.healthPort" not in text
-    assert 'jenkins-mcp-server.healthPort' in text
-    assert 'jenkins-mcp-server.readyPath' in text
+    assert "jenkins-mcp-server.healthPort" in text
+    assert "jenkins-mcp-server.readyPath" in text
     # No test pod when the health port is not published on the Service.
     assert ".Values.service.exposeHealthPort" in text
     # A single request races endpoint propagation after the Deployment becomes
@@ -1333,14 +1340,9 @@ def test_settings_reject_scientific_notation_so_the_cast_matters() -> None:
     """Guards the assumption behind the fix above."""
     from jenkins_mcp_server.config import Settings
 
-    base = dict(
-        JENKINS_URL="https://j.test", JENKINS_USERNAME="u", JENKINS_TOKEN="t"
-    )
+    base = dict(JENKINS_URL="https://j.test", JENKINS_USERNAME="u", JENKINS_TOKEN="t")
     assert Settings(**base, MCP_MAX_LOG_BYTES="1000000").max_log_bytes == 1000000
-    assert (
-        Settings(**base, MCP_MAX_RESPONSE_BYTES="10000000").max_response_bytes
-        == 10000000
-    )
+    assert Settings(**base, MCP_MAX_RESPONSE_BYTES="10000000").max_response_bytes == 10000000
     import pydantic
     import pytest
 
@@ -1381,9 +1383,7 @@ def test_no_tailnet_hostnames_leak_into_chart_defaults() -> None:
     )
     text = (CHART / "values.yaml").read_text()
     defaults = [
-        ln
-        for ln in text.splitlines()
-        if tailnet_host.search(ln) and not ln.strip().startswith("#")
+        ln for ln in text.splitlines() if tailnet_host.search(ln) and not ln.strip().startswith("#")
     ]
     assert not defaults, f"tailnet hostnames in non-comment defaults: {defaults}"
 
@@ -1404,8 +1404,11 @@ def test_ingress_class_is_optional() -> None:
 
 
 def test_tailscale_resources_require_the_master_switch() -> None:
-    for name in ["tailscale-egress-service.yaml", "tailscale-dnsconfig.yaml",
-                 "tailscale-proxygroups.yaml"]:
+    for name in [
+        "tailscale-egress-service.yaml",
+        "tailscale-dnsconfig.yaml",
+        "tailscale-proxygroups.yaml",
+    ]:
         text = (CHART / "templates" / name).read_text()
         assert "and .Values.tailscale.enabled" in text, name
 
@@ -1416,11 +1419,20 @@ def test_chart_readme_reflects_neutral_defaults() -> None:
     # A quick start that works on a plain cluster.
     assert "## Quick start" in readme
     assert "jenkins.url=https://jenkins.example.com" in readme
+    assert "jenkins.credentials.existingSecret.enabled=true" in readme
     # Tailscale must be presented as opt-in, not assumed.
     assert "Tailscale integration (optional)" in readme
     assert "tailscale:\n  enabled: true" in readme
     # The in-cluster endpoint must be documented, not only an ingress hostname.
     assert "svc.cluster.local:8000/mcp" in readme
+
+
+def test_main_helm_quick_start_is_for_external_jenkins() -> None:
+    readme = (ROOT / "README.md").read_text()
+    install = _section(readme, "Helm installation", "Connecting a client")
+    assert "examples/values/existing-secret.yaml" in install
+    assert "jenkins.url=https://jenkins.example.com" in install
+    assert "tailscale-production.yaml" not in install
 
 
 def test_chart_readme_service_name_matches_the_template() -> None:
@@ -1544,9 +1556,7 @@ def test_readme_headline_claims_match_reality() -> None:
     # Count rows in the compatibility table only. Counting the whole file also
     # matches headings that happen to contain the same marker.
     table = _section(readme, "Jenkins compatibility", "Capabilities")
-    verified = len(
-        [ln for ln in table.splitlines() if ln.startswith("|") and "✅ Verified" in ln]
-    )
+    verified = len([ln for ln in table.splitlines() if ln.startswith("|") and "✅ Verified" in ln])
     # The claim moved into the security section; assert it wherever it is made.
     assert "four Jenkins LTS lines" in " ".join(readme.split()), (
         "README no longer states how many Jenkins lines are verified"
@@ -1687,9 +1697,7 @@ def test_documented_values_blocks_match_the_current_schema() -> None:
                 assert isinstance(value, dict), (
                     f"{doc}: jenkins.credentials.{name} must be an object, got {value!r}"
                 )
-                assert "enabled" in value, (
-                    f"{doc}: jenkins.credentials.{name} is missing 'enabled'"
-                )
+                assert "enabled" in value, f"{doc}: jenkins.credentials.{name} is missing 'enabled'"
             assert "externalSecret" not in parsed, (
                 f"{doc}: externalSecret moved under jenkins.credentials in 2.0.0"
             )
