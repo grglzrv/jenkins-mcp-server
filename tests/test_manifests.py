@@ -276,6 +276,7 @@ def test_jenkins_integration_enables_every_destructive_gate_it_exercises():
     assert environment["MCP_ALLOW_DESTRUCTIVE"] == "true"
     assert environment["MCP_ALLOW_BUILD_STOP"] == "true"
     assert environment["MCP_ALLOW_JOB_DELETE"] == "true"
+    assert environment["MCP_ALLOW_SCRIPT_CONSOLE"] == "false"
 
 
 def test_jenkins_integration_runs_before_merge_when_relevant_code_changes():

@@ -28,6 +28,7 @@ mcp:
   allowDestructive: false
   allowJobDelete: false
   allowAdminRequest: false
+  allowScriptConsole: false
 
 service:
   # Minibridge sessions are process-local; keep requests on the initializing pod.

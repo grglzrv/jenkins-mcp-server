@@ -71,6 +71,8 @@ def test_all_tools_smoke_denies_only_destructive_at_minibridge() -> None:
         "allowBuildStop",
     ]:
         assert mcp[option] is True
+    assert mcp["allowScriptConsole"] is False
+    assert mcp["allowedJobs"] == "mcp-*"
 
 
 def test_entrypoint_uses_acuvity_single_container_transport_split() -> None:
@@ -287,7 +289,15 @@ def test_admin_escape_hatch_warns_about_ungated_mutations() -> None:
         for t in asyncio.run(mcp.list_tools())
     }
     description = tools["jenkins_admin_request"]
-    for phrase in ["mutate", "delete", "not gated by mcp_allow_destructive", "confirm"]:
+    for phrase in [
+        "mutate",
+        "delete",
+        "not gated by mcp_allow_destructive",
+        "mcp_allowed_jobs",
+        "mcp_allow_script_console",
+        "sensitive-pattern guardrail",
+        "confirm",
+    ]:
         assert phrase in description, f"admin description is missing {phrase!r}"
 
 

@@ -62,6 +62,7 @@ data:
   MCP_MAX_LOG_BYTES: "1000000"
   MCP_ALLOW_NODE_WRITE: "false"
   MCP_ALLOW_ADMIN_REQUEST: "false"
+  MCP_ALLOW_SCRIPT_CONSOLE: "false"
   MCP_ALLOW_DESTRUCTIVE: "false"
   MCP_ALLOW_JOB_DELETE: "false"
 
@@ -123,7 +124,7 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:2.7.2-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.8.0-minibridge
           imagePullPolicy: IfNotPresent
           lifecycle:
             preStop:

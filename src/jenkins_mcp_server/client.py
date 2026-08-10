@@ -136,7 +136,11 @@ def _queue_job_name(item: dict[str, Any]) -> str | None:
 def _job_name_from_url(url: Any) -> str | None:
     if not isinstance(url, str):
         return None
-    segments = [unquote(part) for part in urlsplit(url).path.split("/") if part]
+    # Decode exactly once, matching the URI decoding applied before Jenkins'
+    # route dispatch. Splitting first and decoding each component afterwards
+    # misses encoded separators and can make the policy inspect a different
+    # resource from the one Jenkins receives.
+    segments = [part for part in unquote(urlsplit(url).path).split("/") if part]
     names = [segments[index + 1] for index, part in enumerate(segments[:-1]) if part == "job"]
     return "/".join(names) or None
 
@@ -851,6 +855,52 @@ class JenkinsClient:
         )
         return {"scan_triggered": job_name}
 
+    def _check_admin_path(self, path: str) -> None:
+        """Apply the policy an arbitrary path would otherwise walk around.
+
+        jenkins_admin_request exists to reach endpoints no other tool covers,
+        but it inherited none of their limits. A path under /job/ addresses a
+        job, so MCP_ALLOWED_JOBS has to apply, or an allowlist of AI/* is no
+        boundary at all once this tool is enabled. The Groovy console is a
+        second decision again: it runs arbitrary code on the controller, and
+        Minibridge's sensitive-pattern guardrail refuses it when enabled, so
+        the layer that always applies should not be the weaker one.
+        """
+        # httpx and Jenkins decode URI escapes before exposing/routing the
+        # request path. Apply policy to that same single-decoded form so
+        # /%6aob/... and /%73criptText cannot evade literal string checks.
+        decoded_path = unquote(path)
+        if "\\" in decoded_path:
+            raise ValueError("path must not contain backslash separators")
+        if ";" in decoded_path:
+            raise ValueError("path must not contain semicolon path parameters")
+        if any(ord(character) < 32 or ord(character) == 127 for character in decoded_path):
+            raise ValueError("path must not contain control characters")
+        if any(part in TRAVERSAL_SEGMENTS for part in decoded_path.split("/")):
+            raise ValueError("path must not contain '.' or '..' segments")
+
+        # Compare the decoded route name rather than only an exact raw spelling.
+        first_segment = next(
+            (part.casefold() for part in decoded_path.split("/") if part),
+            "",
+        )
+        if not self.policy.allow_script_console and first_segment in {
+            "script",
+            "scripttext",
+        }:
+            raise PolicyError(
+                f"Path '{path}' is the Jenkins script console, which runs "
+                "arbitrary code on the controller. Enable "
+                "MCP_ALLOW_SCRIPT_CONSOLE to permit it."
+            )
+
+        # Jenkins also exposes jobs through view URLs such as
+        # /view/All/job/name. Reuse the same parser as queue/running-build URL
+        # filtering so aliases cannot drift into a second allowlist bypass.
+        job_name = _job_name_from_url(path)
+        if job_name:
+            self.policy.check_job(job_name)
+
     async def admin_request(
         self,
         method: str,
@@ -867,8 +917,10 @@ class JenkinsClient:
             raise ValueError("path must be a Jenkins-relative absolute path")
         if not parsed.path.startswith("/"):
             raise ValueError("path must be a Jenkins-relative absolute path")
-        if any(part in TRAVERSAL_SEGMENTS for part in parsed.path.split("/")):
-            raise ValueError("path must not contain '.' or '..' segments")
+        # _check_admin_path validates both policy and the decoded path shape.
+        # urlsplit separates components but deliberately does not normalise or
+        # percent-decode the path.
+        self._check_admin_path(parsed.path)
         # Rebuild from the parsed components so only what was validated is sent.
         path = parsed.path
         if parsed.query:

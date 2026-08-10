@@ -52,6 +52,16 @@ def client(
     )
 
 
+def client_with_policy(handler, **policy_overrides: object) -> JenkinsClient:
+    """A client whose Policy differs from the default. Policy is frozen."""
+    return JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0),
+        policy(**policy_overrides),
+        AuditLogger(None),
+        transport=httpx.MockTransport(handler),
+    )
+
+
 # --- path traversal -------------------------------------------------------
 
 
@@ -115,7 +125,16 @@ def test_policy_allows_browsing_only_possible_allowlist_ancestors() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "path",
-    ["//evil.example/steal", "/safe/../../etc", "/./relative"],
+    [
+        "//evil.example/steal",
+        "/safe/../../etc",
+        "/./relative",
+        "/safe/%2e%2e/etc",
+        "/safe/%2E/etc",
+        "/safe/%5c..%5cetc",
+        "/job;matrix/Secret/doDelete",
+        "/safe/%00/control",
+    ],
 )
 async def test_admin_request_rejects_unsafe_paths(path: str) -> None:
     def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
@@ -413,7 +432,9 @@ async def test_empty_parameters_still_use_buildWithParameters() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/crumbIssuer/api/json":
-            return httpx.Response(200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"})
+            return httpx.Response(
+                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
+            )
         calls.append(request.url.path)
         return httpx.Response(201, headers={"Location": "q"})
 
@@ -470,7 +491,9 @@ async def test_admin_request_withholds_session_and_csrf_headers() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/crumbIssuer/api/json":
-            return httpx.Response(200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"})
+            return httpx.Response(
+                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
+            )
         return httpx.Response(
             200,
             text="ok",
@@ -837,9 +860,7 @@ async def test_concurrent_writes_share_one_transient_crumb_recovery() -> None:
             state["probes"] += 1
             if not state["issuer_up"]:
                 return httpx.Response(404)
-            return httpx.Response(
-                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
-            )
+            return httpx.Response(200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"})
         if "Jenkins-Crumb" not in request.headers:
             if state["issuer_up"]:
                 state["waiting"] += 1
@@ -978,9 +999,7 @@ async def test_crumb_preflight_does_not_deadlock_against_the_bound() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/crumbIssuer/api/json":
             await asyncio.sleep(0.01)
-            return httpx.Response(
-                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
-            )
+            return httpx.Response(200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"})
         return httpx.Response(201, headers={"Location": "/queue/1"})
 
     jc = client(handler, JENKINS_MAX_RETRIES=0, JENKINS_MAX_CONCURRENCY=1)
@@ -1035,4 +1054,97 @@ async def test_valid_node_names_still_work() -> None:
     assert any(
         path.startswith("/computer/build%20agent%201/toggleOffline?") for path in seen
     )
+    await jc.close()
+
+
+# --- admin_request inherits the limits it used to walk around ---------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/job/Secret/job/x/doDelete",
+        "/%6aob/Secret/job/x/doDelete",
+        "/view/All/job/Secret/job/x/doDelete",
+        "/view/All/%6aob/Secret/job/x/doDelete",
+    ],
+)
+async def test_admin_request_still_honours_the_job_allowlist(path: str) -> None:
+    """The escape hatch inherited none of the limits of the tools it replaces.
+
+    With MCP_ALLOWED_JOBS=AI/*, POST /job/Secret/job/x/doDelete deleted a job
+    outside the allowlist, so enabling this tool voided the boundary entirely.
+    """
+    jc = client_with_policy(
+        lambda request: httpx.Response(200, text="ok"),
+        job_patterns=["AI/*"],
+    )
+    with pytest.raises(PolicyError, match="not allowed"):
+        await jc.admin_request("POST", path)
+    await jc.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/job/AI/job/nightly/doDelete",
+        "/job/AI/job/nightly/api/json",
+        "/view/All/job/AI/job/nightly/api/json",
+    ],
+)
+async def test_admin_request_permits_jobs_inside_the_allowlist(path: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        return httpx.Response(200, text="ok")
+
+    jc = client_with_policy(handler, job_patterns=["AI/*"])
+    assert (await jc.admin_request("POST", path))["status"] == 200
+    await jc.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/script",
+        "/scriptText",
+        "/SCRIPTTEXT",
+        "/%73criptText",
+        "/script%54ext",
+    ],
+)
+async def test_admin_request_refuses_the_script_console_by_default(path: str) -> None:
+    """Minibridge's sensitive-path guardrail refuses it, but that layer is optional.
+
+    The layer documented as always enforced must not be the weaker of the two:
+    the console runs arbitrary code on the controller.
+    """
+    jc = client(lambda request: httpx.Response(200, text="ok"), JENKINS_MAX_RETRIES=0)
+    with pytest.raises(PolicyError, match="script console"):
+        await jc.admin_request("POST", path)
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_script_console_can_be_enabled_explicitly() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        return httpx.Response(200, text="ok")
+
+    jc = client_with_policy(handler, allow_script_console=True)
+    assert (await jc.admin_request("POST", "/scriptText"))["status"] == 200
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_admin_request_still_reaches_non_job_endpoints() -> None:
+    """The tool must stay an escape hatch for everything else."""
+    jc = client_with_policy(
+        lambda request: httpx.Response(200, text="ok"), job_patterns=["AI/*"]
+    )
+    assert (await jc.admin_request("GET", "/api/json"))["status"] == 200
     await jc.close()

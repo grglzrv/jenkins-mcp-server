@@ -43,7 +43,7 @@ spec:
     chart: jenkins-mcp-server
     # Pin an exact version. A range or "*" would let a sync move you between
     # releases without review.
-    targetRevision: 2.7.2
+    targetRevision: 2.8.0
     helm:
       releaseName: jenkins-mcp
       # valuesObject is inline and easy to read. For larger setups, keep values
@@ -77,6 +77,7 @@ spec:
           maxResponseBytes: 10000000
           allowNodeWrite: false
           allowAdminRequest: false
+          allowScriptConsole: false
           allowDestructive: false
           # Deletion is irreversible; leave it off unless genuinely required.
           allowJobDelete: false

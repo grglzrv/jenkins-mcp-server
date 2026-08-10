@@ -63,7 +63,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.7.2 \
+  --version 2.8.0 \
   --namespace jenkins-mcp \
   --set-string jenkins.url=https://jenkins.example.com \
   --set jenkins.credentials.create.enabled=false \
@@ -343,9 +343,10 @@ jenkins:
 | Key | Default |
 | --- | --- |
 | `mcp.readOnly` | `false` |
-| `mcp.allowedJobs` | `AI/*,Platform/*` — applies to job discovery, queue/running-build visibility, and mutations |
+| `mcp.allowedJobs` | `AI/*,Platform/*` — applies to job discovery, queue/running-build visibility, mutations, and job URLs sent through `jenkins_admin_request` |
 | `mcp.allowJobWrite` / `allowBuildWrite` | `true` |
 | `mcp.allowNodeWrite` / `allowAdminRequest` | `false` |
+| `mcp.allowScriptConsole` | **`false`** — additional in-process gate for `/script` and `/scriptText`; when Minibridge is enabled, `sensitive-pattern-detection` independently refuses these paths |
 | `mcp.allowDestructive` | **`false`** — master switch; all irreversible actions are opt-in |
 | `mcp.allowJobDelete` | **`false`** — irreversible, opt-in |
 | `mcp.allowJobUpdate` / `allowBuildStop` | `true` |
@@ -497,7 +498,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.7.2
+NEW_VERSION=2.8.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

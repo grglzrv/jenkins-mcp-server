@@ -10,35 +10,99 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.8.0] - 2026-08-10
+
+### Highlights
+
+- `jenkins_admin_request` no longer walks around the job allowlist, and no
+  longer reaches the Groovy script console by default.
+
+### New Features
+
+- `mcp.allowScriptConsole` (`MCP_ALLOW_SCRIPT_CONSOLE`, default `false`) adds a
+  separate in-process opt-in for `/script` and `/scriptText` through
+  `jenkins_admin_request`. `MCP_ALLOW_ADMIN_REQUEST` is still required.
+
+### Improvements
+
+- Jenkins job routes are resolved back to the job they address, including view
+  aliases and percent-encoded route names, and checked against
+  `MCP_ALLOWED_JOBS`. Policy is applied to the single-decoded path Jenkins
+  routes, so encoded separators and traversal spellings cannot make the server
+  authorize a different resource. Paths that address no job, such as
+  `/api/json` or `/quietDown`, are unaffected, so the tool remains the escape
+  hatch it is meant to be.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- A deployment that used `jenkins_admin_request` to reach jobs outside
+  `MCP_ALLOWED_JOBS` now receives a policy error. Widen the allowlist if that
+  access was intended.
+- A deployment that used it to reach the script console must set
+  `mcp.allowScriptConsole: true`. When Minibridge is enabled,
+  `sensitive-pattern-detection` remains an independent denial and must also be
+  removed from `minibridge.guardrails` for that path to pass; doing so weakens
+  the proxy's other sensitive-path protections.
+
+### Known Issues
+
+- `jenkins_admin_request` remains an escape hatch by design. Endpoints that
+  address no job, `/quietDown` among them, are still reachable whenever the tool
+  is enabled; that is what the tool is for, and `MCP_ALLOW_ADMIN_REQUEST`
+  defaults to false for that reason.
+
+### Security
+
+- With `MCP_ALLOWED_JOBS=AI/*` and the tool enabled, `POST
+  /job/Secret/job/x/doDelete` deleted a job outside the allowlist: enabling the
+  escape hatch silently voided the boundary that the same policy enforces for
+  every other tool.
+- The Rego guardrails already refused the script console, but that layer is
+  optional while the in-process policy is documented as always enforced. The
+  layer that always applies was the weaker of the two, so a deployment without
+  Minibridge had arbitrary code execution on the controller one enabled flag
+  away. The server now refuses the console by default; Minibridge continues to
+  enforce its independent sensitive-path policy when that guardrail is active.
+
+### Upgrade Notes
+
+- No action is required for the secure defaults. Operators intentionally using
+  administrator requests against job URLs or the script console must follow the
+  migration steps under Breaking Changes before upgrading.
 
 ## [2.7.2] - 2026-08-10
 

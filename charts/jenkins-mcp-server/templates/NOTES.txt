@@ -42,6 +42,7 @@ Server policy in effect (applies with or without minibridge):
   Destructive master switch: {{ .Values.mcp.allowDestructive }}{{ if not .Values.mcp.allowDestructive }} (job update/delete, build stop, queue cancel, and node offline are blocked){{ end }}
   Job delete: {{ .Values.mcp.allowJobDelete }}{{ if not .Values.mcp.allowJobDelete }} (irreversible, off by default){{ end }}
   Admin requests: {{ .Values.mcp.allowAdminRequest }}
+  Script console: {{ .Values.mcp.allowScriptConsole }}
 {{- if .Values.audit.fileEnabled }}
 
 Audit file copy:

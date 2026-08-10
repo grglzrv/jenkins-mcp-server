@@ -170,6 +170,8 @@ async def main(url: str) -> int:
                 tool for tool in listed_tools if tool.name == "jenkins_admin_request"
             )
             assert "not gated by MCP_ALLOW_DESTRUCTIVE" in (admin.description or "")
+            assert "MCP_ALLOWED_JOBS" in (admin.description or "")
+            assert "MCP_ALLOW_SCRIPT_CONSOLE" in (admin.description or "")
             print(f"PASS  tools/list exposes all {len(ALLOWED)} allowed tools and no others")
 
             print("destructive policy")
@@ -300,6 +302,28 @@ async def main(url: str) -> int:
                 called,
                 "jenkins_admin_request",
                 {"method": "GET", "path": "/api/json"},
+            )
+            await call_allowed(
+                session,
+                called,
+                "jenkins_admin_request",
+                {"method": "GET", "path": "/job/mcp-xml-job/api/json"},
+            )
+            # Encoded route names bypass a raw string comparison. This smoke
+            # intentionally leaves optional content guardrails off, so these
+            # calls prove the always-on server policy catches the canonical
+            # endpoint after the request traverses Minibridge.
+            await expect_application_rejection(
+                session,
+                "jenkins_admin_request",
+                {"method": "GET", "path": "/%73criptText"},
+                "MCP_ALLOW_SCRIPT_CONSOLE",
+            )
+            await expect_application_rejection(
+                session,
+                "jenkins_admin_request",
+                {"method": "GET", "path": "/view/All/%6aob/outside/api/json"},
+                "MCP_ALLOWED_JOBS",
             )
             await call_allowed(session, called, "list_jobs", {})
 

@@ -33,6 +33,7 @@ data:
   MCP_ALLOW_BUILD_WRITE: {{ .Values.mcp.allowBuildWrite | quote }}
   MCP_ALLOW_NODE_WRITE: {{ .Values.mcp.allowNodeWrite | quote }}
   MCP_ALLOW_ADMIN_REQUEST: {{ .Values.mcp.allowAdminRequest | quote }}
+  MCP_ALLOW_SCRIPT_CONSOLE: {{ .Values.mcp.allowScriptConsole | quote }}
   MCP_ALLOW_DESTRUCTIVE: {{ .Values.mcp.allowDestructive | quote }}
   MCP_ALLOW_JOB_DELETE: {{ .Values.mcp.allowJobDelete | quote }}
   MCP_ALLOW_JOB_UPDATE: {{ .Values.mcp.allowJobUpdate | quote }}
