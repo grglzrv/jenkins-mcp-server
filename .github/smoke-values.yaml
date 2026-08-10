@@ -3,6 +3,8 @@
 # those is off so the test exercises the chart itself.
 jenkins:
   url: https://jenkins.smoke.invalid
+  # Non-default value proves the chart carries the setting into the pod.
+  maxConcurrency: 7
   credentials:
     # The chart creates the Secret by default; this deployment supplies its own.
     create:
@@ -16,6 +18,10 @@ jenkins:
 # Single replica: the runner has two cores, and the PodDisruptionBudget default
 # of minAvailable 1 would then block eviction, which the chart rejects.
 replicaCount: 2
+
+# Non-default value proves the hook is rendered and installed, not just accepted
+# by the values schema.
+preStopDelaySeconds: 3
 
 ingress:
   enabled: false

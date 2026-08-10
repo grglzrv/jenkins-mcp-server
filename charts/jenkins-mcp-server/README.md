@@ -63,7 +63,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.6.4 \
+  --version 2.7.0 \
   --namespace jenkins-mcp \
   --set-string jenkins.url=https://jenkins.example.com \
   --set jenkins.credentials.create.enabled=false \
@@ -226,6 +226,7 @@ and pod scheduling fields remain open by design.
 | `jenkins.caBundle.existingSecret` | `""` | ⚪ Optional | Mount a CA from a Secret. Only for a private or self-signed issuer |
 | `jenkins.caBundle.key` | `ca.crt` | ⚪ Optional | Key within that Secret |
 | `jenkins.caBundlePath` | `""` | ⚪ Optional | Path to a CA already present in the image or mounted by `extraVolumes`. Mutually exclusive with `caBundle.existingSecret` |
+| `jenkins.maxConcurrency` | `10` | — | Jenkins requests in flight per replica; accepts 1–100. Excess requests wait up to `timeoutSeconds`, and the cluster-wide ceiling is this value multiplied by the replica count |
 | `jenkins.timeoutSeconds` / `maxRetries` | `30` / `3` | — | Retries apply to safe reads and failures before a write is sent; writes are never replayed after an HTTP response |
 
 Neither CA setting is needed for a publicly issued certificate, which covers
@@ -403,7 +404,8 @@ does not render direct-listener variables into the ConfigMap.
 | `revisionHistoryLimit` | `5` | |
 | `probes.*` | enabled | Startup, readiness, liveness |
 | `test.image.*` | `busybox:1.37`, `IfNotPresent` | Image used only by `helm test`; override for a private registry or mirror |
-| `terminationGracePeriodSeconds` | `30` | |
+| `preStopDelaySeconds` | `5` | Keeps the listener available briefly while terminating EndpointSlice and load-balancer state propagates; `0` disables it. Must be less than the total grace period |
+| `terminationGracePeriodSeconds` | `30` | Total budget for the preStop delay and application shutdown |
 | `nodeSelector`, `tolerations`, `affinity`, `topologySpreadConstraints`, `priorityClassName`, `podAnnotations`, `podLabels`, `extraVolumes`, `extraVolumeMounts` | standard | |
 | `podSecurityContext`, `securityContext` | hardened | Non-root uid 10001, read-only root filesystem, all capabilities dropped, seccomp `RuntimeDefault` |
 | `serviceAccount.create` / `name` / `annotations` | `true` / `""` / `{}` | Annotations carry the GCP Workload Identity binding |
@@ -495,7 +497,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.6.4
+NEW_VERSION=2.7.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

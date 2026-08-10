@@ -45,8 +45,14 @@ spec:
               app.kubernetes.io/name: jenkins-mcp
       containers:
         - name: server
-          image: ghcr.io/grglzrv/jenkins-mcp-server:2.6.4
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.7.0
           imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              exec:
+                # Leave time for terminating EndpointSlices and load-balancer
+                # state to propagate before SIGTERM stops the listener.
+                command: ["/usr/bin/sleep", "5"]
           args: ["--transport", "streamable-http"]
           envFrom:
             - configMapRef:

@@ -37,6 +37,8 @@ spec:
       # share a values file, use a multi-source Application with the repo as a
       # second source of type `ref`.
       valuesObject:
+        # Drain residual routing before the process receives SIGTERM.
+        preStopDelaySeconds: 5
         jenkins:
           url: https://jenkins.example-tailnet.ts.net
           credentials:

@@ -50,6 +50,10 @@ data:
   # Leave enabled. Only set JENKINS_CA_BUNDLE as well if Jenkins uses a private
   # or self-signed CA; a publicly issued certificate needs nothing.
   JENKINS_VERIFY_TLS: "true"
+  JENKINS_TIMEOUT_SECONDS: "30"
+  # Per replica. Excess requests wait up to the timeout above for a slot.
+  JENKINS_MAX_CONCURRENCY: "10"
+  JENKINS_MAX_RETRIES: "3"
 
   # Server-side policy. Enforced in-process, independent of minibridge.
   MCP_ALLOWED_JOBS: "AI/*,Platform/*"
@@ -107,6 +111,7 @@ spec:
         app.kubernetes.io/part-of: jenkins-mcp
     spec:
       automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -118,8 +123,13 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:2.6.4-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.7.0-minibridge
           imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              exec:
+                # Same termination drain as the direct-server deployment.
+                command: ["/usr/bin/sleep", "5"]
           # No args: the entrypoint follows Acuvity's single-container pattern:
           # public Streamable HTTP in Minibridge, private stdio to Jenkins.
           envFrom:

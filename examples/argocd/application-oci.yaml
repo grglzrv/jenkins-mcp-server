@@ -43,13 +43,15 @@ spec:
     chart: jenkins-mcp-server
     # Pin an exact version. A range or "*" would let a sync move you between
     # releases without review.
-    targetRevision: 2.6.4
+    targetRevision: 2.7.0
     helm:
       releaseName: jenkins-mcp
       # valuesObject is inline and easy to read. For larger setups, keep values
       # in Git and use a multi-source Application instead, so the values file
       # is reviewed like any other change.
       valuesObject:
+        # Delay SIGTERM while terminating routing state propagates.
+        preStopDelaySeconds: 5
         image:
           repository: ghcr.io/grglzrv/jenkins-mcp-server
           # Left unset on purpose: the chart uses Chart.appVersion, which is

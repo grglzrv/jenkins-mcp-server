@@ -521,6 +521,12 @@
               "minLength": 1
             }
           }
+        },
+        "maxConcurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Maximum Jenkins requests in flight per replica. Excess requests wait up to jenkins.timeoutSeconds for a slot. The cluster-wide ceiling is this value multiplied by the number of replicas."
         }
       }
     },
@@ -1148,6 +1154,11 @@
     },
     "priorityClassName": {
       "type": "string"
+    },
+    "preStopDelaySeconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Seconds to keep serving during pod termination while EndpointSlice and load-balancer state propagates. Zero disables the preStop hook. Must be less than terminationGracePeriodSeconds."
     },
     "terminationGracePeriodSeconds": {
       "type": "integer",

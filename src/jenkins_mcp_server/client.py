@@ -145,11 +145,20 @@ class JenkinsClient:
         self.settings = settings
         self.policy = policy
         self.audit = audit
+        # Bound in-flight requests, not just connections: the semaphore holds
+        # regardless of transport, and the pool is sized to match so a waiting
+        # request queues here rather than on a connection it cannot get.
+        self._concurrency = asyncio.Semaphore(settings.jenkins_max_concurrency)
         self.http = httpx.AsyncClient(
             base_url=settings.jenkins_url,
             auth=(settings.jenkins_username, settings.jenkins_token),
             verify=settings.verify,
             timeout=settings.jenkins_timeout_seconds,
+            limits=httpx.Limits(
+                max_connections=settings.jenkins_max_concurrency,
+                max_keepalive_connections=min(settings.jenkins_max_concurrency, 20),
+                keepalive_expiry=5.0,
+            ),
             follow_redirects=False,
             transport=transport,
             headers={"User-Agent": f"jenkins-mcp-server/{__version__}"},
@@ -271,6 +280,28 @@ class JenkinsClient:
         return random.uniform(0, min(2**attempt, 5))
 
     async def _send(
+        self,
+        method: str,
+        path: str,
+        request_kwargs: dict[str, Any],
+        response_limit: int | None,
+    ) -> httpx.Response:
+        # HTTPX timeouts start only after entering the transport. Bound the
+        # application queue separately; otherwise N saturated batches could
+        # make a caller wait N * timeoutSeconds before its request even starts.
+        try:
+            async with asyncio.timeout(self.settings.jenkins_timeout_seconds):
+                await self._concurrency.acquire()
+        except TimeoutError as exc:
+            raise httpx.PoolTimeout(
+                "Timed out waiting for a Jenkins concurrency slot"
+            ) from exc
+        try:
+            return await self._send_unbounded(method, path, request_kwargs, response_limit)
+        finally:
+            self._concurrency.release()
+
+    async def _send_unbounded(
         self,
         method: str,
         path: str,

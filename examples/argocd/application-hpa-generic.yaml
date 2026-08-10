@@ -18,13 +18,17 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 2.6.4
+    targetRevision: 2.7.0
     helm:
       releaseName: jenkins-mcp
       valuesObject:
+        # Tune to the slowest measured ingress/Service propagation path.
+        preStopDelaySeconds: 5
         jenkins:
           url: https://jenkins.internal.example.com
           verifyTls: true
+          # Per replica: HPA scale-out multiplies the deployment-wide ceiling.
+          maxConcurrency: 10
           # No CA bundle: a publicly issued certificate is validated by the
           # container's default trust store. Add caBundle.existingSecret only
           # for a private or self-signed issuer.

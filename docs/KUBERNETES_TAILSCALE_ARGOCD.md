@@ -86,6 +86,14 @@ it. If an ingress controller bypasses Service load balancing or masks the source
 address, configure equivalent affinity on that controller too. A pod restart
 still requires the client to reconnect and initialize a new session.
 
+Both raw deployments also wait 5 seconds in a `preStop` hook before Kubernetes
+sends SIGTERM. That window mitigates the race while terminating EndpointSlice,
+Service proxy, ingress, and load-balancer state propagates; it does not make an
+in-memory MCP session portable to another replica. The Helm equivalent is
+`preStopDelaySeconds` (set `0` to disable). The delay consumes the same total
+budget as `terminationGracePeriodSeconds`, so the chart rejects a delay greater
+than or equal to the grace period.
+
 ## Deploy with Argo CD
 
 ```bash

@@ -121,6 +121,28 @@ jobs:
             --set jenkins.url=https://jenkins.example.com \
             --set jenkins.credentials.create.jenkinsUserId=ci \
             --set jenkins.credentials.create.jenkinsApiToken=ci-placeholder > /tmp/default.yaml
+          grep -q 'command: \["/usr/bin/sleep", "5"\]' /tmp/default.yaml
+      - name: Validate termination drain settings
+        run: |
+          helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
+            --set jenkins.url=https://jenkins.example.com \
+            --set jenkins.credentials.create.jenkinsUserId=ci \
+            --set jenkins.credentials.create.jenkinsApiToken=ci-placeholder \
+            --set preStopDelaySeconds=0 > /tmp/no-drain.yaml
+          if grep -q '/usr/bin/sleep' /tmp/no-drain.yaml; then
+            echo "preStop hook rendered despite preStopDelaySeconds=0"
+            exit 1
+          fi
+          if helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp \
+            --set jenkins.url=https://jenkins.example.com \
+            --set jenkins.credentials.create.jenkinsUserId=ci \
+            --set jenkins.credentials.create.jenkinsApiToken=ci-placeholder \
+            --set preStopDelaySeconds=30 \
+            --set terminationGracePeriodSeconds=30 > /tmp/invalid-drain.yaml 2>&1; then
+            echo "expected a drain delay that consumes the grace period to fail"
+            exit 1
+          fi
+          grep -q "preStopDelaySeconds must be less" /tmp/invalid-drain.yaml
       - name: Render major-version-2 credential compatibility
         run: |
           render_dir=$(mktemp -d)
@@ -239,7 +261,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Inspect image
-        run: docker image inspect jenkins-mcp-server:test
+        run: |
+          docker image inspect jenkins-mcp-server:test
+          docker run --rm --entrypoint /usr/bin/sleep jenkins-mcp-server:test 0
 
       - name: Build the minibridge variant
         # Catches a broken Dockerfile.minibridge on the PR rather than at
@@ -249,6 +273,9 @@ jobs:
           context: .
           file: docker/Dockerfile.minibridge
           push: false
-          load: false
+          load: true
+          tags: jenkins-mcp-server:minibridge-test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Verify Minibridge lifecycle executable
+        run: docker run --rm --entrypoint /usr/bin/sleep jenkins-mcp-server:minibridge-test 0

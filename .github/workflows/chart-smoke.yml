@@ -117,6 +117,13 @@ jobs:
           echo "ready replicas: ${ready:-0}"
           [ "${ready:-0}" -ge 1 ]
 
+      - name: Termination drain hook is installed
+        run: |
+          command=$(kubectl -n jenkins-mcp get deploy jenkins-mcp-jenkins-mcp-server \
+            -o jsonpath='{.spec.template.spec.containers[0].lifecycle.preStop.exec.command[0]}{ " " }{.spec.template.spec.containers[0].lifecycle.preStop.exec.command[1]}')
+          echo "preStop command: $command"
+          [ "$command" = '/usr/bin/sleep 3' ]
+
       - name: Audit file configuration is live and healthy
         run: |
           for pod in $(kubectl -n jenkins-mcp get pods \
@@ -131,6 +138,7 @@ jobs:
           assert os.environ["MCP_AUDIT_MAX_BYTES"] == "65536"
           assert os.environ["MCP_AUDIT_BACKUP_COUNT"] == "2"
           assert os.environ["MCP_MAX_RESPONSE_BYTES"] == "10000000"
+          assert os.environ["JENKINS_MAX_CONCURRENCY"] == "7"
           path = Path(os.environ["MCP_AUDIT_LOG_PATH"])
           lock = path.with_name(path.name + ".lock")
           assert path.is_file() and lock.is_file()

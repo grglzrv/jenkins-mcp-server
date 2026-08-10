@@ -6,6 +6,13 @@ Cross-field validation that would otherwise only surface at runtime.
 {{- fail "jenkins.url is required. Set it to the Jenkins base URL, including any path prefix, for example https://ci.example.com/jenkins." }}
 {{- end }}
 
+{{- /* The preStop delay consumes the same grace-period budget as application
+       shutdown. Refuse a setting that guarantees SIGKILL before the process
+       receives any time to handle SIGTERM. Zero explicitly disables it. */ -}}
+{{- if and (gt (int .Values.preStopDelaySeconds) 0) (ge (int .Values.preStopDelaySeconds) (int .Values.terminationGracePeriodSeconds)) }}
+{{- fail "preStopDelaySeconds must be less than terminationGracePeriodSeconds, because the hook consumes that grace period before SIGTERM is sent. Increase the grace period or set preStopDelaySeconds=0 to disable the delay." }}
+{{- end }}
+
 {{- /* Tailscale is optional. Configuring a sub-feature while the integration
        is off would silently render nothing. */ -}}
 {{- if not .Values.tailscale.enabled }}

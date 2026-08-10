@@ -13,6 +13,9 @@
 # BASIC_AUTH_SECRET to externalSecret.extraData; the chart fails the render
 # otherwise rather than producing a pod that cannot start.
 
+# Minibridge remains available while terminating routing state propagates.
+preStopDelaySeconds: 5
+
 jenkins:
   url: https://jenkins.example.com
   credentials:

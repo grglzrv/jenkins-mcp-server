@@ -7,8 +7,13 @@
 # Prerequisites: an ingress controller, cert-manager with the named issuer, a
 # metrics-server for the HPA, and the Secret jenkins-mcp-secrets.
 
+# Tune to the slowest measured ingress/Service endpoint propagation path.
+preStopDelaySeconds: 5
+
 jenkins:
   url: https://jenkins.internal.example.com
+  # Per replica: HPA scale-out multiplies the deployment-wide Jenkins ceiling.
+  maxConcurrency: 10
   credentials:
     # The chart creates the Secret by default; this deployment supplies its own.
     create:

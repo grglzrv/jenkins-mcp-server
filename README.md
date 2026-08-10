@@ -238,7 +238,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.6.4 \
+  --version 2.7.0 \
   --namespace jenkins-mcp \
   --values examples/values/existing-secret.yaml \
   --set-string jenkins.url=https://jenkins.example.com
@@ -254,6 +254,13 @@ External Secrets, Tailscale, and the complete values reference live in the
 [Helm chart guide](charts/jenkins-mcp-server/README.md). The
 [examples index](examples/README.md) maps each supported deployment shape to a
 ready-to-edit values file or manifest.
+
+The chart defaults `preStopDelaySeconds` to 5 so a terminating pod continues
+serving while EndpointSlice, Service proxy, ingress, and load-balancer state
+propagates. Set it to `0` to disable, or tune it from rollout measurements; it
+must remain below `terminationGracePeriodSeconds` because the hook and process
+shutdown share that total budget. A terminated pod's in-memory MCP sessions are
+not migrated, so affected clients still reconnect and initialize again.
 
 ## 🔌 Connecting a client
 
@@ -495,7 +502,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.6.4
+NEW_VERSION=2.7.0
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 
