@@ -10,35 +10,86 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.8.0] - 2026-08-10
+
+### Highlights
+
+- Every tool now describes itself to the agent calling it. All 23 previously
+  shipped with an empty description.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Descriptions cover what each tool returns and the traps a model cannot infer
+  from a signature: `trigger_build` returns a queue URL rather than a build
+  number; an omitted `parameters` object makes Jenkins reject a parameterised
+  job while an empty one accepts the defaults; `build_number` takes aliases such
+  as `lastBuild`; a queue item id is not a build number; `get_job_config` needs
+  Job/ExtendedRead specifically.
+- Plugin and policy prerequisites are named where they bite, so a refusal or a
+  403 is self-explaining rather than a lookup.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None. Tool names, signatures and behaviour are unchanged.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- The five destructive tools now state that they are destructive, and what is
+  lost. The policy layers can refuse a call, but only the description
+  discourages the model from choosing it: `delete_job` says the deletion is
+  irreversible and Jenkins keeps no copy, `stop_build` that the build is
+  abandoned, `cancel_queue_item` that the request is discarded,
+  `update_job_config` that settings absent from the supplied XML are lost, and
+  `set_node_offline` that scheduling stops on that node. A test derives the set
+  from `policy.rego` rather than restating it, so a tool moved into
+  `@destructive` must gain a warning too.
+
+### Upgrade Notes
+
+- No action required. Clients that cache tool listings should refresh to pick
+  up the descriptions.
 
 ## [2.7.1] - 2026-08-10
 

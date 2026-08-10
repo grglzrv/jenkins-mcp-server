@@ -84,46 +84,80 @@ mcp = MCPServer("Jenkins MCP Server", version=__version__, lifespan=server_lifes
 
 @mcp.tool()
 async def list_jobs(folder: str | None = None) -> Any:
+    """List jobs visible to this server, optionally within a folder.
+
+    Returns name, full path, URL and build colour. Folders are traversed with
+    the folder argument, for example "Platform" to list jobs inside it. Jobs
+    outside MCP_ALLOWED_JOBS are omitted rather than reported as errors."""
     return await get_client().list_jobs(folder)
 
 
 @mcp.tool()
 async def get_job(job_name: str) -> Any:
+    """Get one job's current state: description, buildable flag, health and
+    the most recent build references. Use get_job_config for its XML
+    definition, or get_build_info for a specific build."""
     return await get_client().get_job(job_name)
 
 
 @mcp.tool()
 async def get_job_config(job_name: str) -> str:
+    """Fetch a job's config.xml definition.
+
+    Requires Job/ExtendedRead in Jenkins; Job/Read alone is not enough and
+    fails with 403 while other tools keep working."""
     return await get_client().get_job_config(job_name)
 
 
 @mcp.tool()
 async def create_job_from_xml(job_name: str, config_xml: str) -> Any:
+    """Create a job from a raw config.xml.
+
+    Fails if the name already exists. Prefer create_pipeline_job or
+    create_multibranch_pipeline unless you need full control of the XML."""
     return await get_client().create_job(job_name, config_xml)
 
 
 @mcp.tool()
 async def update_job_config(job_name: str, config_xml: str) -> Any:
+    """Replace a job's config.xml in full.
+
+    Destructive: the previous definition is overwritten with no history kept
+    by this server, and any setting absent from the XML you supply is lost.
+    Read the current config first with get_job_config."""
     return await get_client().update_job(job_name, config_xml)
 
 
 @mcp.tool()
 async def delete_job(job_name: str) -> Any:
+    """Delete a job and all of its build history.
+
+    Destructive and irreversible: Jenkins keeps no copy. Disabled by default;
+    requires MCP_ALLOW_JOB_DELETE. Confirm the exact job with get_job first."""
     return await get_client().delete_job(job_name)
 
 
 @mcp.tool()
 async def copy_job(source_job: str, target_job: str) -> Any:
+    """Copy an existing job to a new name.
+
+    The copy is created disabled, so enable_job is needed before it builds.
+    Both source and target must be inside MCP_ALLOWED_JOBS."""
     return await get_client().copy_job(source_job, target_job)
 
 
 @mcp.tool()
 async def enable_job(job_name: str) -> Any:
+    """Enable a job so Jenkins will build it. Safe to call when already enabled."""
     return await get_client().enable_job(job_name, True)
 
 
 @mcp.tool()
 async def disable_job(job_name: str) -> Any:
+    """Disable a job so Jenkins stops building it.
+
+    Queued builds are not cancelled; use cancel_queue_item for those. The job
+    and its history are kept, so this is reversible with enable_job."""
     return await get_client().enable_job(job_name, False)
 
 
@@ -133,6 +167,10 @@ async def create_pipeline_job(
     jenkinsfile: str,
     description: str = "Managed by Jenkins MCP",
 ) -> Any:
+    """Create a Pipeline job from an inline Jenkinsfile.
+
+    The script runs in the Groovy sandbox. Requires the workflow-aggregator
+    plugin."""
     config_xml = pipeline_job_xml(jenkinsfile, description)
     return await get_client().create_job(job_name, config_xml)
 
@@ -145,6 +183,11 @@ async def create_multibranch_pipeline(
     script_path: str = "Jenkinsfile",
     description: str = "Managed by Jenkins MCP",
 ) -> Any:
+    """Create a multibranch Pipeline that discovers branches from a Git
+    repository.
+
+    Requires the workflow-multibranch, branch-api and git plugins. Run
+    scan_multibranch_pipeline afterwards to populate branches immediately."""
     config_xml = multibranch_github_xml(
         repository_url,
         credentials_id,
@@ -156,6 +199,8 @@ async def create_multibranch_pipeline(
 
 @mcp.tool()
 async def scan_multibranch_pipeline(job_name: str) -> Any:
+    """Trigger a branch scan on a multibranch Pipeline so newly pushed
+    branches are discovered without waiting for the next scheduled scan."""
     return await get_client().scan_multibranch(job_name)
 
 
@@ -164,6 +209,12 @@ async def trigger_build(
     job_name: str,
     parameters: dict[str, Any] | None = None,
 ) -> Any:
+    """Queue a build.
+
+    Returns the queue URL, not a build number: the build has not started yet.
+    Poll get_queue, or use get_build_info once it has. For a parameterised
+    job pass parameters, using an empty object to accept every default;
+    omitting it entirely makes Jenkins reject the trigger."""
     return await get_client().build(job_name, parameters)
 
 
@@ -173,6 +224,11 @@ async def stop_build(
     build_number: int,
     mode: str = "stop",
 ) -> Any:
+    """Stop a running build.
+
+    Destructive: the build is abandoned and marked ABORTED, and any work it
+    had done is lost. mode escalates from a graceful stop to term and then
+    kill; term and kill need the workflow-aggregator plugin."""
     return await get_client().stop_build(job_name, build_number, mode)
 
 
@@ -181,6 +237,10 @@ async def get_build_info(
     job_name: str,
     build_number: int | str = "lastBuild",
 ) -> Any:
+    """Get one build's result, timing, duration and parameters.
+
+    build_number accepts a number or an alias such as lastBuild,
+    lastSuccessfulBuild or lastFailedBuild."""
     return await get_client().build_info(job_name, build_number)
 
 
@@ -190,31 +250,50 @@ async def get_build_console(
     build_number: int | str = "lastBuild",
     start: int = 0,
 ) -> Any:
+    """Read a build's console output.
+
+    Output is truncated to MCP_MAX_LOG_BYTES; the returned offset can be
+    passed back as start to continue reading, which is how a running build is
+    followed. build_number accepts a number or an alias such as lastBuild."""
     return await get_client().console(job_name, build_number, start)
 
 
 @mcp.tool()
 async def list_running_builds() -> Any:
+    """List builds currently executing across the controller, with their job
+    and build number. Use get_build_console to follow one."""
     return await get_client().running_builds()
 
 
 @mcp.tool()
 async def get_queue() -> Any:
+    """List builds waiting to start, with why each is blocked.
+
+    A queue item is not a build yet and has no build number; it gains one
+    when an executor picks it up."""
     return await get_client().queue()
 
 
 @mcp.tool()
 async def cancel_queue_item(item_id: int) -> Any:
+    """Remove a queued item before it starts.
+
+    Destructive: the request to build is discarded. Takes the queue item id
+    from get_queue, which is not a build number. Use stop_build for a build
+    that is already running."""
     return await get_client().cancel_queue(item_id)
 
 
 @mcp.tool()
 async def list_nodes() -> Any:
+    """List build nodes with their online, idle and temporarily-offline state."""
     return await get_client().nodes()
 
 
 @mcp.tool()
 async def get_node(node_name: str) -> Any:
+    """Get one node's state: executors, offline reason and current load.
+    Node names are case sensitive and must not be empty."""
     return await get_client().node_info(node_name)
 
 
@@ -224,6 +303,12 @@ async def set_node_offline(
     offline: bool,
     message: str = "Managed by MCP",
 ) -> Any:
+    """Take a node offline, or bring it back online.
+
+    Taking a node offline is destructive: running builds keep going but no
+    new work is scheduled there, which can stall a pipeline. Requires
+    MCP_ALLOW_NODE_WRITE, and taking offline additionally requires
+    MCP_ALLOW_DESTRUCTIVE."""
     return await get_client().toggle_node(node_name, offline, message)
 
 
@@ -234,4 +319,10 @@ async def jenkins_admin_request(
     body: str | None = None,
     content_type: str = "application/json",
 ) -> Any:
+    """Send an arbitrary authenticated request to a Jenkins path.
+
+    An escape hatch for endpoints no other tool covers, disabled by default
+    and requiring MCP_ALLOW_ADMIN_REQUEST. path must be Jenkins-relative and
+    absolute, for example /api/json. Session and CSRF headers are withheld
+    from the response."""
     return await get_client().admin_request(method, path, body, content_type)

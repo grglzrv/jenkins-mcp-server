@@ -220,3 +220,46 @@ def test_opa_policy_tests_pass() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "FAIL" not in result.stdout
+
+
+def test_every_tool_is_described_for_the_agent() -> None:
+    """Descriptions are the in-band signal an agent uses to choose a tool.
+
+    Without them a model sees only names, and get_job, get_job_config and
+    get_build_info are not distinguishable from names alone.
+    """
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = asyncio.run(mcp.list_tools())
+    undescribed = sorted(t.name for t in tools if not (t.description or "").strip())
+    assert not undescribed, f"tools with no description: {undescribed}"
+
+
+def test_destructive_tools_say_so_in_their_description() -> None:
+    """The policy layers can refuse a call; only the description can stop the
+    model choosing it in the first place."""
+    import asyncio
+    import re
+
+    from jenkins_mcp_server.server import mcp
+
+    # Derive the set from the policy rather than restating it, so a tool moved
+    # into @destructive is required to gain a warning too.
+    policy = (DOCKER / "policy.rego").read_text()
+    block = policy.split("_tool_groups := {")[1].split("\n_all_tools")[0]
+    destructive = set(
+        re.findall(
+            r'"([a-z_0-9]+)"',
+            re.search(r'"@destructive": \{([^}]*)\}', block, re.S).group(1),
+        )
+    )
+    assert destructive, "could not read @destructive from policy.rego"
+
+    warned = ("destructive", "irreversible", "lost", "discarded", "abandoned")
+    tools = {t.name: (t.description or "").lower() for t in asyncio.run(mcp.list_tools())}
+    for name in destructive:
+        assert any(word in tools[name] for word in warned), (
+            f"{name} does not warn that it is destructive"
+        )
