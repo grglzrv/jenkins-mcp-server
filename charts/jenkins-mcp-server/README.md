@@ -343,9 +343,10 @@ jenkins:
 | Key | Default |
 | --- | --- |
 | `mcp.readOnly` | `false` |
-| `mcp.allowedJobs` | `AI/*,Platform/*` — applies to job discovery, queue/running-build visibility, and mutations |
+| `mcp.allowedJobs` | `AI/*,Platform/*` — applies to job discovery, queue/running-build visibility, mutations, and job URLs sent through `jenkins_admin_request` |
 | `mcp.allowJobWrite` / `allowBuildWrite` | `true` |
 | `mcp.allowNodeWrite` / `allowAdminRequest` | `false` |
+| `mcp.allowScriptConsole` | **`false`** — additional in-process gate for `/script` and `/scriptText`; when Minibridge is enabled, `sensitive-pattern-detection` independently refuses these paths |
 | `mcp.allowDestructive` | **`false`** — master switch; all irreversible actions are opt-in |
 | `mcp.allowJobDelete` | **`false`** — irreversible, opt-in |
 | `mcp.allowJobUpdate` / `allowBuildStop` | `true` |

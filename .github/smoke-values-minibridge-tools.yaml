@@ -59,11 +59,12 @@ mcp:
   allowBuildWrite: true
   allowNodeWrite: true
   allowAdminRequest: true
+  allowScriptConsole: false
   allowDestructive: true
   allowJobDelete: true
   allowJobUpdate: true
   allowBuildStop: true
-  allowedJobs: "*"
+  allowedJobs: "mcp-*"
   maxResponseBytes: 10000000
 
 # This job tests Jenkins tools through Minibridge, not optional file storage.

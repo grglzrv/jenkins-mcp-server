@@ -545,6 +545,7 @@
         "allowBuildWrite",
         "allowNodeWrite",
         "allowAdminRequest",
+        "allowScriptConsole",
         "allowedJobs",
         "maxResponseBytes",
         "maxLogBytes",
@@ -637,7 +638,8 @@
           "type": "boolean"
         },
         "allowScriptConsole": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Additional in-process opt-in for the Jenkins Groovy script console. Requires allowAdminRequest too. Minibridge sensitive-pattern-detection independently refuses script-console paths when active."
         }
       }
     },

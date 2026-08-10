@@ -71,6 +71,8 @@ async def main() -> None:
             assert "not gated by mcp_allow_destructive" in descriptions[
                 "jenkins_admin_request"
             ]
+            assert "mcp_allowed_jobs" in descriptions["jenkins_admin_request"]
+            assert "mcp_allow_script_console" in descriptions["jenkins_admin_request"]
 
             script = """pipeline {
   agent any

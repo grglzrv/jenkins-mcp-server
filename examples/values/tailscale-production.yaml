@@ -46,6 +46,7 @@ mcp:
   allowBuildWrite: true
   allowNodeWrite: false
   allowAdminRequest: false
+  allowScriptConsole: false
   allowDestructive: false
   allowedJobs: "AI/*,Platform/*"
   maxResponseBytes: 10000000

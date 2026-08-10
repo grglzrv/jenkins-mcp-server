@@ -64,9 +64,9 @@ class Settings(BaseSettings):
     allow_node_write: bool = Field(default=False, alias="MCP_ALLOW_NODE_WRITE")
     allow_admin_request: bool = Field(default=False, alias="MCP_ALLOW_ADMIN_REQUEST")
     # The Groovy console runs arbitrary code on the controller, which is a
-    # different decision from allowing an arbitrary API call. minibridge already
-    # refuses it, but that layer is optional, so the always-enforced layer must
-    # not be the weaker of the two.
+    # different decision from allowing an arbitrary API call. Minibridge's
+    # sensitive-pattern guardrail refuses it when enabled, but that layer is
+    # optional, so the always-enforced layer must not be the weaker of the two.
     allow_script_console: bool = Field(
         default=False, alias="MCP_ALLOW_SCRIPT_CONSOLE"
     )

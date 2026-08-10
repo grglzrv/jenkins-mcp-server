@@ -339,9 +339,12 @@ async def jenkins_admin_request(
     """Send an arbitrary authenticated request to a Jenkins path.
 
     A powerful escape hatch for endpoints no other tool covers, disabled by
-    default and requiring MCP_ALLOW_ADMIN_REQUEST. Non-read methods can mutate
-    or delete Jenkins state and are not gated by MCP_ALLOW_DESTRUCTIVE; confirm
-    the exact method, path and body first. path must be Jenkins-relative and
+    default and requiring MCP_ALLOW_ADMIN_REQUEST. MCP_ALLOWED_JOBS still
+    applies to job URLs. The Groovy console additionally requires
+    MCP_ALLOW_SCRIPT_CONSOLE and remains blocked by Minibridge when its
+    sensitive-pattern guardrail is active. Non-read methods can mutate or
+    delete Jenkins state and are not gated by MCP_ALLOW_DESTRUCTIVE; confirm the
+    exact method, path and body first. path must be Jenkins-relative and
     absolute, for example /api/json. Session and CSRF headers are withheld from
     the response."""
     return await get_client().admin_request(method, path, body, content_type)

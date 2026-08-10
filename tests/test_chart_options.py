@@ -57,6 +57,7 @@ def test_destructive_flags_exist_with_safe_defaults() -> None:
 def test_241_security_defaults_are_consistent_across_runtime_and_deployments() -> None:
     v = values()
     assert v["mcp"]["allowDestructive"] is False
+    assert v["mcp"]["allowScriptConsole"] is False
     # External Jenkins commonly sits behind a firewall allowing only the
     # cluster. A DNS hostname cannot be selected portably by NetworkPolicy, so
     # pod-level isolation must be an explicit, fully modeled opt-in.
@@ -72,10 +73,13 @@ def test_241_security_defaults_are_consistent_across_runtime_and_deployments() -
     config = (ROOT / "src/jenkins_mcp_server/config.py").read_text()
     policy = (ROOT / "src/jenkins_mcp_server/security.py").read_text()
     assert 'default=False, alias="MCP_ALLOW_DESTRUCTIVE"' in config
+    assert 'default=False, alias="MCP_ALLOW_SCRIPT_CONSOLE"' in config
     assert "allow_destructive: bool = False" in policy
+    assert "allow_script_console: bool = False" in policy
 
     for path in [ROOT / ".env.example", ROOT / "deploy/kubernetes/base/config.env"]:
         assert "MCP_ALLOW_DESTRUCTIVE=false" in path.read_text()
+        assert "MCP_ALLOW_SCRIPT_CONSOLE=false" in path.read_text()
     assert "audit-data" not in (ROOT / "compose.yaml").read_text()
     raw_deployment = (ROOT / "deploy/kubernetes/base/deployment.yaml").read_text()
     assert "mountPath: /data" not in raw_deployment
@@ -91,6 +95,7 @@ def test_every_values_example_states_security_and_network_intent() -> None:
     for path in sorted(EXAMPLES.glob("*.yaml")):
         example = yaml.safe_load(path.read_text())
         assert example["mcp"]["allowDestructive"] is False, path.name
+        assert example["mcp"]["allowScriptConsole"] is False, path.name
         assert example["mcp"]["maxResponseBytes"] == 10_000_000, path.name
         assert example["audit"]["fileEnabled"] is False, path.name
         policy = example["networkPolicy"]
@@ -107,6 +112,7 @@ def test_every_argocd_application_states_security_and_network_intent() -> None:
         application = yaml.safe_load(path.read_text())
         values_object = application["spec"]["source"]["helm"]["valuesObject"]
         assert values_object["mcp"]["allowDestructive"] is False, path.name
+        assert values_object["mcp"]["allowScriptConsole"] is False, path.name
         assert values_object["mcp"]["maxResponseBytes"] == 10_000_000, path.name
         assert values_object["audit"]["fileEnabled"] is False, path.name
         policy = values_object["networkPolicy"]
@@ -120,6 +126,7 @@ def test_destructive_flags_are_passed_to_the_container() -> None:
     configmap = (CHART / "templates/configmap.yaml").read_text()
     for env in DESTRUCTIVE_ENV:
         assert env in configmap, f"{env} not wired into the ConfigMap"
+    assert "MCP_ALLOW_SCRIPT_CONSOLE" in configmap
 
 
 def test_audit_health_and_rotation_are_wired_and_validated() -> None:
@@ -154,6 +161,9 @@ def test_destructive_flags_are_in_the_schema() -> None:
     for key in DESTRUCTIVE_VALUES:
         assert key in mcp["properties"]
         assert key in mcp["required"]
+    assert "allowScriptConsole" in mcp["properties"]
+    assert "allowScriptConsole" in mcp["required"]
+    assert mcp["properties"]["allowScriptConsole"]["description"]
 
 
 def test_chart_env_names_match_the_settings_aliases() -> None:
@@ -680,6 +690,7 @@ def test_minibridge_overlay_and_standalone_exist_and_parse() -> None:
     assert {"Secret", "ConfigMap", "Deployment", "Service"} <= kinds
     config_map = next(d for d in docs if d["kind"] == "ConfigMap")
     assert config_map["data"]["JENKINS_MAX_CONCURRENCY"] == "10"
+    assert config_map["data"]["MCP_ALLOW_SCRIPT_CONSOLE"] == "false"
     dep = next(d for d in docs if d["kind"] == "Deployment")
     container = dep["spec"]["template"]["spec"]["containers"][0]
     # The minibridge image is required; the plain image has no minibridge binary.
@@ -1647,6 +1658,7 @@ def test_readme_headline_claims_match_reality() -> None:
     mcp = values()["mcp"]
     assert mcp["allowJobDelete"] is False
     assert mcp["allowAdminRequest"] is False
+    assert mcp["allowScriptConsole"] is False
 
 
 def test_readme_anchor_links_resolve() -> None:

@@ -52,6 +52,7 @@ spec:
         mcp:
           allowedJobs: "AI/*,Platform/*"
           maxResponseBytes: 10000000
+          allowScriptConsole: false
           allowDestructive: false
         audit:
           fileEnabled: false
