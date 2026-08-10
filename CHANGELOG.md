@@ -40,6 +40,52 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.9.0] - 2026-08-10
+
+### Highlights
+
+- Refused calls are now recorded. The audit log described what an agent was
+  permitted to do and was silent about everything it attempted.
+
+### New Features
+
+- A `policy.denied` audit record carries the check that refused, the job or
+  action it refused, and the reason.
+
+### Improvements
+
+- The recording wraps the policy rather than sitting at each of the two dozen
+  call sites, so a check added later is audited without anyone remembering to.
+  Records are written through the same off-loop path as successes.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None. Existing success records are unchanged in shape and content.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- A policy refusal left no trace. An agent probing for jobs outside
+  `MCP_ALLOWED_JOBS`, attempting a delete that `MCP_ALLOW_JOB_DELETE` forbids,
+  or reaching for the script console produced nothing to review, so the
+  behaviour these controls exist to stop was also the behaviour nothing
+  recorded. The refusals are now the loudest thing in the log.
+- The script console gate raises outside the `Policy` object and needed its own
+  hook; a test asserts an encoded attempt such as `/%73criptText` is recorded
+  the same as a plain one, so an evasion attempt is visible rather than silent.
+
+### Upgrade Notes
+
+- No action required. Alerting on `outcome="denied"` gives a signal that was
+  previously unavailable; a burst of them from one session is worth attention.
+
 ## [2.8.0] - 2026-08-10
 
 ### Highlights

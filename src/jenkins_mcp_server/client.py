@@ -156,6 +156,69 @@ def _is_crumb_rejection(text: str) -> bool:
     return any(marker in detail for marker in CRUMB_REJECTION_MARKERS)
 
 
+class _AuditedPolicy:
+    """Records every policy refusal, then re-raises it unchanged.
+
+    The audit log answered what an agent was permitted to do and said nothing
+    about what it attempted. For a server whose purpose is bounding an agent,
+    the refusals are the interesting events: a job probed outside the allowlist,
+    a blocked delete, a reach for the script console. None of that was visible.
+
+    Wrapping the policy keeps the recording in one place rather than at the
+    two dozen call sites, so a check added later is audited without being
+    remembered.
+    """
+
+    __slots__ = ("_audit", "_policy", "_tasks")
+
+    def __init__(self, policy: Policy, audit: AuditLogger) -> None:
+        self._policy = policy
+        self._audit = audit
+        # asyncio only holds a weak reference to a task; without this the
+        # record can be collected before it is written.
+        self._tasks: set[asyncio.Task[None]] = set()
+
+    def __getattr__(self, name: str) -> Any:
+        attribute = getattr(self._policy, name)
+        if not callable(attribute):
+            return attribute
+
+        def guarded(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return attribute(*args, **kwargs)
+            except PolicyError as exc:
+                self._record(name, args, exc)
+                raise
+
+        return guarded
+
+    def record_denial(self, check: str, target: str, reason: str) -> None:
+        """For refusals decided outside the Policy object, such as the script
+        console gate, so no refusal escapes the audit trail."""
+        self._emit({"check": check, "reason": reason, "target": target})
+
+    def _record(self, check: str, args: tuple[Any, ...], exc: PolicyError) -> None:
+        fields: dict[str, Any] = {"check": check, "reason": str(exc)}
+        if args:
+            # The first argument is the action or the job name, depending on
+            # the check. Either identifies what was refused.
+            fields["target"] = str(args[0])
+        self._emit(fields)
+
+    def _emit(self, fields: dict[str, Any]) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No loop: stdio startup, or a synchronous test.
+            self._audit.emit("policy.denied", "denied", **fields)
+            return
+        task = loop.create_task(
+            self._audit.emit_async("policy.denied", "denied", **fields)
+        )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+
 class JenkinsClient:
     def __init__(
         self,
@@ -166,7 +229,8 @@ class JenkinsClient:
         contact: JenkinsContact | None = None,
     ) -> None:
         self.settings = settings
-        self.policy = policy
+        # Wrapped so refusals are recorded once, centrally.
+        self.policy = _AuditedPolicy(policy, audit)  # type: ignore[assignment]
         self.audit = audit
         # Bound in-flight requests, not just connections: the semaphore holds
         # regardless of transport, and the pool is sized to match so a waiting
@@ -888,11 +952,13 @@ class JenkinsClient:
             "script",
             "scripttext",
         }:
-            raise PolicyError(
+            reason = (
                 f"Path '{path}' is the Jenkins script console, which runs "
                 "arbitrary code on the controller. Enable "
                 "MCP_ALLOW_SCRIPT_CONSOLE to permit it."
             )
+            self.policy.record_denial("script_console", path, reason)
+            raise PolicyError(reason)
 
         # Jenkins also exposes jobs through view URLs such as
         # /view/All/job/name. Reuse the same parser as queue/running-build URL

@@ -1148,3 +1148,88 @@ async def test_admin_request_still_reaches_non_job_endpoints() -> None:
     )
     assert (await jc.admin_request("GET", "/api/json"))["status"] == 200
     await jc.close()
+
+
+# --- refusals are recorded -------------------------------------------------
+
+
+def _audit_records(path) -> list[dict]:
+    import json
+
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+@pytest.mark.asyncio
+async def test_policy_refusals_are_audited(tmp_path) -> None:
+    """The log recorded what an agent was allowed to do and nothing it tried.
+
+    For a server whose purpose is bounding an agent, the refusals are the
+    interesting events: a job probed outside the allowlist, a blocked delete, a
+    reach for the script console. None of it was visible before.
+    """
+    log = tmp_path / "audit.jsonl"
+    jc = JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0),
+        policy(job_patterns=["AI/*"]),
+        AuditLogger(log),
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"jobs": []})
+        ),
+    )
+    with pytest.raises(PolicyError):
+        await jc.get_job("Secret/x")
+    await asyncio.sleep(0.05)
+    await jc.close()
+
+    denials = [r for r in _audit_records(log) if r["outcome"] == "denied"]
+    assert denials, "a refused call left no audit record"
+    assert denials[0]["check"] == "check_job"
+    assert denials[0]["target"] == "Secret/x"
+    assert "not allowed" in denials[0]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_script_console_refusals_are_audited(tmp_path) -> None:
+    """That check raises outside the Policy object, so it needs its own hook."""
+    log = tmp_path / "audit.jsonl"
+    jc = JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0),
+        policy(),
+        AuditLogger(log),
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text="ok")
+        ),
+    )
+    for path in ("/scriptText", "/%73criptText"):
+        with pytest.raises(PolicyError):
+            await jc.admin_request("POST", path)
+    await asyncio.sleep(0.05)
+    await jc.close()
+
+    checks = [r["check"] for r in _audit_records(log) if r["outcome"] == "denied"]
+    assert checks.count("script_console") == 2, (
+        "an encoded attempt should be recorded like a plain one"
+    )
+
+
+@pytest.mark.asyncio
+async def test_allowed_calls_are_still_audited_as_before(tmp_path) -> None:
+    """Recording refusals must not disturb the existing success records."""
+    log = tmp_path / "audit.jsonl"
+    jc = JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0),
+        policy(job_patterns=["AI/*"]),
+        AuditLogger(log),
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"name": "nightly"})
+        ),
+    )
+    await jc.get_job("AI/nightly")
+    await asyncio.sleep(0.05)
+    await jc.close()
+
+    outcomes = [r["outcome"] for r in _audit_records(log)]
+    assert "success" in outcomes
+    assert "denied" not in outcomes
