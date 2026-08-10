@@ -27,6 +27,7 @@ def create_client(
         allow_build_write=settings.allow_build_write,
         allow_node_write=settings.allow_node_write,
         allow_admin_request=settings.allow_admin_request,
+        allow_script_console=settings.allow_script_console,
         job_patterns=settings.job_patterns,
         allow_destructive=settings.allow_destructive,
         allow_job_delete=settings.allow_job_delete,

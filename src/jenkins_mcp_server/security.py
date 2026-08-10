@@ -42,6 +42,7 @@ class Policy:
     allow_node_write: bool
     allow_admin_request: bool
     job_patterns: list[str]
+    allow_script_console: bool = False
     allow_destructive: bool = False
     allow_job_delete: bool = False
     allow_job_update: bool = True

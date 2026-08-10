@@ -347,6 +347,10 @@ mcp:
   allowBuildWrite: true
   allowNodeWrite: false
   allowAdminRequest: false
+  # The Groovy script console runs arbitrary code on the controller. Enabling
+  # allowAdminRequest permits API calls; this permits code execution, which
+  # is a separate decision.
+  allowScriptConsole: false
   # Destructive (irreversible) actions: job delete/update, build stop, queue
   # cancel, node offline. allowDestructive is the master switch and defaults
   # false; opt in only after reviewing the individual operations below.

@@ -851,6 +851,38 @@ class JenkinsClient:
         )
         return {"scan_triggered": job_name}
 
+    def _check_admin_path(self, path: str) -> None:
+        """Apply the policy an arbitrary path would otherwise walk around.
+
+        jenkins_admin_request exists to reach endpoints no other tool covers,
+        but it inherited none of their limits. A path under /job/ addresses a
+        job, so MCP_ALLOWED_JOBS has to apply, or an allowlist of AI/* is no
+        boundary at all once this tool is enabled. The Groovy console is a
+        second decision again: it runs arbitrary code on the controller, and
+        minibridge already refuses it, so the layer that always applies should
+        not be the weaker one.
+        """
+        lowered = path.lower()
+        if not self.policy.allow_script_console and any(
+            lowered == prefix or lowered.startswith(f"{prefix}/")
+            for prefix in ("/script", "/scripttext")
+        ):
+            raise PolicyError(
+                f"Path '{path}' is the Jenkins script console, which runs "
+                "arbitrary code on the controller. Enable "
+                "MCP_ALLOW_SCRIPT_CONSOLE to permit it."
+            )
+
+        segments = [part for part in path.split("/") if part]
+        if not segments or segments[0] != "job":
+            return
+        # /job/A/job/B/... addresses job A/B. Anything after the last job
+        # segment is the action and is not part of the name.
+        names = [segments[i + 1] for i in range(0, len(segments) - 1, 2)
+                 if segments[i] == "job"]
+        if names:
+            self.policy.check_job("/".join(unquote(name) for name in names))
+
     async def admin_request(
         self,
         method: str,
@@ -869,6 +901,9 @@ class JenkinsClient:
             raise ValueError("path must be a Jenkins-relative absolute path")
         if any(part in TRAVERSAL_SEGMENTS for part in parsed.path.split("/")):
             raise ValueError("path must not contain '.' or '..' segments")
+        # Checked after normalisation so the decision is made on what is sent,
+        # not on a spelling that urlsplit would have changed.
+        self._check_admin_path(parsed.path)
         # Rebuild from the parsed components so only what was validated is sent.
         path = parsed.path
         if parsed.query:

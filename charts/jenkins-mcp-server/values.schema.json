@@ -635,6 +635,9 @@
         },
         "allowBuildStop": {
           "type": "boolean"
+        },
+        "allowScriptConsole": {
+          "type": "boolean"
         }
       }
     },

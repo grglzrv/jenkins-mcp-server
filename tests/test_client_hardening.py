@@ -52,6 +52,16 @@ def client(
     )
 
 
+def client_with_policy(handler, **policy_overrides: object) -> JenkinsClient:
+    """A client whose Policy differs from the default. Policy is frozen."""
+    return JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0),
+        policy(**policy_overrides),
+        AuditLogger(None),
+        transport=httpx.MockTransport(handler),
+    )
+
+
 # --- path traversal -------------------------------------------------------
 
 
@@ -1035,4 +1045,75 @@ async def test_valid_node_names_still_work() -> None:
     assert any(
         path.startswith("/computer/build%20agent%201/toggleOffline?") for path in seen
     )
+    await jc.close()
+
+
+# --- admin_request inherits the limits it used to walk around ---------------
+
+
+@pytest.mark.asyncio
+async def test_admin_request_still_honours_the_job_allowlist() -> None:
+    """The escape hatch inherited none of the limits of the tools it replaces.
+
+    With MCP_ALLOWED_JOBS=AI/*, POST /job/Secret/job/x/doDelete deleted a job
+    outside the allowlist, so enabling this tool voided the boundary entirely.
+    """
+    jc = client_with_policy(
+        lambda request: httpx.Response(200, text="ok"),
+        job_patterns=["AI/*"],
+    )
+    with pytest.raises(PolicyError, match="not allowed"):
+        await jc.admin_request("POST", "/job/Secret/job/x/doDelete")
+    await jc.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    ["/job/AI/job/nightly/doDelete", "/job/AI/job/nightly/api/json"],
+)
+async def test_admin_request_permits_jobs_inside_the_allowlist(path: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        return httpx.Response(200, text="ok")
+
+    jc = client_with_policy(handler, job_patterns=["AI/*"])
+    assert (await jc.admin_request("POST", path))["status"] == 200
+    await jc.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/script", "/scriptText", "/SCRIPTTEXT"])
+async def test_admin_request_refuses_the_script_console_by_default(path: str) -> None:
+    """minibridge refuses it, but that layer is optional.
+
+    The layer documented as always enforced must not be the weaker of the two:
+    the console runs arbitrary code on the controller.
+    """
+    jc = client(lambda request: httpx.Response(200, text="ok"), JENKINS_MAX_RETRIES=0)
+    with pytest.raises(PolicyError, match="script console"):
+        await jc.admin_request("POST", path)
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_script_console_can_be_enabled_explicitly() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        return httpx.Response(200, text="ok")
+
+    jc = client_with_policy(handler, allow_script_console=True)
+    assert (await jc.admin_request("POST", "/scriptText"))["status"] == 200
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_admin_request_still_reaches_non_job_endpoints() -> None:
+    """The tool must stay an escape hatch for everything else."""
+    jc = client_with_policy(
+        lambda request: httpx.Response(200, text="ok"), job_patterns=["AI/*"]
+    )
+    assert (await jc.admin_request("GET", "/api/json"))["status"] == 200
     await jc.close()

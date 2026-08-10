@@ -10,35 +10,89 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.8.0] - 2026-08-10
+
+### Highlights
+
+- `jenkins_admin_request` no longer walks around the job allowlist, and no
+  longer reaches the Groovy script console by default.
+
+### New Features
+
+- `mcp.allowScriptConsole` (`MCP_ALLOW_SCRIPT_CONSOLE`, default `false`) permits
+  `/script` and `/scriptText` through `jenkins_admin_request`.
+
+### Improvements
+
+- A path under `/job/` is resolved back to the job it addresses, including
+  percent-encoded folder names, and checked against `MCP_ALLOWED_JOBS`. Paths
+  that address no job, such as `/api/json` or `/quietDown`, are unaffected, so
+  the tool remains the escape hatch it is meant to be.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- A deployment that used `jenkins_admin_request` to reach jobs outside
+  `MCP_ALLOWED_JOBS` now receives a policy error. Widen the allowlist if that
+  access was intended.
+- A deployment that used it to reach the script console must set
+  `mcp.allowScriptConsole: true`.
+
+### Known Issues
+
+- `jenkins_admin_request` remains an escape hatch by design. Endpoints that
+  address no job, `/quietDown` among them, are still reachable whenever the tool
+  is enabled; that is what the tool is for, and `MCP_ALLOW_ADMIN_REQUEST`
+  defaults to false for that reason.
+
+### Security
+
+- With `MCP_ALLOWED_JOBS=AI/*` and the tool enabled, `POST
+  /job/Secret/job/x/doDelete` deleted a job outside the allowlist: enabling the
+  escape hatch silently voided the boundary that the same policy enforces for
+  every other tool.
+- The Rego guardrails already refused the script console, but that layer is
+  optional while the in-process policy is documented as always enforced. The
+  layer that always applies was the weaker of the two, so a deployment without
+  minibridge had arbitrary code execution on the controller one enabled flag
+  away. Both layers now refuse it unless it is asked for explicitly.
+
+### Upgrade Notes
+
+- No action required unless one of the Breaking Changes above applies.
 
 ## [2.7.2] - 2026-08-10
 
