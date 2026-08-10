@@ -257,9 +257,109 @@ def test_destructive_tools_say_so_in_their_description() -> None:
     )
     assert destructive, "could not read @destructive from policy.rego"
 
-    warned = ("destructive", "irreversible", "lost", "discarded", "abandoned")
-    tools = {t.name: (t.description or "").lower() for t in asyncio.run(mcp.list_tools())}
-    for name in destructive:
-        assert any(word in tools[name] for word in warned), (
-            f"{name} does not warn that it is destructive"
-        )
+    consequences = {
+        "update_job_config": ("destructive", "overwritten", "absent", "lost"),
+        "delete_job": ("destructive", "build history", "external backup"),
+        "stop_build": ("destructive", "abandoned", "lost"),
+        "cancel_queue_item": ("destructive", "discarded", "queue item"),
+        "set_node_offline": ("destructive", "no new work", "stall"),
+    }
+    assert set(consequences) == destructive, (
+        "every @destructive tool needs a reviewed, consequence-specific warning"
+    )
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    for name, required in consequences.items():
+        missing = [phrase for phrase in required if phrase not in tools[name]]
+        assert not missing, f"{name} description is missing consequences: {missing}"
+
+
+def test_admin_escape_hatch_warns_about_ungated_mutations() -> None:
+    """The generic admin tool can bypass operation-specific destructive flags."""
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    description = tools["jenkins_admin_request"]
+    for phrase in ["mutate", "delete", "not gated by mcp_allow_destructive", "confirm"]:
+        assert phrase in description, f"admin description is missing {phrase!r}"
+
+
+def test_destructive_descriptions_name_every_server_policy_gate() -> None:
+    """A single enabled flag is not enough; descriptions must not imply it is."""
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    required = {
+        "update_job_config": (
+            "mcp_allow_job_write",
+            "mcp_allow_destructive",
+            "mcp_allow_job_update",
+        ),
+        "delete_job": (
+            "mcp_allow_job_write",
+            "mcp_allow_destructive",
+            "mcp_allow_job_delete",
+        ),
+        "stop_build": (
+            "mcp_allow_build_write",
+            "mcp_allow_destructive",
+            "mcp_allow_build_stop",
+        ),
+        "cancel_queue_item": (
+            "mcp_allow_build_write",
+            "mcp_allow_destructive",
+            "mcp_allow_build_stop",
+        ),
+        "set_node_offline": ("mcp_allow_node_write", "mcp_allow_destructive"),
+    }
+    for name, gates in required.items():
+        missing = [gate for gate in gates if gate not in tools[name]]
+        assert not missing, f"{name} description is missing policy gates: {missing}"
+
+
+def test_copy_description_matches_jenkins_copy_semantics() -> None:
+    """Jenkins copies config.xml; it does not force the target disabled."""
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    description = tools["copy_job"]
+    assert "inherits" in description
+    assert "enabled or disabled state" in description
+    assert "build history" in description and "not copied" in description
+    assert "job/extendedread" in description
+    assert "job/create" in description
+    assert "job/configure" in description and "redact" in description
+
+
+def test_creation_descriptions_keep_plaintext_secrets_out_of_tool_arguments() -> None:
+    """Credential IDs are references; descriptions must not invite raw secrets."""
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    for name in ["create_job_from_xml", "update_job_config", "create_pipeline_job"]:
+        assert "plaintext" in tools[name] and "credential" in tools[name]
+    multibranch = tools["create_multibranch_pipeline"]
+    for phrase in ["credentials_id", "stored in jenkins", "never pass", "private key"]:
+        assert phrase in multibranch

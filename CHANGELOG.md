@@ -10,42 +10,44 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None.
+- None yet.
 
 ### New Features
 
-- None.
+- None yet.
 
 ### Improvements
 
-- None.
+- None yet.
 
 ### Bug Fixes
 
-- None.
+- None yet.
 
 ### Breaking Changes
 
-- None.
+- None yet.
 
 ### Known Issues
 
-- None.
+- None yet.
 
 ### Security
 
-- None.
+- None yet.
 
 ### Upgrade Notes
 
-- No action required.
+- None yet.
 
-## [2.8.0] - 2026-08-10
+## [2.7.2] - 2026-08-10
 
 ### Highlights
 
-- Every tool now describes itself to the agent calling it. All 23 previously
-  shipped with an empty description.
+- Every MCP tool now explains its purpose, return shape, prerequisites, and
+  operational hazards in the metadata agents receive from `tools/list`.
+- Destructive tools and the generic administrator escape hatch explicitly warn
+  what state can be lost before an agent chooses to call them.
 
 ### New Features
 
@@ -53,43 +55,48 @@ from the matching version entry after CI validates it.
 
 ### Improvements
 
-- Descriptions cover what each tool returns and the traps a model cannot infer
-  from a signature: `trigger_build` returns a queue URL rather than a build
-  number; an omitted `parameters` object makes Jenkins reject a parameterised
-  job while an empty one accepts the defaults; `build_number` takes aliases such
-  as `lastBuild`; a queue item id is not a build number; `get_job_config` needs
-  Job/ExtendedRead specifically.
-- Plugin and policy prerequisites are named where they bite, so a refusal or a
-  403 is self-explaining rather than a lookup.
+- Descriptions distinguish similarly named tools and document details absent
+  from their signatures: build queue URLs versus build numbers, parameter
+  defaults, build aliases, queue item IDs, `Job/ExtendedRead`, allowlist
+  filtering, complete destructive policy gates, Jenkins copy permissions, and
+  exact Pipeline plugin requirements.
+- Copy semantics now state that Jenkins preserves the source configuration and
+  enabled state but not build history or workspaces. The direct HTTP and
+  Jenkins-through-Minibridge smoke tests verify descriptions survive the wire
+  and proxy rather than checking only the in-process registry.
 
 ### Bug Fixes
 
-- None.
+- All 23 tools previously exposed an empty description because their registered
+  functions had no docstrings. Agents saw names and parameter schemas without
+  the information required to choose safely between related tools.
 
 ### Breaking Changes
 
-- None. Tool names, signatures and behaviour are unchanged.
+- None. Tool names, input schemas, policy groups, and execution behavior are
+  unchanged.
 
 ### Known Issues
 
-- None.
+- None known.
 
 ### Security
 
-- The five destructive tools now state that they are destructive, and what is
-  lost. The policy layers can refuse a call, but only the description
-  discourages the model from choosing it: `delete_job` says the deletion is
-  irreversible and Jenkins keeps no copy, `stop_build` that the build is
-  abandoned, `cancel_queue_item` that the request is discarded,
-  `update_job_config` that settings absent from the supplied XML are lost, and
-  `set_node_offline` that scheduling stops on that node. A test derives the set
-  from `policy.rego` rather than restating it, so a tool moved into
-  `@destructive` must gain a warning too.
+- Each `@destructive` tool names its specific consequence. The test maps every
+  current destructive tool to required consequence language, so a generic
+  keyword cannot satisfy the guard and group changes cannot silently omit a
+  warning.
+- `jenkins_admin_request` now warns that non-read methods can mutate or delete
+  Jenkins state and are not gated by `MCP_ALLOW_DESTRUCTIVE`. The tool remains
+  disabled by default behind `MCP_ALLOW_ADMIN_REQUEST`.
+- Job XML, Jenkinsfile, and multibranch descriptions tell agents to reference
+  Jenkins-managed credential IDs rather than put plaintext tokens, passwords,
+  or private keys into tool arguments.
 
 ### Upgrade Notes
 
-- No action required. Clients that cache tool listings should refresh to pick
-  up the descriptions.
+- No configuration change is required. Reconnect long-lived MCP clients after
+  rollout so they refresh cached tool descriptions.
 
 ## [2.7.1] - 2026-08-10
 

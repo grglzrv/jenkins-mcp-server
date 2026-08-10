@@ -86,9 +86,9 @@ mcp = MCPServer("Jenkins MCP Server", version=__version__, lifespan=server_lifes
 async def list_jobs(folder: str | None = None) -> Any:
     """List jobs visible to this server, optionally within a folder.
 
-    Returns name, full path, URL and build colour. Folders are traversed with
-    the folder argument, for example "Platform" to list jobs inside it. Jobs
-    outside MCP_ALLOWED_JOBS are omitted rather than reported as errors."""
+    Returns name, full path, URL and build colour. Pass a folder's full name,
+    for example "Platform", to list its immediate children. Jobs outside
+    MCP_ALLOWED_JOBS are omitted rather than reported as errors."""
     return await get_client().list_jobs(folder)
 
 
@@ -114,7 +114,9 @@ async def create_job_from_xml(job_name: str, config_xml: str) -> Any:
     """Create a job from a raw config.xml.
 
     Fails if the name already exists. Prefer create_pipeline_job or
-    create_multibranch_pipeline unless you need full control of the XML."""
+    create_multibranch_pipeline unless you need full control of the XML. Do
+    not place plaintext credentials in the XML; reference Jenkins-managed
+    credential IDs."""
     return await get_client().create_job(job_name, config_xml)
 
 
@@ -124,7 +126,9 @@ async def update_job_config(job_name: str, config_xml: str) -> Any:
 
     Destructive: the previous definition is overwritten with no history kept
     by this server, and any setting absent from the XML you supply is lost.
-    Read the current config first with get_job_config."""
+    Read the current config first with get_job_config, and do not place
+    plaintext credentials in the XML. Requires MCP_ALLOW_JOB_WRITE,
+    MCP_ALLOW_DESTRUCTIVE and MCP_ALLOW_JOB_UPDATE."""
     return await get_client().update_job(job_name, config_xml)
 
 
@@ -132,17 +136,22 @@ async def update_job_config(job_name: str, config_xml: str) -> Any:
 async def delete_job(job_name: str) -> Any:
     """Delete a job and all of its build history.
 
-    Destructive and irreversible: Jenkins keeps no copy. Disabled by default;
-    requires MCP_ALLOW_JOB_DELETE. Confirm the exact job with get_job first."""
+    Destructive and irreversible through this server: Jenkins core removes the
+    job and its builds, so recovery requires an external backup. Disabled by
+    default; requires MCP_ALLOW_JOB_WRITE, MCP_ALLOW_DESTRUCTIVE and
+    MCP_ALLOW_JOB_DELETE. Confirm with get_job first."""
     return await get_client().delete_job(job_name)
 
 
 @mcp.tool()
 async def copy_job(source_job: str, target_job: str) -> Any:
-    """Copy an existing job to a new name.
+    """Copy an existing job's configuration to a new name.
 
-    The copy is created disabled, so enable_job is needed before it builds.
-    Both source and target must be inside MCP_ALLOWED_JOBS."""
+    The target inherits the source's settings, including its enabled or
+    disabled state; build history and workspaces are not copied. Both source
+    and target must be inside MCP_ALLOWED_JOBS. Jenkins requires
+    Job/ExtendedRead on the source and Job/Create on the target parent; it also
+    requires source Job/Configure when extended-read redacts secrets."""
     return await get_client().copy_job(source_job, target_job)
 
 
@@ -169,8 +178,9 @@ async def create_pipeline_job(
 ) -> Any:
     """Create a Pipeline job from an inline Jenkinsfile.
 
-    The script runs in the Groovy sandbox. Requires the workflow-aggregator
-    plugin."""
+    The script runs in the Groovy sandbox. Requires workflow-job and
+    workflow-cps, both included in the workflow-aggregator plugin. Reference
+    Jenkins credential IDs; do not put plaintext secrets in the Jenkinsfile."""
     config_xml = pipeline_job_xml(jenkinsfile, description)
     return await get_client().create_job(job_name, config_xml)
 
@@ -187,7 +197,9 @@ async def create_multibranch_pipeline(
     repository.
 
     Requires the workflow-multibranch, branch-api and git plugins. Run
-    scan_multibranch_pipeline afterwards to populate branches immediately."""
+    scan_multibranch_pipeline afterwards to populate branches immediately.
+    credentials_id names a credential already stored in Jenkins; never pass a
+    token, password or private key in that field."""
     config_xml = multibranch_github_xml(
         repository_url,
         credentials_id,
@@ -211,10 +223,10 @@ async def trigger_build(
 ) -> Any:
     """Queue a build.
 
-    Returns the queue URL, not a build number: the build has not started yet.
-    Poll get_queue, or use get_build_info once it has. For a parameterised
-    job pass parameters, using an empty object to accept every default;
-    omitting it entirely makes Jenkins reject the trigger."""
+    Returns queue_url, not a build number: the build has not started yet. Poll
+    get_queue, or use get_build_info once it has. For a parameterised job pass
+    parameters, using an empty object to accept every default; omitting it
+    entirely makes Jenkins reject the trigger."""
     return await get_client().build(job_name, parameters)
 
 
@@ -227,8 +239,10 @@ async def stop_build(
     """Stop a running build.
 
     Destructive: the build is abandoned and marked ABORTED, and any work it
-    had done is lost. mode escalates from a graceful stop to term and then
-    kill; term and kill need the workflow-aggregator plugin."""
+    had done is lost. mode escalates from stop to term and then kill. Freestyle
+    builds support only stop; term and kill are Pipeline-only and require
+    workflow-job. Requires MCP_ALLOW_BUILD_WRITE, MCP_ALLOW_DESTRUCTIVE and
+    MCP_ALLOW_BUILD_STOP."""
     return await get_client().stop_build(job_name, build_number, mode)
 
 
@@ -252,16 +266,17 @@ async def get_build_console(
 ) -> Any:
     """Read a build's console output.
 
-    Output is truncated to MCP_MAX_LOG_BYTES; the returned offset can be
-    passed back as start to continue reading, which is how a running build is
-    followed. build_number accepts a number or an alias such as lastBuild."""
+    Output is truncated to MCP_MAX_LOG_BYTES; pass the returned next_start back
+    as start to continue reading, which is how a running build is followed.
+    build_number accepts a number or an alias such as lastBuild."""
     return await get_client().console(job_name, build_number, start)
 
 
 @mcp.tool()
 async def list_running_builds() -> Any:
     """List builds currently executing across the controller, with their job
-    and build number. Use get_build_console to follow one."""
+    and build number. Jobs outside MCP_ALLOWED_JOBS are omitted. Use
+    get_build_console to follow one."""
     return await get_client().running_builds()
 
 
@@ -270,7 +285,7 @@ async def get_queue() -> Any:
     """List builds waiting to start, with why each is blocked.
 
     A queue item is not a build yet and has no build number; it gains one
-    when an executor picks it up."""
+    when an executor picks it up. Items outside MCP_ALLOWED_JOBS are omitted."""
     return await get_client().queue()
 
 
@@ -280,7 +295,8 @@ async def cancel_queue_item(item_id: int) -> Any:
 
     Destructive: the request to build is discarded. Takes the queue item id
     from get_queue, which is not a build number. Use stop_build for a build
-    that is already running."""
+    that is already running. Requires MCP_ALLOW_BUILD_WRITE,
+    MCP_ALLOW_DESTRUCTIVE and MCP_ALLOW_BUILD_STOP."""
     return await get_client().cancel_queue(item_id)
 
 
@@ -321,8 +337,10 @@ async def jenkins_admin_request(
 ) -> Any:
     """Send an arbitrary authenticated request to a Jenkins path.
 
-    An escape hatch for endpoints no other tool covers, disabled by default
-    and requiring MCP_ALLOW_ADMIN_REQUEST. path must be Jenkins-relative and
-    absolute, for example /api/json. Session and CSRF headers are withheld
-    from the response."""
+    A powerful escape hatch for endpoints no other tool covers, disabled by
+    default and requiring MCP_ALLOW_ADMIN_REQUEST. Non-read methods can mutate
+    or delete Jenkins state and are not gated by MCP_ALLOW_DESTRUCTIVE; confirm
+    the exact method, path and body first. path must be Jenkins-relative and
+    absolute, for example /api/json. Session and CSRF headers are withheld from
+    the response."""
     return await get_client().admin_request(method, path, body, content_type)

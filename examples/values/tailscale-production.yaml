@@ -6,7 +6,7 @@ preStopDelaySeconds: 5
 
 image:
   repository: ghcr.io/grglzrv/jenkins-mcp-server
-  tag: "2.8.0"
+  tag: "2.7.2"
 
 service:
   # Streamable HTTP session state is process-local; keep requests on one pod.

@@ -50,6 +50,10 @@ async def main() -> None:
             await session.initialize()
             tools = await session.list_tools()
             names = {tool.name for tool in tools.tools}
+            undescribed = sorted(
+                tool.name for tool in tools.tools if not (tool.description or "").strip()
+            )
+            assert not undescribed, f"direct MCP tools lack descriptions: {undescribed}"
             required = {
                 "create_pipeline_job",
                 "trigger_build",
@@ -60,6 +64,13 @@ async def main() -> None:
                 "update_job_config",
             }
             assert required <= names
+            descriptions = {
+                tool.name: (tool.description or "").lower() for tool in tools.tools
+            }
+            assert "irreversible" in descriptions["delete_job"]
+            assert "not gated by mcp_allow_destructive" in descriptions[
+                "jenkins_admin_request"
+            ]
 
             script = """pipeline {
   agent any
