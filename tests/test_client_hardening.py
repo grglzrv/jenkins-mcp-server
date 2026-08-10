@@ -1170,9 +1170,10 @@ async def test_policy_refusals_are_audited(tmp_path) -> None:
     reach for the script console. None of it was visible before.
     """
     log = tmp_path / "audit.jsonl"
+    original_policy = policy(job_patterns=["AI/*"])
     jc = JenkinsClient(
         settings(JENKINS_MAX_RETRIES=0),
-        policy(job_patterns=["AI/*"]),
+        original_policy,
         AuditLogger(log),
         transport=httpx.MockTransport(
             lambda request: httpx.Response(200, json={"jobs": []})
@@ -1180,9 +1181,9 @@ async def test_policy_refusals_are_audited(tmp_path) -> None:
     )
     with pytest.raises(PolicyError):
         await jc.get_job("Secret/x")
-    await asyncio.sleep(0.05)
     await jc.close()
 
+    assert jc.policy is original_policy
     denials = [r for r in _audit_records(log) if r["outcome"] == "denied"]
     assert denials, "a refused call left no audit record"
     assert denials[0]["check"] == "check_job"
@@ -1205,7 +1206,6 @@ async def test_script_console_refusals_are_audited(tmp_path) -> None:
     for path in ("/scriptText", "/%73criptText"):
         with pytest.raises(PolicyError):
             await jc.admin_request("POST", path)
-    await asyncio.sleep(0.05)
     await jc.close()
 
     checks = [r["check"] for r in _audit_records(log) if r["outcome"] == "denied"]
@@ -1227,9 +1227,113 @@ async def test_allowed_calls_are_still_audited_as_before(tmp_path) -> None:
         ),
     )
     await jc.get_job("AI/nightly")
-    await asyncio.sleep(0.05)
     await jc.close()
 
     outcomes = [r["outcome"] for r in _audit_records(log)]
     assert "success" in outcomes
     assert "denied" not in outcomes
+
+
+@pytest.mark.asyncio
+async def test_destructive_denial_records_action_and_job(tmp_path) -> None:
+    """A generic positional proxy used to lose the job behind the action."""
+    log = tmp_path / "audit.jsonl"
+    jc = JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0),
+        policy(
+            job_patterns=["AI/*"],
+            allow_destructive=True,
+            allow_job_delete=False,
+        ),
+        AuditLogger(log),
+        transport=httpx.MockTransport(
+            lambda request: pytest.fail(f"denied call reached Jenkins: {request.url}")
+        ),
+    )
+
+    with pytest.raises(PolicyError, match="job.delete"):
+        await jc.delete_job("AI/nightly")
+    await jc.close()
+
+    [denial] = [r for r in _audit_records(log) if r["outcome"] == "denied"]
+    assert denial["check"] == "require_destructive"
+    assert denial["policy_action"] == "job.delete"
+    assert denial["target"] == "AI/nightly"
+    assert denial["job"] == "AI/nightly"
+
+
+@pytest.mark.asyncio
+async def test_folder_scope_refusal_is_audited(tmp_path) -> None:
+    """list_jobs used a boolean policy query, so a proxy saw no exception."""
+    log = tmp_path / "audit.jsonl"
+    jc = JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0),
+        policy(job_patterns=["AI/*"]),
+        AuditLogger(log),
+        transport=httpx.MockTransport(
+            lambda request: pytest.fail(f"denied call reached Jenkins: {request.url}")
+        ),
+    )
+
+    with pytest.raises(PolicyError, match="not allowed"):
+        await jc.list_jobs("Production")
+    await jc.close()
+
+    [denial] = [r for r in _audit_records(log) if r["outcome"] == "denied"]
+    assert denial["check"] == "allows_job_or_descendant"
+    assert denial["target"] == "Production"
+
+
+@pytest.mark.asyncio
+async def test_denial_audit_completes_before_error_is_returned() -> None:
+    """Normal shutdown must not race a detached denial-write task."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class DelayedAudit(AuditLogger):
+        async def emit_async(self, action, outcome, **fields) -> None:
+            if action == "policy.denied":
+                started.set()
+                await release.wait()
+            await super().emit_async(action, outcome, **fields)
+
+    jc = JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0),
+        policy(job_patterns=["AI/*"]),
+        DelayedAudit(),
+        transport=httpx.MockTransport(
+            lambda request: pytest.fail(f"denied call reached Jenkins: {request.url}")
+        ),
+    )
+
+    call = asyncio.create_task(jc.get_job("Secret/x"))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    assert not call.done(), "the policy error escaped before its audit record"
+    release.set()
+    with pytest.raises(PolicyError):
+        await call
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_admin_category_denial_does_not_audit_query_secrets(tmp_path) -> None:
+    log = tmp_path / "audit.jsonl"
+    jc = JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0),
+        policy(allow_admin_request=False),
+        AuditLogger(log),
+        transport=httpx.MockTransport(
+            lambda request: pytest.fail(f"denied call reached Jenkins: {request.url}")
+        ),
+    )
+
+    with pytest.raises(PolicyError, match="admin"):
+        await jc.admin_request("GET", "/api/json?access_token=do-not-log")
+    await jc.close()
+
+    text = log.read_text()
+    assert "do-not-log" not in text
+    [denial] = [r for r in _audit_records(log) if r["outcome"] == "denied"]
+    assert denial["check"] == "require_write"
+    assert denial["category"] == "admin"
+    assert denial["target"] == "admin"

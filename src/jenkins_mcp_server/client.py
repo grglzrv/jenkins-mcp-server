@@ -156,69 +156,6 @@ def _is_crumb_rejection(text: str) -> bool:
     return any(marker in detail for marker in CRUMB_REJECTION_MARKERS)
 
 
-class _AuditedPolicy:
-    """Records every policy refusal, then re-raises it unchanged.
-
-    The audit log answered what an agent was permitted to do and said nothing
-    about what it attempted. For a server whose purpose is bounding an agent,
-    the refusals are the interesting events: a job probed outside the allowlist,
-    a blocked delete, a reach for the script console. None of that was visible.
-
-    Wrapping the policy keeps the recording in one place rather than at the
-    two dozen call sites, so a check added later is audited without being
-    remembered.
-    """
-
-    __slots__ = ("_audit", "_policy", "_tasks")
-
-    def __init__(self, policy: Policy, audit: AuditLogger) -> None:
-        self._policy = policy
-        self._audit = audit
-        # asyncio only holds a weak reference to a task; without this the
-        # record can be collected before it is written.
-        self._tasks: set[asyncio.Task[None]] = set()
-
-    def __getattr__(self, name: str) -> Any:
-        attribute = getattr(self._policy, name)
-        if not callable(attribute):
-            return attribute
-
-        def guarded(*args: Any, **kwargs: Any) -> Any:
-            try:
-                return attribute(*args, **kwargs)
-            except PolicyError as exc:
-                self._record(name, args, exc)
-                raise
-
-        return guarded
-
-    def record_denial(self, check: str, target: str, reason: str) -> None:
-        """For refusals decided outside the Policy object, such as the script
-        console gate, so no refusal escapes the audit trail."""
-        self._emit({"check": check, "reason": reason, "target": target})
-
-    def _record(self, check: str, args: tuple[Any, ...], exc: PolicyError) -> None:
-        fields: dict[str, Any] = {"check": check, "reason": str(exc)}
-        if args:
-            # The first argument is the action or the job name, depending on
-            # the check. Either identifies what was refused.
-            fields["target"] = str(args[0])
-        self._emit(fields)
-
-    def _emit(self, fields: dict[str, Any]) -> None:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # No loop: stdio startup, or a synchronous test.
-            self._audit.emit("policy.denied", "denied", **fields)
-            return
-        task = loop.create_task(
-            self._audit.emit_async("policy.denied", "denied", **fields)
-        )
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
-
-
 class JenkinsClient:
     def __init__(
         self,
@@ -229,8 +166,7 @@ class JenkinsClient:
         contact: JenkinsContact | None = None,
     ) -> None:
         self.settings = settings
-        # Wrapped so refusals are recorded once, centrally.
-        self.policy = _AuditedPolicy(policy, audit)  # type: ignore[assignment]
+        self.policy = policy
         self.audit = audit
         # Bound in-flight requests, not just connections: the semaphore holds
         # regardless of transport, and the pool is sized to match so a waiting
@@ -263,6 +199,92 @@ class JenkinsClient:
 
     async def close(self) -> None:
         await self.http.aclose()
+
+    async def _record_policy_denial(
+        self,
+        check: str,
+        target: str,
+        reason: str,
+        **fields: Any,
+    ) -> None:
+        """Persist a refusal before returning it to the MCP caller.
+
+        Policy checks are synchronous, but file audit is deliberately off-loop.
+        Awaiting the write avoids detached tasks that can be lost during normal
+        shutdown and bounds denial-write concurrency to active MCP requests.
+        """
+        await self.audit.emit_async(
+            "policy.denied",
+            "denied",
+            check=check,
+            target=target,
+            reason=reason,
+            **fields,
+        )
+
+    async def _deny_policy(
+        self,
+        check: str,
+        target: str,
+        reason: str,
+        **fields: Any,
+    ) -> None:
+        await self._record_policy_denial(check, target, reason, **fields)
+        raise PolicyError(reason)
+
+    async def _check_job(self, job_name: str) -> None:
+        try:
+            self.policy.check_job(job_name)
+        except PolicyError as exc:
+            await self._record_policy_denial(
+                "check_job",
+                job_name,
+                str(exc),
+                job=job_name,
+            )
+            raise
+
+    async def _require_write(
+        self,
+        category: str,
+        job_name: str | None = None,
+        *,
+        target: str | None = None,
+    ) -> None:
+        try:
+            self.policy.require_write(category, job_name)
+        except PolicyError as exc:
+            fields: dict[str, Any] = {"category": category}
+            if job_name is not None:
+                fields["job"] = job_name
+            await self._record_policy_denial(
+                "require_write",
+                target or job_name or category,
+                str(exc),
+                **fields,
+            )
+            raise
+
+    async def _require_destructive(
+        self,
+        action: str,
+        job_name: str | None = None,
+        *,
+        target: str | None = None,
+    ) -> None:
+        try:
+            self.policy.require_destructive(action, job_name)
+        except PolicyError as exc:
+            fields: dict[str, Any] = {"policy_action": action}
+            if job_name is not None:
+                fields["job"] = job_name
+            await self._record_policy_denial(
+                "require_destructive",
+                target or job_name or action,
+                str(exc),
+                **fields,
+            )
+            raise
 
     async def _get_crumb(
         self,
@@ -637,8 +659,24 @@ class JenkinsClient:
             raise JenkinsError(f"Jenkins returned malformed JSON for {endpoint}") from exc
 
     async def list_jobs(self, folder: str | None = None) -> Any:
-        if folder and not self.policy.allows_job_or_descendant(folder):
-            raise PolicyError(f"Job folder '{folder}' is not allowed by MCP_ALLOWED_JOBS")
+        if folder:
+            try:
+                folder_allowed = self.policy.allows_job_or_descendant(folder)
+            except PolicyError as exc:
+                await self._record_policy_denial(
+                    "allows_job_or_descendant",
+                    folder,
+                    str(exc),
+                    job=folder,
+                )
+                raise
+            if not folder_allowed:
+                await self._deny_policy(
+                    "allows_job_or_descendant",
+                    folder,
+                    f"Job folder '{folder}' is not allowed by MCP_ALLOWED_JOBS",
+                    job=folder,
+                )
         path = _job_path(folder) if folder else ""
         result = await self.api(path, tree="jobs[name,fullName,url,color,_class]")
         if not isinstance(result, dict) or not isinstance(result.get("jobs"), list):
@@ -660,11 +698,11 @@ class JenkinsClient:
         return {**result, "jobs": visible}
 
     async def get_job(self, job_name: str) -> Any:
-        self.policy.check_job(job_name)
+        await self._check_job(job_name)
         return await self.api(_job_path(job_name), depth=2)
 
     async def get_job_config(self, job_name: str) -> str:
-        self.policy.check_job(job_name)
+        await self._check_job(job_name)
         response = await self.request(
             "GET",
             f"/{_job_path(job_name)}/config.xml",
@@ -678,7 +716,7 @@ class JenkinsClient:
         config_xml: str,
     ) -> dict[str, Any]:
         parent, leaf = _new_job_parts(job_name)
-        self.policy.require_write("job", job_name)
+        await self._require_write("job", job_name)
         path = f"/{_job_path(parent)}/createItem" if parent else "/createItem"
         await self.request(
             "POST",
@@ -696,7 +734,7 @@ class JenkinsClient:
         job_name: str,
         config_xml: str,
     ) -> dict[str, Any]:
-        self.policy.require_destructive("job.update", job_name)
+        await self._require_destructive("job.update", job_name)
         await self.request(
             "POST",
             f"/{_job_path(job_name)}/config.xml",
@@ -708,7 +746,7 @@ class JenkinsClient:
         return {"updated": job_name}
 
     async def delete_job(self, job_name: str) -> dict[str, Any]:
-        self.policy.require_destructive("job.delete", job_name)
+        await self._require_destructive("job.delete", job_name)
         await self.request(
             "POST",
             f"/{_job_path(job_name)}/doDelete",
@@ -722,7 +760,7 @@ class JenkinsClient:
         job_name: str,
         enabled: bool,
     ) -> dict[str, Any]:
-        self.policy.require_write("job", job_name)
+        await self._require_write("job", job_name)
         operation = "enable" if enabled else "disable"
         await self.request(
             "POST",
@@ -734,8 +772,8 @@ class JenkinsClient:
 
     async def copy_job(self, source: str, target: str) -> dict[str, Any]:
         parent, leaf = _new_job_parts(target)
-        self.policy.check_job(source)
-        self.policy.require_write("job", target)
+        await self._check_job(source)
+        await self._require_write("job", target)
         path = f"/{_job_path(parent)}/createItem" if parent else "/createItem"
         await self.request(
             "POST",
@@ -751,7 +789,7 @@ class JenkinsClient:
         job_name: str,
         parameters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        self.policy.require_write("build", job_name)
+        await self._require_write("build", job_name)
         # `is not None` rather than truthiness: an explicitly empty dict means
         # "this job is parameterised, use the defaults". Falling back to /build
         # there makes Jenkins reject the trigger on a parameterised job.
@@ -771,7 +809,7 @@ class JenkinsClient:
         build_number: int,
         mode: str = "stop",
     ) -> dict[str, Any]:
-        self.policy.require_destructive("build.stop", job_name)
+        await self._require_destructive("build.stop", job_name)
         if isinstance(build_number, bool) or build_number < 1:
             raise ValueError("build_number must be positive")
         if mode not in {"stop", "term", "kill"}:
@@ -793,7 +831,7 @@ class JenkinsClient:
         job_name: str,
         build_number: int | str = "lastBuild",
     ) -> Any:
-        self.policy.check_job(job_name)
+        await self._check_job(job_name)
         selector = _build_selector(build_number)
         return await self.api(f"{_job_path(job_name)}/{selector}", depth=2)
 
@@ -803,7 +841,7 @@ class JenkinsClient:
         build_number: int | str = "lastBuild",
         start: int = 0,
     ) -> dict[str, Any]:
-        self.policy.check_job(job_name)
+        await self._check_job(job_name)
         selector = _build_selector(build_number)
         if start < 0:
             raise ValueError("start must not be negative")
@@ -849,12 +887,21 @@ class JenkinsClient:
     async def cancel_queue(self, item_id: int) -> dict[str, Any]:
         if isinstance(item_id, bool) or item_id < 1:
             raise ValueError("item_id must be positive")
-        self.policy.require_destructive("queue.cancel")
+        await self._require_destructive(
+            "queue.cancel",
+            target=str(item_id),
+        )
         item = await self.api(f"queue/item/{item_id}", depth=1)
         job_name = _queue_job_name(item) if isinstance(item, dict) else None
         if not job_name:
-            raise PolicyError("Queue item does not identify a Jenkins job")
-        self.policy.check_job(job_name)
+            await self._deny_policy(
+                "queue_item_job",
+                str(item_id),
+                "Queue item does not identify a Jenkins job",
+                queue_item=item_id,
+            )
+        assert job_name is not None
+        await self._check_job(job_name)
         await self.request(
             "POST",
             "/queue/cancelItem",
@@ -894,9 +941,12 @@ class JenkinsClient:
         message: str = "Managed by MCP",
     ) -> dict[str, Any]:
         if offline:
-            self.policy.require_destructive("node.offline")
+            await self._require_destructive(
+                "node.offline",
+                target=node_name,
+            )
         else:
-            self.policy.require_write("node")
+            await self._require_write("node", target=node_name)
         encoded_node = _node_path(node_name)
         current = await self.node_info(node_name)
         if bool(current.get("temporarilyOffline")) != offline:
@@ -910,7 +960,7 @@ class JenkinsClient:
         return {"node": node_name, "offline": offline}
 
     async def scan_multibranch(self, job_name: str) -> dict[str, Any]:
-        self.policy.require_write("job", job_name)
+        await self._require_write("job", job_name)
         await self.request(
             "POST",
             f"/{_job_path(job_name)}/build",
@@ -919,7 +969,7 @@ class JenkinsClient:
         )
         return {"scan_triggered": job_name}
 
-    def _check_admin_path(self, path: str) -> None:
+    async def _check_admin_path(self, path: str) -> None:
         """Apply the policy an arbitrary path would otherwise walk around.
 
         jenkins_admin_request exists to reach endpoints no other tool covers,
@@ -957,15 +1007,14 @@ class JenkinsClient:
                 "arbitrary code on the controller. Enable "
                 "MCP_ALLOW_SCRIPT_CONSOLE to permit it."
             )
-            self.policy.record_denial("script_console", path, reason)
-            raise PolicyError(reason)
+            await self._deny_policy("script_console", path, reason, path=path)
 
         # Jenkins also exposes jobs through view URLs such as
         # /view/All/job/name. Reuse the same parser as queue/running-build URL
         # filtering so aliases cannot drift into a second allowlist bypass.
         job_name = _job_name_from_url(path)
         if job_name:
-            self.policy.check_job(job_name)
+            await self._check_job(job_name)
 
     async def admin_request(
         self,
@@ -974,7 +1023,10 @@ class JenkinsClient:
         body: str | None = None,
         content_type: str = "application/json",
     ) -> dict[str, Any]:
-        self.policy.require_write("admin")
+        # Do not include the caller's arbitrary path in this category denial:
+        # it may contain a query string. Finer-grained path/job denials below
+        # use only the parsed path or canonical job name.
+        await self._require_write("admin")
         # Parse rather than pattern-match the caller's path. A structural check
         # rejects any scheme or authority outright, including forms that string
         # prefixes miss such as '//host/x', ' https://host' and 'HtTpS://host'.
@@ -986,7 +1038,7 @@ class JenkinsClient:
         # _check_admin_path validates both policy and the decoded path shape.
         # urlsplit separates components but deliberately does not normalise or
         # percent-decode the path.
-        self._check_admin_path(parsed.path)
+        await self._check_admin_path(parsed.path)
         # Rebuild from the parsed components so only what was validated is sent.
         path = parsed.path
         if parsed.query:

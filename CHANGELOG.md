@@ -40,27 +40,32 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
-## [2.9.0] - 2026-08-10
+## [2.8.1] - 2026-08-10
 
 ### Highlights
 
-- Refused calls are now recorded. The audit log described what an agent was
-  permitted to do and was silent about everything it attempted.
+- Server-side policy refusals now produce structured audit events whose write
+  completes before the error is returned to the MCP caller.
 
 ### New Features
 
-- A `policy.denied` audit record carries the check that refused, the job or
-  action it refused, and the reason.
+- None.
 
 ### Improvements
 
-- The recording wraps the policy rather than sitting at each of the two dozen
-  call sites, so a check added later is audited without anyone remembering to.
-  Records are written through the same off-loop path as successes.
+- `policy.denied` records identify the enforcing check and target, with
+  structured job, write-category, or destructive-action context when
+  applicable, so SIEM rules do not need to parse the human-readable reason.
+- Denial file writes stay off the event loop but are awaited before returning
+  the policy error. This bounds audit work to active calls and prevents normal
+  server shutdown from racing detached audit tasks.
 
 ### Bug Fixes
 
-- None.
+- Job-allowlist, write, destructive-action, queue-scope, and script-console
+  refusals no longer disappear from the audit trail. Folder-scope denials are
+  included even though that check returns a boolean rather than raising inside
+  the policy object.
 
 ### Breaking Changes
 
@@ -68,23 +73,22 @@ from the matching version entry after CI validates it.
 
 ### Known Issues
 
-- None.
+- Minibridge refusals occur before the request reaches Jenkins MCP Server and
+  therefore remain in Minibridge's logs, not the server's `policy.denied`
+  stream. Collect both sources when Minibridge is enabled.
 
 ### Security
 
-- A policy refusal left no trace. An agent probing for jobs outside
-  `MCP_ALLOWED_JOBS`, attempting a delete that `MCP_ALLOW_JOB_DELETE` forbids,
-  or reaching for the script console produced nothing to review, so the
-  behaviour these controls exist to stop was also the behaviour nothing
-  recorded. The refusals are now the loudest thing in the log.
-- The script console gate raises outside the `Policy` object and needed its own
-  hook; a test asserts an encoded attempt such as `/%73criptText` is recorded
-  the same as a plain one, so an evasion attempt is visible rather than silent.
+- Calls rejected by the in-process policy now leave a `policy.denied` record,
+  including job-scope probes, destructive operations, and plain or encoded
+  script-console attempts. No credentials, request body, or job configuration
+  content is added to these records.
 
 ### Upgrade Notes
 
-- No action required. Alerting on `outcome="denied"` gives a signal that was
-  previously unavailable; a burst of them from one session is worth attention.
+- No configuration change is required. Collect process logs as before and
+  consider alerting on bursts of `action="policy.denied"`. Operators using
+  Minibridge should continue collecting its separate policy log stream.
 
 ## [2.8.0] - 2026-08-10
 

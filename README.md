@@ -124,7 +124,7 @@ depend on it.
 - Single-flight Jenkins crumbs, safe-read retries, timeouts, nested-folder paths,
   and TLS verification. Writes retry only failures known to occur before sending.
 - Read-only mode, job allowlists covering discovery and mutations,
-  write-category controls, and JSONL audit logging.
+  write-category controls, and JSONL auditing of allowed and refused calls.
 - Optional generic administrator REST request, disabled by default.
 
 ## 📦 Published artifacts
@@ -238,7 +238,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.9.0 \
+  --version 2.8.1 \
   --namespace jenkins-mcp \
   --values examples/values/existing-secret.yaml \
   --set-string jenkins.url=https://jenkins.example.com
@@ -502,7 +502,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.9.0
+NEW_VERSION=2.8.1
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 
