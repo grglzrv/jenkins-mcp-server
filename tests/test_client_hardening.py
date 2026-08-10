@@ -867,6 +867,26 @@ async def test_crumb_issuer_transport_failure_is_reported() -> None:
 
 
 @pytest.mark.asyncio
+async def test_default_transport_diagnostics_are_isolated_per_client() -> None:
+    """Library clients must not leak failures through process-global state."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, request=request)
+
+    first = client(handler)
+    second = client(handler)
+    first.contact.record_failure(httpx.ConnectError("refused"))
+
+    assert first.contact.snapshot()["last_transport_error"] == "ConnectError"
+    assert second.contact.snapshot() == {
+        "last_contact_age_seconds": None,
+        "last_transport_error": None,
+    }
+    await first.close()
+    await second.close()
+
+
+@pytest.mark.asyncio
 async def test_csrf_disabled_controllers_are_still_probed_only_once() -> None:
     """The negative cache is why the flag exists; recovery must not cost it."""
     probes = {"count": 0}

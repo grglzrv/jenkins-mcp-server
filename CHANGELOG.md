@@ -75,10 +75,11 @@ from the matching version entry after CI validates it.
   nothing re-probed the issuer, and readiness does not test it, so every write
   returned 403 for the life of the process and only a restart recovered. A
   crumb-related 403 now clears the flag and re-probes once, because Jenkins
-  asking for a crumb disproves the earlier conclusion. Recovery is single-flight
-  under concurrent writes, so every waiting write shares one issuer probe rather
-  than racing the negative-cache flag. Controllers with CSRF genuinely disabled
-  are still probed exactly once.
+  asking for a crumb disproves the earlier conclusion. Recovery remains
+  single-flight under concurrent writes, and the negative-cache mutation now
+  happens under the lock that owns the state. Every waiting write therefore
+  shares one issuer probe. Controllers with CSRF genuinely disabled are still
+  probed exactly once.
 - Transport failures while fetching the crumb previously happened before the
   main request instrumentation and were absent from diagnostics. All Jenkins
   sends now use the same contact recorder, including the crumb issuer.
