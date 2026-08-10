@@ -11,6 +11,7 @@ from . import __version__
 from .audit import AuditLogger
 from .client import JenkinsClient
 from .config import Settings, get_settings
+from .diagnostics import JenkinsContact
 from .security import Policy
 from .templates import multibranch_github_xml, pipeline_job_xml
 
@@ -18,6 +19,7 @@ from .templates import multibranch_github_xml, pipeline_job_xml
 def create_client(
     settings: Settings,
     audit: AuditLogger | None = None,
+    contact: JenkinsContact | None = None,
 ) -> JenkinsClient:
     policy = Policy(
         read_only=settings.read_only,
@@ -38,7 +40,7 @@ def create_client(
     )
     if audit is None:
         audit_logger.probe()
-    return JenkinsClient(settings, policy, audit_logger)
+    return JenkinsClient(settings, policy, audit_logger, contact=contact)
 
 
 @lru_cache
@@ -54,8 +56,13 @@ def get_audit_logger() -> AuditLogger:
 
 
 @lru_cache
+def get_jenkins_contact() -> JenkinsContact:
+    return JenkinsContact()
+
+
+@lru_cache
 def get_client() -> JenkinsClient:
-    return create_client(get_settings(), get_audit_logger())
+    return create_client(get_settings(), get_audit_logger(), get_jenkins_contact())
 
 
 @asynccontextmanager
@@ -66,6 +73,7 @@ async def server_lifespan(_: MCPServer[None]) -> AsyncIterator[None]:
     finally:
         await client.close()
         get_client.cache_clear()
+        get_jenkins_contact.cache_clear()
 
 
 # MCPServer takes the version directly, so clients see the server they are

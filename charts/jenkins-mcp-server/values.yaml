@@ -68,9 +68,10 @@ service:
       clientIP:
         timeoutSeconds: 600
   # Publish the health port on the Service. Useful for in-cluster scraping, but
-  # /readyz reports configuration state, so set false when type is LoadBalancer
-  # or NodePort and the Service is reachable from outside the cluster. Probes
-  # are unaffected either way: the kubelet talks to the container port directly.
+  # Direct-server /readyz reports configuration and passive Jenkins transport
+  # state; Minibridge publishes its own / health. Set false when type is
+  # LoadBalancer or NodePort and the Service is reachable from outside the
+  # cluster. Probes are unaffected: the kubelet uses the container port.
   exposeHealthPort: true
 
 # Tailscale Operator L7 ingress. The value in hostname becomes the MagicDNS

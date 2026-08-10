@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 2.6.3
+    targetRevision: 2.6.4
     helm:
       releaseName: jenkins-mcp
       valuesObject:
@@ -113,8 +113,8 @@ spec:
             sessionAffinityConfig:
               clientIP:
                 timeoutSeconds: 600
-          # /readyz reports configuration state; keep it off any Service that is
-          # reachable from outside the cluster.
+          # /readyz reports configuration and passive Jenkins transport state;
+          # keep it off any Service reachable from outside the cluster.
           exposeHealthPort: true
 
   destination:

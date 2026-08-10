@@ -12,6 +12,7 @@ import httpx
 from . import __version__
 from .audit import AuditLogger
 from .config import Settings
+from .diagnostics import JenkinsContact
 from .security import Policy, PolicyError
 
 
@@ -27,6 +28,11 @@ TRAVERSAL_SEGMENTS = {".", ".."}
 REPLAY_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
 MAX_RETRY_DELAY_SECONDS = 30.0
+CRUMB_REJECTION_MARKERS = (
+    "no valid crumb",
+    "invalid crumb",
+    "csrf crumb",
+)
 
 BUILD_ALIASES = frozenset(
     {
@@ -121,6 +127,12 @@ def _build_job_name(executable: dict[str, Any]) -> str | None:
     return _job_name_from_url(executable.get("url"))
 
 
+def _is_crumb_rejection(text: str) -> bool:
+    """Match Jenkins CSRF rejection phrases, not any mention of a crumb."""
+    detail = text[:2000].casefold()
+    return any(marker in detail for marker in CRUMB_REJECTION_MARKERS)
+
+
 class JenkinsClient:
     def __init__(
         self,
@@ -128,6 +140,7 @@ class JenkinsClient:
         policy: Policy,
         audit: AuditLogger,
         transport: httpx.AsyncBaseTransport | None = None,
+        contact: JenkinsContact | None = None,
     ) -> None:
         self.settings = settings
         self.policy = policy
@@ -148,6 +161,9 @@ class JenkinsClient:
         # parallel triggers meant eight crumb requests against a controller
         # that is often the slow part.
         self._crumb_lock = asyncio.Lock()
+        # Tests and library callers get isolated diagnostics by default. The
+        # application injects one process-level instance shared with /readyz.
+        self.contact = contact or JenkinsContact()
 
     async def close(self) -> None:
         await self.http.aclose()
@@ -155,10 +171,12 @@ class JenkinsClient:
     async def _get_crumb(
         self,
         stale: tuple[str, str] | None = None,
+        *,
+        force: bool = False,
     ) -> tuple[str, str] | None:
-        if stale is None and self._crumb is not None:
+        if not force and stale is None and self._crumb is not None:
             return self._crumb
-        if stale is None and self._crumb_disabled:
+        if not force and stale is None and self._crumb_disabled:
             return None
         async with self._crumb_lock:
             # A second request may have refreshed the stale crumb while this
@@ -169,6 +187,11 @@ class JenkinsClient:
                 self._crumb = None
             elif self._crumb is not None:
                 return self._crumb
+            if force:
+                # A crumb-related 403 proves that a previously observed 404
+                # was transient. Clear the negative cache under the same lock
+                # used for the fetch so concurrent recoveries share one probe.
+                self._crumb_disabled = False
             if self._crumb_disabled:
                 return None
             try:
@@ -254,39 +277,48 @@ class JenkinsClient:
         request_kwargs: dict[str, Any],
         response_limit: int | None,
     ) -> httpx.Response:
-        if response_limit is None:
-            return await self.http.request(method, path, **request_kwargs)
-
-        truncated = False
-        content = bytearray()
-        async with self.http.stream(method, path, **request_kwargs) as streamed:
-            async for chunk in streamed.aiter_bytes():
-                remaining = response_limit - len(content)
-                if remaining <= 0:
-                    truncated = True
-                    break
-                content.extend(chunk[:remaining])
-                if len(chunk) > remaining:
-                    truncated = True
-                    break
-            # aiter_bytes() has already decoded content encodings. Carrying
-            # gzip/br (or the original length) onto the synthetic response
-            # would make HTTPX try to decode the plain bytes a second time.
-            response_headers = [
-                (name, value)
-                for name, value in streamed.headers.multi_items()
-                if name.lower() not in {"content-encoding", "content-length", "transfer-encoding"}
-            ]
-            return httpx.Response(
-                streamed.status_code,
-                headers=response_headers,
-                content=bytes(content),
-                request=streamed.request,
-                extensions={
-                    **streamed.extensions,
-                    "jenkins_mcp_truncated": truncated,
-                },
-            )
+        try:
+            if response_limit is None:
+                response = await self.http.request(method, path, **request_kwargs)
+            else:
+                truncated = False
+                content = bytearray()
+                async with self.http.stream(method, path, **request_kwargs) as streamed:
+                    async for chunk in streamed.aiter_bytes():
+                        remaining = response_limit - len(content)
+                        if remaining <= 0:
+                            truncated = True
+                            break
+                        content.extend(chunk[:remaining])
+                        if len(chunk) > remaining:
+                            truncated = True
+                            break
+                    # aiter_bytes() has already decoded content encodings.
+                    # Carrying gzip/br (or the original length) onto the
+                    # synthetic response would decode plain bytes twice.
+                    response_headers = [
+                        (name, value)
+                        for name, value in streamed.headers.multi_items()
+                        if name.lower()
+                        not in {"content-encoding", "content-length", "transfer-encoding"}
+                    ]
+                    response = httpx.Response(
+                        streamed.status_code,
+                        headers=response_headers,
+                        content=bytes(content),
+                        request=streamed.request,
+                        extensions={
+                            **streamed.extensions,
+                            "jenkins_mcp_truncated": truncated,
+                        },
+                    )
+        except httpx.TransportError as exc:
+            # Instrument the common transport path so crumb-issuer failures are
+            # visible too; request() never runs its own send in that case.
+            self.contact.record_failure(exc)
+            raise
+        self.contact.record_contact()
+        return response
 
     async def request(
         self,
@@ -370,18 +402,22 @@ class JenkinsClient:
                     )
                     return response
 
-                # A cached crumb goes stale when Jenkins rotates the session.
-                # Re-issue it once rather than surfacing a hard 403.
+                # A cached crumb goes stale when Jenkins rotates the session,
+                # and a 404 from the crumb issuer during a restart or a proxy
+                # blip makes us conclude CSRF is off. Jenkins asking for a crumb
+                # disproves both, so re-issue once rather than surfacing a hard
+                # 403. Without this the wrong conclusion is permanent: nothing
+                # re-probes the issuer, readiness does not test it, so every
+                # write fails until the process restarts.
                 if (
                     response.status_code == 403
                     and method_upper not in REPLAY_SAFE_METHODS
                     and not crumb_refreshed
-                    and crumb is not None
-                    and "crumb" in response.text.lower()
+                    and _is_crumb_rejection(response.text)
                 ):
                     crumb_refreshed = True
                     try:
-                        crumb = await self._get_crumb(stale=crumb)
+                        crumb = await self._get_crumb(stale=crumb, force=True)
                     except JenkinsError as exc:
                         await self.audit.emit_async(
                             action,
@@ -425,7 +461,7 @@ class JenkinsClient:
                     # troubleshooting only when Jenkins actually identifies a
                     # crumb problem; otherwise the old advice sent operators
                     # toward an unrelated proxy setting.
-                    if "crumb" in body.lower():
+                    if _is_crumb_rejection(body):
                         hint += (
                             " Jenkins also rejected the CSRF crumb; check that the proxy "
                             "preserves its header and, when source NAT is involved, review "

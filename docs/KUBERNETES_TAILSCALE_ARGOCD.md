@@ -133,7 +133,10 @@ kubectl exec -n jenkins-mcp deploy/jenkins-mcp -- \
 When file audit is enabled, the readiness payload always reports
 `audit_log_writable`. A false value returns HTTP 503 only in fail-closed mode;
 otherwise it stays visible while process-log auditing and MCP traffic continue.
-The Minibridge deployment exposes its own `/` health endpoint instead, so use
-the server process logs to monitor audit-file degradation in that mode.
+The direct server also reports passive `jenkins.last_contact_age_seconds` and
+`jenkins.last_transport_error` diagnostics without gating readiness. The
+Minibridge deployment exposes its own `/` health endpoint instead, so use the
+container logs to monitor both audit-file degradation and rate-limited Jenkins
+transport failure/recovery messages in that mode.
 
 From a tagged Hermes node, verify TLS and the MCP endpoint with the MCP Inspector or Hermes itself. A plain browser GET is not a valid MCP protocol test.

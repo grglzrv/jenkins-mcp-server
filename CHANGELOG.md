@@ -10,35 +10,101 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.6.4] - 2026-08-10
+
+### Highlights
+
+- A crumb issuer that is briefly unavailable no longer disables Jenkins writes
+  until the pod restarts.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Direct-server `/readyz` reports passive Jenkins transport state under a
+  `jenkins` key: `last_contact_age_seconds` and `last_transport_error`. It is a
+  diagnostic and never gates readiness. Readiness controls
+  Service endpoints, so failing it during a Jenkins restart would turn one
+  upstream outage into two and leave callers with a refused connection instead
+  of an error naming the cause. The value is observed from requests the server
+  was already making rather than an added probe, which would have every replica
+  polling the controller on its readiness interval, hardest exactly when the
+  controller is already struggling. A pod that has not been asked to do anything
+  reports null rather than an invented result. Transport failures also produce
+  a rate-limited warning and a recovery message without logging the Jenkins URL
+  or exception text, so Minibridge deployments retain the signal even though
+  the proxy exposes its own health endpoint instead of the child's `/readyz`.
+
+### Bug Fixes
+
+- A 404 from the crumb issuer is treated as CSRF protection being disabled,
+  which is correct for a controller that has it off and wrong for one that is
+  restarting or briefly behind a misrouting proxy. The conclusion was permanent:
+  nothing re-probed the issuer, and readiness does not test it, so every write
+  returned 403 for the life of the process and only a restart recovered. A
+  crumb-related 403 now clears the flag and re-probes once, because Jenkins
+  asking for a crumb disproves the earlier conclusion. Recovery remains
+  single-flight under concurrent writes, and the negative-cache mutation now
+  happens under the lock that owns the state. Every waiting write therefore
+  shares one issuer probe. Controllers with CSRF genuinely disabled are still
+  probed exactly once.
+- Transport failures while fetching the crumb previously happened before the
+  main request instrumentation and were absent from diagnostics. All Jenkins
+  sends now use the same contact recorder, including the crumb issuer.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- The Jenkins fields are passive: they remain null until the pod handles a
+  request and may grow stale while the pod is idle. Minibridge exposes its own
+  `/` health endpoint, so use the same container's rate-limited child-process
+  logs rather than expecting the direct server's `/readyz` payload there.
+
+### Security
+
+- None. The re-probe is triggered by Jenkins rejecting a write for a missing
+  crumb, and the retried request carries the crumb Jenkins issued.
+
+### Upgrade Notes
+
+- No configuration changes are required. Monitoring that consumes the new
+  direct-server payload should use `jenkins.last_contact_age_seconds` and
+  `jenkins.last_transport_error`; neither changes the readiness status code.
 
 ## [2.6.3] - 2026-08-09
 

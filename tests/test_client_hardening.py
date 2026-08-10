@@ -9,6 +9,7 @@ import pytest
 from jenkins_mcp_server.audit import AuditLogger
 from jenkins_mcp_server.client import JenkinsClient, JenkinsError, _job_path
 from jenkins_mcp_server.config import Settings
+from jenkins_mcp_server.diagnostics import JenkinsContact
 from jenkins_mcp_server.security import Policy, PolicyError
 
 
@@ -36,12 +37,18 @@ def policy(**overrides: object) -> Policy:
     return Policy(**values)  # type: ignore[arg-type]
 
 
-def client(handler, **setting_overrides: object) -> JenkinsClient:
+def client(
+    handler,
+    *,
+    contact: JenkinsContact | None = None,
+    **setting_overrides: object,
+) -> JenkinsClient:
     return JenkinsClient(
         settings(**setting_overrides),
         policy(),
         AuditLogger(None),
         transport=httpx.MockTransport(handler),
+        contact=contact,
     )
 
 
@@ -295,6 +302,31 @@ async def test_unrelated_403_is_not_treated_as_a_crumb_problem() -> None:
     with pytest.raises(Exception, match="403"):
         await jc.request("POST", "/job/AI/job/build/build", action="test")
     assert len(attempts) == 1, "permission errors must not trigger a crumb retry"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_403_that_only_mentions_crumb_configuration_is_not_replayed() -> None:
+    """The noun alone is not proof that Jenkins rejected the request's crumb."""
+    issuer_calls = 0
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal issuer_calls, attempts
+        if request.url.path == "/crumbIssuer/api/json":
+            issuer_calls += 1
+            return httpx.Response(
+                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
+            )
+        attempts += 1
+        return httpx.Response(403, text="Not permitted to configure the crumb issuer")
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(JenkinsError) as caught:
+        await jc.build("demo")
+    assert issuer_calls == 1
+    assert attempts == 1
+    assert "rejected the CSRF crumb" not in str(caught.value)
     await jc.close()
 
 
@@ -748,3 +780,125 @@ def test_audit_reports_an_unwritable_path_once(tmp_path, caplog) -> None:
         for _ in range(5):
             audit.emit("build.trigger", "success", status=201)
     assert caplog.text.count("not writable") == 1
+
+
+@pytest.mark.asyncio
+async def test_a_transient_crumb_404_does_not_disable_csrf_forever() -> None:
+    """A 404 during a restart made the wrong conclusion permanent.
+
+    Nothing re-probed the issuer and readiness does not test it, so every write
+    failed until the process restarted. Jenkins asking for a crumb disproves the
+    conclusion, so the next write must recover on its own.
+    """
+    state = {"issuer_up": False, "probes": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            state["probes"] += 1
+            if not state["issuer_up"]:
+                return httpx.Response(404, text="not found")
+            return httpx.Response(
+                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
+            )
+        if "Jenkins-Crumb" not in request.headers:
+            return httpx.Response(403, text="No valid crumb was included")
+        return httpx.Response(201, headers={"Location": "/queue/1"})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(JenkinsError):
+        await jc.build("demo")
+
+    state["issuer_up"] = True
+    assert (await jc.build("demo"))["queued"] is True
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_writes_share_one_transient_crumb_recovery() -> None:
+    """Every write waiting on the disproved negative cache must recover."""
+    state = {"issuer_up": False, "probes": 0, "waiting": 0}
+    both_waiting = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            state["probes"] += 1
+            if not state["issuer_up"]:
+                return httpx.Response(404)
+            return httpx.Response(
+                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
+            )
+        if "Jenkins-Crumb" not in request.headers:
+            if state["issuer_up"]:
+                state["waiting"] += 1
+                if state["waiting"] == 2:
+                    both_waiting.set()
+                await asyncio.wait_for(both_waiting.wait(), timeout=1)
+            return httpx.Response(403, text="No valid crumb was included")
+        return httpx.Response(201, headers={"Location": "/queue/1"})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(JenkinsError):
+        await jc.build("initial")
+
+    state["issuer_up"] = True
+    state["probes"] = 0
+    results = await asyncio.gather(jc.build("one"), jc.build("two"))
+    assert all(result["queued"] is True for result in results)
+    assert state["probes"] == 1, "concurrent recovery must share one issuer probe"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_crumb_issuer_transport_failure_is_reported() -> None:
+    """The preflight can fail before request() sends the write itself."""
+    contact = JenkinsContact()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    jc = client(handler, contact=contact, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(JenkinsError, match="Could not reach the Jenkins crumb issuer"):
+        await jc.build("demo")
+    assert contact.snapshot() == {
+        "last_contact_age_seconds": None,
+        "last_transport_error": "ConnectError",
+    }
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_default_transport_diagnostics_are_isolated_per_client() -> None:
+    """Library clients must not leak failures through process-global state."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, request=request)
+
+    first = client(handler)
+    second = client(handler)
+    first.contact.record_failure(httpx.ConnectError("refused"))
+
+    assert first.contact.snapshot()["last_transport_error"] == "ConnectError"
+    assert second.contact.snapshot() == {
+        "last_contact_age_seconds": None,
+        "last_transport_error": None,
+    }
+    await first.close()
+    await second.close()
+
+
+@pytest.mark.asyncio
+async def test_csrf_disabled_controllers_are_still_probed_only_once() -> None:
+    """The negative cache is why the flag exists; recovery must not cost it."""
+    probes = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            probes["count"] += 1
+            return httpx.Response(404)
+        return httpx.Response(201, headers={"Location": "/queue/1"})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    for _ in range(5):
+        await jc.build("demo")
+    assert probes["count"] == 1, f"re-probed {probes['count']} times"
+    await jc.close()

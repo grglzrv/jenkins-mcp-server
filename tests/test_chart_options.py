@@ -1003,7 +1003,7 @@ def test_notes_describe_the_actual_deployment() -> None:
 
 
 def test_health_port_exposure_is_configurable() -> None:
-    """/readyz reports config state; it should not be forced onto a LoadBalancer."""
+    """/readyz reports config and transport state; do not force it onto a LoadBalancer."""
     assert values()["service"]["exposeHealthPort"] is True
     svc = (CHART / "templates/service.yaml").read_text()
     assert ".Values.service.exposeHealthPort" in svc
