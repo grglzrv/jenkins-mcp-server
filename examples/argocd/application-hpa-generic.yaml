@@ -113,8 +113,8 @@ spec:
             sessionAffinityConfig:
               clientIP:
                 timeoutSeconds: 600
-          # /readyz reports configuration state; keep it off any Service that is
-          # reachable from outside the cluster.
+          # /readyz reports configuration and passive Jenkins transport state;
+          # keep it off any Service reachable from outside the cluster.
           exposeHealthPort: true
 
   destination:

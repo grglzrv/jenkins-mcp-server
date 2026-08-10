@@ -128,7 +128,8 @@
           }
         },
         "exposeHealthPort": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Publish the health listener on the Service. Direct-server /readyz includes configuration and passive Jenkins transport diagnostics; Minibridge exposes its own / health endpoint. Pod probes do not require Service exposure."
         }
       }
     },

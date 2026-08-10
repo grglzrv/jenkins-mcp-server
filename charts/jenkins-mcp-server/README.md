@@ -87,15 +87,27 @@ the Tailscale integration are all opt-in. Public GHCR packages do not require
 ## Troubleshooting
 
 `/healthz` proves the process is running; `/readyz` validates configuration,
-the CA file, and optional audit-file health. Readiness does not call Jenkins, so
-a ready pod can still be blocked by DNS, a firewall, NetworkPolicy, a proxy, or
-Jenkins authentication. A 403 without a crumb message is a Jenkins permission
-failure; only a crumb-related 403 calls for proxy or Strict Crumb Issuer checks.
+the CA file, and optional audit-file health. It passively reports the age of the
+last Jenkins HTTP contact and latest transport-error class, but does not probe
+or gate on them. A ready pod can still be blocked by DNS, a firewall,
+NetworkPolicy, a proxy, or Jenkins authentication. A 403 without a crumb message
+is a Jenkins permission failure; only a crumb-related 403 calls for proxy or
+Strict Crumb Issuer checks. With Minibridge enabled, `/` is Minibridge's health
+endpoint and the child server's diagnostics are available through container
+warning/recovery logs instead.
 
 See the repository's [complete troubleshooting guide](https://github.com/grglzrv/jenkins-mcp-server/blob/main/docs/TROUBLESHOOTING.md)
 for commands and the complete symptom guide covering external Jenkins
 networking, audit readiness, session affinity, TLS, response limits, and both
 policy layers.
+
+### Upgrading from 2.6.3
+
+No values changes are required. Direct-server `/readyz` adds passive
+`jenkins.last_contact_age_seconds` and `jenkins.last_transport_error` fields;
+they never alter the readiness status code. Minibridge continues to expose its
+own `/` health endpoint, with Jenkins transport failure and recovery reported in
+the container logs.
 
 ### Upgrading from 2.6.1
 
@@ -404,7 +416,7 @@ does not render direct-listener variables into the ConfigMap.
 | --- | --- | --- |
 | `service.type` / `port` | `ClusterIP` / `8000` | |
 | `service.sessionAffinity` | `ClientIP`, 600 seconds | Keeps a Streamable HTTP session on the replica that owns its in-memory state; set the whole value to `null` only when affinity is provided upstream or there is one replica |
-| `service.exposeHealthPort` | `true` | `/readyz` reports config state; set false on an externally reachable Service |
+| `service.exposeHealthPort` | `true` | Direct-server `/readyz` reports config state and passive Jenkins transport diagnostics; Minibridge publishes its own `/` health; set false on an externally reachable Service |
 | `ingress.enabled` | `false` | No ingress controller is assumed |
 | `ingress.className` | `""` | Empty uses the cluster default. The template adapts to the class |
 | `ingress.hostname` | `""` | Machine name for Tailscale, full hostname otherwise |

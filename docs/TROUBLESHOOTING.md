@@ -7,16 +7,24 @@ file, and optional audit-file health; it deliberately does **not** call Jenkins.
 It does report what recent traffic revealed, under `jenkins`:
 
 ```json
-{"jenkins": {"last_success_age_seconds": 4.2, "last_error": null}}
+{"jenkins": {"last_contact_age_seconds": 4.2, "last_transport_error": null}}
 ```
 
-`last_success_age_seconds` is how long ago a request last reached the
+`last_contact_age_seconds` is how long ago any request last received an HTTP
+response from the
 controller, and is `null` on a pod that has not been asked to do anything yet.
-`last_error` names the class of the last transport failure. Neither gates
+`last_transport_error` names the class of the latest DNS, connection, timeout,
+TLS, or protocol failure and clears after the next HTTP response. Neither gates
 readiness: a Jenkins outage would otherwise remove every replica from the
 Service, replacing an error that names the cause with a refused connection. Use
-a growing age alongside a set `last_error` to spot a pod that has lost Jenkins
-while its peers have not.
+a growing age alongside a set transport error to spot a pod that has lost
+Jenkins while its peers have not. The server also writes a rate-limited warning
+and a recovery message to its process logs, without including the Jenkins URL or
+exception text.
+
+These `/readyz` fields belong to the direct server. With Minibridge enabled, the
+public health endpoint is Minibridge's `/`; inspect the same container's logs for
+the child server's Jenkins transport warnings and recovery message.
 
 ```bash
 kubectl -n jenkins-mcp get pods
@@ -46,7 +54,7 @@ instead. Do not paste Jenkins tokens or Secret output into an issue.
 | A tool is absent from `tools/list` | Minibridge denied it through `minibridge.tools` | Check `tools.allow` and `tools.deny`; deny wins. Server-side `mcp.allow*` flags do not hide tools |
 | A visible tool is refused with a policy/destructive-action error | The in-process server policy rejected the call | Check `mcp.readOnly`, `mcp.allowedJobs`, the category flag, `mcp.allowDestructive`, and the operation-specific flag |
 | An MCP session works intermittently with multiple replicas | Requests are reaching a replica that does not own the in-memory Streamable HTTP session | Keep the Service's `ClientIP` affinity, or provide equivalent ingress affinity. Reconnect after pod restarts |
-| `jenkins.last_error` is set and `last_success_age_seconds` keeps growing | This pod cannot reach Jenkins; check egress, DNS, and the CA bundle | The pod stays ready on purpose: tool calls return an error naming the cause |
+| `jenkins.last_transport_error` is set and `last_contact_age_seconds` keeps growing | This pod cannot reach Jenkins; check egress, DNS, and the CA bundle | The pod stays ready on purpose: tool calls return an error naming the cause |
 | `/readyz` reports `audit_log_writable: false` | The optional audit-file copy cannot be written | Fix the mount, permissions, or full volume. Process-log audit records continue; traffic is gated only with `audit.requiredForReadiness: true` |
 | `Jenkins response exceeded MCP_MAX_RESPONSE_BYTES` | A complete API, config, or crumb response exceeded the 10 MB default safety bound | Narrow the query/folder where possible. Raise `mcp.maxResponseBytes` only for a measured legitimate response |
 | `Jenkins returned malformed JSON` | Jenkins or an intermediary returned HTML, truncated data, or invalid JSON to an API endpoint | Inspect the proxy/WAF response and Jenkins logs; confirm the URL does not lead to a login page |

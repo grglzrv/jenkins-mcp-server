@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from .audit import AuditLogger
-from .client import jenkins_contact
 from .config import Settings
+from .diagnostics import JenkinsContact
 
 log = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 def readiness(
     settings: Settings,
     audit: AuditLogger | None = None,
+    contact: JenkinsContact | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     checks: dict[str, Any] = {
         "jenkins_url_configured": bool(settings.jenkins_url),
@@ -58,13 +59,14 @@ def readiness(
     # connection instead of an error naming the cause. The server can still
     # serve, and what it serves is more useful than nothing.
     #
-    # Passive by design. last_success_age_seconds is null on a pod that has not
+    # Passive by design. last_contact_age_seconds is null on a pod that has not
     # been asked to do anything yet; that is honest rather than a probe result
     # invented to fill the field.
+    contact_snapshot = (contact or JenkinsContact()).snapshot()
     payload: dict[str, Any] = {
         "status": "ready" if ready else "not_ready",
         "checks": checks,
-        "jenkins": jenkins_contact.snapshot(),
+        "jenkins": contact_snapshot,
     }
     return ready, payload
 
@@ -72,13 +74,14 @@ def readiness(
 class HealthHandler(BaseHTTPRequestHandler):
     settings: Settings
     audit: AuditLogger | None = None
+    contact: JenkinsContact
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/healthz":
             self._json(200, {"status": "ok"})
             return
         if self.path == "/readyz":
-            ready, payload = readiness(self.settings, self.audit)
+            ready, payload = readiness(self.settings, self.audit, self.contact)
             self._json(200 if ready else 503, payload)
             return
         self._json(404, {"error": "not_found"})
@@ -103,11 +106,13 @@ class HealthHandler(BaseHTTPRequestHandler):
 def start_health_server(
     settings: Settings,
     audit: AuditLogger | None = None,
+    contact: JenkinsContact | None = None,
 ) -> ThreadingHTTPServer:
+    shared_contact = contact or JenkinsContact()
     handler = type(
         "ConfiguredHealthHandler",
         (HealthHandler,),
-        {"settings": settings, "audit": audit},
+        {"settings": settings, "audit": audit, "contact": shared_contact},
     )
     server = ThreadingHTTPServer((settings.health_host, settings.health_port), handler)
     thread = threading.Thread(target=server.serve_forever, name="health-server", daemon=True)

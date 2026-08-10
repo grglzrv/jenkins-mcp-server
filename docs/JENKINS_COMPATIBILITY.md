@@ -53,8 +53,8 @@ Nothing exotic. This is the complete surface:
 
 | Endpoint | Used by |
 | --- | --- |
-| `GET /api/json` | `list_jobs`, `list_nodes`, readiness |
-| `GET /crumbIssuer/api/json` | CSRF crumb for every write |
+| `GET /api/json` | `list_jobs`, `list_nodes` |
+| `GET /crumbIssuer/api/json` | Initial CSRF crumb plus stale-crumb and transient-404 recovery |
 | `GET /job/…/api/json` | `get_job`, `get_build_info`, `get_queue` |
 | `GET /job/…/config.xml` | `get_job_config` |
 | `POST /job/…/config.xml` | `update_job_config` |
@@ -151,9 +151,12 @@ searches that field. Generate `JENKINS_TOKEN` from that same Jenkins user.
 
 Create one at *People → your user → Security → API Token → Add new Token*.
 
-The server fetches a CSRF crumb before every write and reissues it once if
-Jenkins rotates the session, so a crumb expiring mid-session does not surface as
-a 403.
+The server fetches a CSRF crumb before the first write and reuses it. A 404 is
+negative-cached for controllers with CSRF disabled. If Jenkins later rejects a
+write as missing a crumb, the client treats that rejection as proof that the
+404 was transient, clears the negative cache, and performs one single-flight
+re-probe. A stale crumb is likewise reissued once, so rotation does not surface
+as a permanent 403.
 
 ## Permissions
 

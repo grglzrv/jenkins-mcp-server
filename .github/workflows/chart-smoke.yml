@@ -79,7 +79,7 @@ jobs:
         run: |
           kubectl create namespace jenkins-mcp
           # The server needs credentials to start. It never reaches Jenkins in
-          # this test: readiness reports configuration, not connectivity.
+          # this test: readiness only reports passively observed connectivity.
           kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
             --from-literal=JENKINS_USERNAME=smoke \
             --from-literal=JENKINS_TOKEN=smoke-token
@@ -139,6 +139,10 @@ jobs:
           payload = json.load(urllib.request.urlopen("http://127.0.0.1:8081/readyz"))
           assert payload["status"] == "ready"
           assert payload["checks"]["audit_log_writable"] is True
+          assert payload["jenkins"] == {
+              "last_contact_age_seconds": None,
+              "last_transport_error": None,
+          }
           PY
           done
 

@@ -13,10 +13,14 @@ async def test_server_lifespan_closes_and_discards_cached_client(
     client.close = AsyncMock()
     get_client = Mock(return_value=client)
     get_client.cache_clear = Mock()
+    get_contact = Mock()
+    get_contact.cache_clear = Mock()
     monkeypatch.setattr(server, "get_client", get_client)
+    monkeypatch.setattr(server, "get_jenkins_contact", get_contact)
 
     async with server.server_lifespan(server.mcp):
         assert get_client.call_count == 1
 
     client.close.assert_awaited_once_with()
     get_client.cache_clear.assert_called_once_with()
+    get_contact.cache_clear.assert_called_once_with()

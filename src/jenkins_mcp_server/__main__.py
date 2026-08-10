@@ -5,7 +5,7 @@ import logging
 
 from .config import get_settings
 from .health import start_health_server
-from .server import get_audit_logger, mcp
+from .server import get_audit_logger, get_jenkins_contact, mcp
 
 
 def main() -> None:
@@ -19,7 +19,7 @@ def main() -> None:
     if transport == "stdio":
         mcp.run(transport="stdio")
     else:
-        start_health_server(settings, get_audit_logger())
+        start_health_server(settings, get_audit_logger(), get_jenkins_contact())
         # In mcp 2.x the listener and transport options are arguments to the
         # transport call rather than mutable attributes on mcp.settings.
         mcp.run(

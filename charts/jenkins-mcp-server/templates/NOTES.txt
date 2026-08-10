@@ -68,8 +68,9 @@ ingress and the Jenkins egress path.
 {{- if and (ne .Values.service.type "ClusterIP") .Values.service.exposeHealthPort }}
 
 WARNING: service.type={{ .Values.service.type }} also publishes the health port.
-/readyz reports configuration state. Set service.exposeHealthPort=false unless
-the external Service needs that port and access is restricted upstream.
+/readyz reports configuration state and passive Jenkins transport diagnostics.
+Set service.exposeHealthPort=false unless the external Service needs that port
+and access is restricted upstream.
 {{- end }}
 {{- if not .Values.jenkins.verifyTls }}
 

@@ -1,3 +1,5 @@
+import json
+import logging
 import time
 from pathlib import Path
 from urllib.request import urlopen
@@ -5,8 +7,8 @@ from urllib.request import urlopen
 import httpx
 
 from jenkins_mcp_server.audit import AuditLogger
-from jenkins_mcp_server.client import JenkinsContact, jenkins_contact
 from jenkins_mcp_server.config import Settings
+from jenkins_mcp_server.diagnostics import JenkinsContact
 from jenkins_mcp_server.health import readiness, start_health_server
 
 
@@ -27,7 +29,12 @@ def test_readiness_without_custom_ca() -> None:
 
 
 def test_health_responses_are_json_and_never_cached() -> None:
-    server = start_health_server(settings(MCP_HEALTH_HOST="127.0.0.1", MCP_HEALTH_PORT=0))
+    contact = JenkinsContact()
+    contact.record_failure(httpx.ConnectError("refused"))
+    server = start_health_server(
+        settings(MCP_HEALTH_HOST="127.0.0.1", MCP_HEALTH_PORT=0),
+        contact=contact,
+    )
     try:
         port = server.server_address[1]
         with urlopen(f"http://127.0.0.1:{port}/readyz", timeout=1) as response:
@@ -35,6 +42,11 @@ def test_health_responses_are_json_and_never_cached() -> None:
             assert response.headers["Content-Type"] == "application/json; charset=utf-8"
             assert response.headers["Cache-Control"] == "no-store"
             assert response.headers["X-Content-Type-Options"] == "nosniff"
+            payload = json.load(response)
+            assert payload["jenkins"] == {
+                "last_contact_age_seconds": None,
+                "last_transport_error": "ConnectError",
+            }
     finally:
         server.shutdown()
         server.server_close()
@@ -197,24 +209,40 @@ def test_jenkins_reachability_is_reported_but_never_gates_readiness() -> None:
     outage into two, and leaves callers with a refused connection instead of an
     error naming the cause.
     """
-    jenkins_contact.record_failure(httpx.ConnectError("refused"))
-    ready, payload = readiness(_settings())
+    contact = JenkinsContact()
+    contact.record_failure(httpx.ConnectError("refused"))
+    ready, payload = readiness(_settings(), contact=contact)
     assert ready is True
-    assert payload["jenkins"]["last_error"] == "ConnectError"
+    assert payload["jenkins"]["last_transport_error"] == "ConnectError"
 
 
 def test_reachability_is_null_until_the_pod_has_done_something() -> None:
     """Passive by design: no probe result is invented to fill the field."""
     fresh = JenkinsContact()
-    assert fresh.snapshot() == {"last_success_age_seconds": None, "last_error": None}
+    assert fresh.snapshot() == {
+        "last_contact_age_seconds": None,
+        "last_transport_error": None,
+    }
 
 
 def test_any_http_response_counts_as_reaching_jenkins() -> None:
     """A 403 is a Jenkins problem, not a reachability problem."""
     contact = JenkinsContact()
     contact.record_failure(httpx.ConnectError("refused"))
-    assert contact.snapshot()["last_error"] == "ConnectError"
-    contact.record_success()
+    assert contact.snapshot()["last_transport_error"] == "ConnectError"
+    contact.record_contact()
     snapshot = contact.snapshot()
-    assert snapshot["last_error"] is None
-    assert snapshot["last_success_age_seconds"] is not None
+    assert snapshot["last_transport_error"] is None
+    assert snapshot["last_contact_age_seconds"] is not None
+
+
+def test_transport_failure_warning_is_rate_limited_and_recovery_is_logged(caplog) -> None:
+    contact = JenkinsContact(warning_interval_seconds=3600)
+    with caplog.at_level(logging.INFO):
+        contact.record_failure(httpx.ConnectError("first"))
+        contact.record_failure(httpx.ConnectError("second"))
+        contact.record_contact()
+    assert caplog.text.count("Jenkins transport failure: ConnectError") == 1
+    assert "Jenkins contact recovered after ConnectError" in caplog.text
+    assert "first" not in caplog.text
+    assert "second" not in caplog.text

@@ -98,8 +98,8 @@ step "Waiting for the MCP server to become ready"
 for _ in {1..60}; do curl -sf http://localhost:8081/readyz >/dev/null && break; sleep 1; done
 curl -sf http://localhost:8081/readyz >/dev/null || { echo "MCP server did not become ready within 60s"; exit 1; }
 
-# /readyz only reports that credentials are configured, not that Jenkins is
-# reachable, so confirm Jenkins is still serving before exercising any tool.
+# /readyz does not actively probe Jenkins. Before normal traffic it has no
+# contact result, so confirm Jenkins is serving before exercising any tool.
 for _ in {1..60}; do jcurl -o /dev/null -w '%{http_code}' "$JENKINS_LOCAL/api/json" | grep -q '^200$' && break; sleep 2; done
 JENKINS_CODE="$(jcurl -o /dev/null -w '%{http_code}' "$JENKINS_LOCAL/api/json")"
 if [ "$JENKINS_CODE" != "200" ]; then
@@ -108,3 +108,13 @@ if [ "$JENKINS_CODE" != "200" ]; then
 fi
 echo "::endgroup::"
 python3 integration/test_mcp_http.py
+
+step "Verifying passive Jenkins diagnostics"
+curl -fsS http://localhost:8081/readyz | python3 -c '
+import json, sys
+payload = json.load(sys.stdin)
+jenkins = payload["jenkins"]
+assert jenkins["last_contact_age_seconds"] is not None, jenkins
+assert jenkins["last_transport_error"] is None, jenkins
+print(jenkins)
+'
