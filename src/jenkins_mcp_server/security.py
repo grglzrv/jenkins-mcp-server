@@ -20,9 +20,13 @@ GLOB_META = re.compile(r"[*?[]")
 
 
 def _job_segments(job_name: str) -> list[str]:
-    segments = [part for part in job_name.strip("/").split("/") if part]
-    if not segments:
+    if not job_name.strip("/").strip():
         raise PolicyError("Job name must not be empty")
+    if job_name != job_name.strip("/") or "//" in job_name:
+        raise PolicyError(
+            f"Job '{job_name}' has leading, trailing, or repeated '/' separators"
+        )
+    segments = job_name.split("/")
     if any(part in {".", ".."} for part in segments):
         raise PolicyError(
             f"Job '{job_name}' contains path traversal segments and is rejected"

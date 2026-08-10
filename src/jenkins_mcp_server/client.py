@@ -63,10 +63,29 @@ SENSITIVE_RESPONSE_HEADERS = frozenset(
 )
 
 
+def _node_path(node_name: str) -> str:
+    """Encode a node name for a /computer/<name> URL.
+
+    Jobs go through _job_path, which rejects an empty name. Nodes had no
+    equivalent, so an empty name collapsed /computer/<name>/ to the collection
+    endpoint: a read returned every node, and a toggle posted to /computer//
+    and reported success for a node it never touched.
+    """
+    if not node_name or not node_name.strip():
+        raise ValueError("node_name must not be empty")
+    if any(part in TRAVERSAL_SEGMENTS for part in node_name.split("/")):
+        raise ValueError("node_name must not contain '.' or '..' segments")
+    return quote(node_name, safe="")
+
+
 def _job_path(full_name: str) -> str:
-    parts = [part for part in full_name.strip("/").split("/") if part]
-    if not parts:
+    if not full_name.strip("/").strip():
         raise ValueError("job_name must not be empty")
+    if full_name != full_name.strip("/") or "//" in full_name:
+        raise ValueError(
+            "job_name must not have leading, trailing, or repeated '/' separators"
+        )
+    parts = full_name.split("/")
     if any(part in TRAVERSAL_SEGMENTS for part in parts):
         raise ValueError(f"job_name must not contain '.' or '..' path segments: {full_name!r}")
     return "/".join(f"job/{quote(part, safe='')}" for part in parts)
@@ -798,8 +817,7 @@ class JenkinsClient:
         return await self.api("computer", depth=2)
 
     async def node_info(self, node_name: str) -> Any:
-        encoded_node = quote(node_name, safe="")
-        return await self.api(f"computer/{encoded_node}", depth=2)
+        return await self.api(f"computer/{_node_path(node_name)}", depth=2)
 
     async def toggle_node(
         self,
@@ -811,9 +829,9 @@ class JenkinsClient:
             self.policy.require_destructive("node.offline")
         else:
             self.policy.require_write("node")
+        encoded_node = _node_path(node_name)
         current = await self.node_info(node_name)
         if bool(current.get("temporarilyOffline")) != offline:
-            encoded_node = quote(node_name, safe="")
             await self.request(
                 "POST",
                 f"/computer/{encoded_node}/toggleOffline",
