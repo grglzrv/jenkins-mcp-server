@@ -220,3 +220,146 @@ def test_opa_policy_tests_pass() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "FAIL" not in result.stdout
+
+
+def test_every_tool_is_described_for_the_agent() -> None:
+    """Descriptions are the in-band signal an agent uses to choose a tool.
+
+    Without them a model sees only names, and get_job, get_job_config and
+    get_build_info are not distinguishable from names alone.
+    """
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = asyncio.run(mcp.list_tools())
+    undescribed = sorted(t.name for t in tools if not (t.description or "").strip())
+    assert not undescribed, f"tools with no description: {undescribed}"
+
+
+def test_destructive_tools_say_so_in_their_description() -> None:
+    """The policy layers can refuse a call; only the description can stop the
+    model choosing it in the first place."""
+    import asyncio
+    import re
+
+    from jenkins_mcp_server.server import mcp
+
+    # Derive the set from the policy rather than restating it, so a tool moved
+    # into @destructive is required to gain a warning too.
+    policy = (DOCKER / "policy.rego").read_text()
+    block = policy.split("_tool_groups := {")[1].split("\n_all_tools")[0]
+    destructive = set(
+        re.findall(
+            r'"([a-z_0-9]+)"',
+            re.search(r'"@destructive": \{([^}]*)\}', block, re.S).group(1),
+        )
+    )
+    assert destructive, "could not read @destructive from policy.rego"
+
+    consequences = {
+        "update_job_config": ("destructive", "overwritten", "absent", "lost"),
+        "delete_job": ("destructive", "build history", "external backup"),
+        "stop_build": ("destructive", "abandoned", "lost"),
+        "cancel_queue_item": ("destructive", "discarded", "queue item"),
+        "set_node_offline": ("destructive", "no new work", "stall"),
+    }
+    assert set(consequences) == destructive, (
+        "every @destructive tool needs a reviewed, consequence-specific warning"
+    )
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    for name, required in consequences.items():
+        missing = [phrase for phrase in required if phrase not in tools[name]]
+        assert not missing, f"{name} description is missing consequences: {missing}"
+
+
+def test_admin_escape_hatch_warns_about_ungated_mutations() -> None:
+    """The generic admin tool can bypass operation-specific destructive flags."""
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    description = tools["jenkins_admin_request"]
+    for phrase in ["mutate", "delete", "not gated by mcp_allow_destructive", "confirm"]:
+        assert phrase in description, f"admin description is missing {phrase!r}"
+
+
+def test_destructive_descriptions_name_every_server_policy_gate() -> None:
+    """A single enabled flag is not enough; descriptions must not imply it is."""
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    required = {
+        "update_job_config": (
+            "mcp_allow_job_write",
+            "mcp_allow_destructive",
+            "mcp_allow_job_update",
+        ),
+        "delete_job": (
+            "mcp_allow_job_write",
+            "mcp_allow_destructive",
+            "mcp_allow_job_delete",
+        ),
+        "stop_build": (
+            "mcp_allow_build_write",
+            "mcp_allow_destructive",
+            "mcp_allow_build_stop",
+        ),
+        "cancel_queue_item": (
+            "mcp_allow_build_write",
+            "mcp_allow_destructive",
+            "mcp_allow_build_stop",
+        ),
+        "set_node_offline": ("mcp_allow_node_write", "mcp_allow_destructive"),
+    }
+    for name, gates in required.items():
+        missing = [gate for gate in gates if gate not in tools[name]]
+        assert not missing, f"{name} description is missing policy gates: {missing}"
+
+
+def test_copy_description_matches_jenkins_copy_semantics() -> None:
+    """Jenkins copies config.xml; it does not force the target disabled."""
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    description = tools["copy_job"]
+    assert "inherits" in description
+    assert "enabled or disabled state" in description
+    assert "build history" in description and "not copied" in description
+    assert "job/extendedread" in description
+    assert "job/create" in description
+    assert "job/configure" in description and "redact" in description
+
+
+def test_creation_descriptions_keep_plaintext_secrets_out_of_tool_arguments() -> None:
+    """Credential IDs are references; descriptions must not invite raw secrets."""
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    for name in ["create_job_from_xml", "update_job_config", "create_pipeline_job"]:
+        assert "plaintext" in tools[name] and "credential" in tools[name]
+    multibranch = tools["create_multibranch_pipeline"]
+    for phrase in ["credentials_id", "stored in jenkins", "never pass", "private key"]:
+        assert phrase in multibranch

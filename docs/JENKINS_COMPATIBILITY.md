@@ -171,10 +171,13 @@ Grant the service account the least that covers the tools you enable:
 
 | Tools | Jenkins permission |
 | --- | --- |
-| All read tools | `Overall/Read`, `Job/Read` |
+| All read tools except `get_job_config` | `Overall/Read`, `Job/Read` |
+| `get_job_config` | `Job/ExtendedRead` |
 | `trigger_build`, `scan_multibranch_pipeline` | `Job/Build` |
 | `stop_build`, `cancel_queue_item` | `Job/Cancel` |
-| `create_*`, `copy_job`, `update_job_config` | `Job/Create`, `Job/Configure` |
+| `create_job_from_xml`, `create_pipeline_job`, `create_multibranch_pipeline` | `Job/Create` on the target parent |
+| `copy_job` | `Job/ExtendedRead` on the source and `Job/Create` on the target parent. Jenkins also requires `Job/Configure` on the source when its configuration contains secrets hidden from extended-read users |
+| `update_job_config` | `Job/Configure` |
 | `delete_job` | `Job/Delete` |
 | `enable_job`, `disable_job` | `Job/Configure` |
 | `set_node_offline` | `Agent/Disconnect` |
@@ -191,6 +194,7 @@ Common mistakes, where one tool fails while its neighbours succeed:
 | --- | --- | --- |
 | `Job/Read` | `Job/ExtendedRead` | `get_job_config` fails; reading `config.xml` needs extended read |
 | `Job/Create` at the root | `Job/Create` on the target folder | `create_*` and `copy_job` fail; permission is evaluated on the parent folder |
+| `Job/Create` on the target | `Job/ExtendedRead` on the source, or `Job/Configure` when its config contains redacted secrets | `copy_job` fails while direct creation still works |
 | `Job/Build` | `Job/Cancel` | `stop_build` and `cancel_queue_item` fail |
 | Job permissions | `Agent/Disconnect` | `set_node_offline` fails |
 

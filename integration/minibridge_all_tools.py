@@ -153,11 +153,23 @@ async def main(url: str) -> int:
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
 
-            listed = {tool.name for tool in (await session.list_tools()).tools}
+            listed_tools = (await session.list_tools()).tools
+            listed = {tool.name for tool in listed_tools}
             assert listed == ALLOWED, (
                 "tools/list did not expose exactly the non-destructive surface; "
                 f"missing={sorted(ALLOWED - listed)}, unexpected={sorted(listed - ALLOWED)}"
             )
+            undescribed = sorted(
+                tool.name for tool in listed_tools if not (tool.description or "").strip()
+            )
+            assert not undescribed, (
+                "Minibridge stripped descriptions from allowed tools: "
+                f"{undescribed}"
+            )
+            admin = next(
+                tool for tool in listed_tools if tool.name == "jenkins_admin_request"
+            )
+            assert "not gated by MCP_ALLOW_DESTRUCTIVE" in (admin.description or "")
             print(f"PASS  tools/list exposes all {len(ALLOWED)} allowed tools and no others")
 
             print("destructive policy")

@@ -40,6 +40,64 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.7.2] - 2026-08-10
+
+### Highlights
+
+- Every MCP tool now explains its purpose, return shape, prerequisites, and
+  operational hazards in the metadata agents receive from `tools/list`.
+- Destructive tools and the generic administrator escape hatch explicitly warn
+  what state can be lost before an agent chooses to call them.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Descriptions distinguish similarly named tools and document details absent
+  from their signatures: build queue URLs versus build numbers, parameter
+  defaults, build aliases, queue item IDs, `Job/ExtendedRead`, allowlist
+  filtering, complete destructive policy gates, Jenkins copy permissions, and
+  exact Pipeline plugin requirements.
+- Copy semantics now state that Jenkins preserves the source configuration and
+  enabled state but not build history or workspaces. The direct HTTP and
+  Jenkins-through-Minibridge smoke tests verify descriptions survive the wire
+  and proxy rather than checking only the in-process registry.
+
+### Bug Fixes
+
+- All 23 tools previously exposed an empty description because their registered
+  functions had no docstrings. Agents saw names and parameter schemas without
+  the information required to choose safely between related tools.
+
+### Breaking Changes
+
+- None. Tool names, input schemas, policy groups, and execution behavior are
+  unchanged.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Each `@destructive` tool names its specific consequence. The test maps every
+  current destructive tool to required consequence language, so a generic
+  keyword cannot satisfy the guard and group changes cannot silently omit a
+  warning.
+- `jenkins_admin_request` now warns that non-read methods can mutate or delete
+  Jenkins state and are not gated by `MCP_ALLOW_DESTRUCTIVE`. The tool remains
+  disabled by default behind `MCP_ALLOW_ADMIN_REQUEST`.
+- Job XML, Jenkinsfile, and multibranch descriptions tell agents to reference
+  Jenkins-managed credential IDs rather than put plaintext tokens, passwords,
+  or private keys into tool arguments.
+
+### Upgrade Notes
+
+- No configuration change is required. Reconnect long-lived MCP clients after
+  rollout so they refresh cached tool descriptions.
+
 ## [2.7.1] - 2026-08-10
 
 ### Highlights
