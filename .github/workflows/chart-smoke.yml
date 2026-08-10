@@ -131,8 +131,10 @@ jobs:
             -o name); do
             echo "checking $pod"
             kubectl -n jenkins-mcp exec -i "$pod" -- python - <<'PY'
-          import json, os, stat, urllib.request
+          import asyncio, json, os, stat, urllib.request
           from pathlib import Path
+          from mcp import ClientSession
+          from mcp.client.streamable_http import streamable_http_client
 
           assert os.environ["MCP_AUDIT_REQUIRED_FOR_READINESS"] == "true"
           assert os.environ["MCP_AUDIT_MAX_BYTES"] == "65536"
@@ -151,6 +153,27 @@ jobs:
               "last_contact_age_seconds": None,
               "last_transport_error": None,
           }
+
+          async def refuse_out_of_scope_job():
+              async with streamable_http_client("http://127.0.0.1:8000/mcp") as streams:
+                  read_stream, write_stream = streams
+                  async with ClientSession(read_stream, write_stream) as session:
+                      await session.initialize()
+                      result = await session.call_tool(
+                          "get_job", {"job_name": "Outside/smoke"}
+                      )
+                      assert result.is_error, "out-of-scope job was not refused"
+
+          asyncio.run(refuse_out_of_scope_job())
+          records = [json.loads(line) for line in path.read_text().splitlines()]
+          denial = next(
+              record for record in reversed(records)
+              if record.get("action") == "policy.denied"
+          )
+          assert denial["check"] == "check_job"
+          assert denial["target"] == "Outside/smoke"
+          assert denial["job"] == "Outside/smoke"
+          assert denial["outcome"] == "denied"
           PY
           done
 

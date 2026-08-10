@@ -63,7 +63,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.8.0 \
+  --version 2.8.1 \
   --namespace jenkins-mcp \
   --set-string jenkins.url=https://jenkins.example.com \
   --set jenkins.credentials.create.enabled=false \
@@ -455,6 +455,14 @@ Tailscale production example demonstrates the proxy pattern.
 | `audit.backupCount` | `3` | Retain three rotated files in addition to the active file; rotation uses an inter-process lock for shared PVCs |
 | `audit.storage.type` | `emptyDir` | Bounded to 256Mi by default; `pvc` needs `persistentVolumeClaim.claimName` |
 
+Every server-side policy refusal emits one JSONL record with
+`action="policy.denied"`, `outcome="denied"`, the enforcing `check`, `target`,
+and `reason`. Job, write-category, and destructive-action context is included
+as structured fields when applicable. The record is completed before the
+policy error is returned, so ordinary pod shutdown does not race a detached
+write. These records cover the Python server policy only; a request refused by
+Minibridge never reaches the server and must be observed in Minibridge's logs.
+
 ## Example values files
 
 | File | Shows |
@@ -498,7 +506,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.8.0
+NEW_VERSION=2.8.1
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

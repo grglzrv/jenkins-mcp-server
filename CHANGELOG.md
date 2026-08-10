@@ -40,6 +40,56 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.8.1] - 2026-08-10
+
+### Highlights
+
+- Server-side policy refusals now produce structured audit events whose write
+  completes before the error is returned to the MCP caller.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- `policy.denied` records identify the enforcing check and target, with
+  structured job, write-category, or destructive-action context when
+  applicable, so SIEM rules do not need to parse the human-readable reason.
+- Denial file writes stay off the event loop but are awaited before returning
+  the policy error. This bounds audit work to active calls and prevents normal
+  server shutdown from racing detached audit tasks.
+
+### Bug Fixes
+
+- Job-allowlist, write, destructive-action, queue-scope, and script-console
+  refusals no longer disappear from the audit trail. Folder-scope denials are
+  included even though that check returns a boolean rather than raising inside
+  the policy object.
+
+### Breaking Changes
+
+- None. Existing success records are unchanged in shape and content.
+
+### Known Issues
+
+- Minibridge refusals occur before the request reaches Jenkins MCP Server and
+  therefore remain in Minibridge's logs, not the server's `policy.denied`
+  stream. Collect both sources when Minibridge is enabled.
+
+### Security
+
+- Calls rejected by the in-process policy now leave a `policy.denied` record,
+  including job-scope probes, destructive operations, and plain or encoded
+  script-console attempts. No credentials, request body, or job configuration
+  content is added to these records.
+
+### Upgrade Notes
+
+- No configuration change is required. Collect process logs as before and
+  consider alerting on bursts of `action="policy.denied"`. Operators using
+  Minibridge should continue collecting its separate policy log stream.
+
 ## [2.8.0] - 2026-08-10
 
 ### Highlights

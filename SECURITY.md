@@ -36,6 +36,11 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Forward audit JSONL process logs to the central SIEM. File output is an
   optional, size-rotated copy. Set `audit.requiredForReadiness=true` only when
   the file is the record of account and losing it must fail closed.
+- Alert on server-side `action="policy.denied"` records. They include the
+  enforcing check, target, reason, and structured job/category/action context
+  when applicable. Each refused call produces one record before its policy
+  error is returned. Minibridge refusals never reach the Python server, so
+  collect Minibridge's logs as a separate policy source when it is enabled.
 - Keep `MCP_MAX_RESPONSE_BYTES` bounded. Raise the 10 MB default only for a
   measured legitimate Jenkins API or job-config response; narrow folder
   queries first.
