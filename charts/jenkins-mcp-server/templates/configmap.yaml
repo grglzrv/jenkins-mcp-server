@@ -11,6 +11,7 @@ data:
   JENKINS_URL: {{ .Values.jenkins.url | quote }}
   JENKINS_VERIFY_TLS: {{ .Values.jenkins.verifyTls | quote }}
   JENKINS_TIMEOUT_SECONDS: {{ printf "%v" .Values.jenkins.timeoutSeconds | quote }}
+  JENKINS_MAX_CONCURRENCY: {{ .Values.jenkins.maxConcurrency | int | quote }}
   JENKINS_MAX_RETRIES: {{ .Values.jenkins.maxRetries | int | quote }}
   {{- if .Values.jenkins.caBundlePath }}
   JENKINS_CA_BUNDLE: {{ .Values.jenkins.caBundlePath | quote }}

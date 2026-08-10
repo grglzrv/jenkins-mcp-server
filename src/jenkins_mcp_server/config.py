@@ -32,6 +32,15 @@ class Settings(BaseSettings):
         gt=0,
         alias="JENKINS_TIMEOUT_SECONDS",
     )
+    # How many requests this process may have in flight at Jenkins. httpx
+    # defaults to 100 connections, which is a sensible browser default and a
+    # poor one for a shared controller: an agent can fan out tool calls freely,
+    # and Jenkins serves its UI, its agents and every other integration from one
+    # Jetty thread pool. Ten keeps a replica a well-behaved client; raise it if
+    # the controller has headroom.
+    jenkins_max_concurrency: int = Field(
+        default=10, alias="JENKINS_MAX_CONCURRENCY", ge=1, le=100
+    )
     jenkins_max_retries: int = Field(
         default=3,
         ge=0,

@@ -902,3 +902,51 @@ async def test_csrf_disabled_controllers_are_still_probed_only_once() -> None:
         await jc.build("demo")
     assert probes["count"] == 1, f"re-probed {probes['count']} times"
     await jc.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [1, 5, 20])
+async def test_in_flight_requests_to_jenkins_are_bounded(limit: int) -> None:
+    """An agent can fan out tool calls; Jenkins serves everything from one pool.
+
+    httpx defaults to 100 connections, which is a browser default and a poor one
+    for a shared controller. The bound is on requests rather than connections so
+    it holds whatever transport is in use.
+    """
+    inflight = {"now": 0, "peak": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        inflight["now"] += 1
+        inflight["peak"] = max(inflight["peak"], inflight["now"])
+        await asyncio.sleep(0.01)
+        inflight["now"] -= 1
+        return httpx.Response(200, json={"jobs": []})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0, JENKINS_MAX_CONCURRENCY=limit)
+    await asyncio.gather(*(jc.list_jobs() for _ in range(60)))
+    assert inflight["peak"] <= limit, f"peak {inflight['peak']} exceeded limit {limit}"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_crumb_preflight_does_not_deadlock_against_the_bound() -> None:
+    """A write needs a crumb first, and both go through the same semaphore.
+
+    Concurrency of one is the worst case: if the permit were held across the
+    preflight, no write could ever complete.
+    """
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            await asyncio.sleep(0.01)
+            return httpx.Response(
+                200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
+            )
+        return httpx.Response(201, headers={"Location": "/queue/1"})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0, JENKINS_MAX_CONCURRENCY=1)
+    results = await asyncio.wait_for(
+        asyncio.gather(*(jc.build(f"job{i}") for i in range(8))), timeout=10
+    )
+    assert len(results) == 8
+    await jc.close()

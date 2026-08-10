@@ -206,6 +206,12 @@ jenkins:
   # extraVolumes. Mutually exclusive with caBundle.existingSecret.
   caBundlePath: ""
   timeoutSeconds: 30
+  # Requests this replica may have in flight at Jenkins. Jenkins serves its
+  # UI, its agents and every other integration from one thread pool, so a
+  # replica that fans out freely competes with all of them. Raise only if
+  # the controller has headroom, and remember the total is this times
+  # replicaCount.
+  maxConcurrency: 10
   maxRetries: 3
   # Jenkins credentials. Exactly one source must be enabled; enabling none or
   # more than one fails the render rather than picking silently.

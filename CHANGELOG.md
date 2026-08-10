@@ -40,6 +40,53 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.7.0] - 2026-08-10
+
+### Highlights
+
+- Requests in flight at Jenkins are bounded and configurable, so a burst of tool
+  calls cannot crowd out the controller's other clients.
+
+### New Features
+
+- `jenkins.maxConcurrency` (`JENKINS_MAX_CONCURRENCY`, default 10) limits how
+  many requests a replica may have in flight at Jenkins. Accepts 1 to 100.
+
+### Improvements
+
+- The HTTP connection pool is sized to the same value instead of leaving httpx
+  at its default of 100 connections. That default suits a browser talking to
+  many hosts and not an integration talking to one controller, which serves its
+  UI, its agents and every other integration from a single thread pool. An MCP
+  client can issue tool calls in parallel freely, so the ceiling mattered:
+  before this, one replica could hold 100 requests open at a controller whose
+  Jetty pool defaults to around 200 threads in total.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None by configuration, but a deployment that relied on more than 10 requests
+  in flight per replica now queues beyond that. Raise `jenkins.maxConcurrency`
+  if the controller has headroom, remembering the total is this value times
+  `replicaCount`.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- None.
+
+### Upgrade Notes
+
+- No action required. Requests above the limit queue rather than fail, and a
+  request that waits longer than `jenkins.timeoutSeconds` for a slot fails as a
+  pool timeout, which is already treated as never sent and is retried.
+
 ## [2.6.4] - 2026-08-10
 
 ### Highlights
