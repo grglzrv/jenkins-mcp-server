@@ -404,7 +404,8 @@ does not render direct-listener variables into the ConfigMap.
 | `revisionHistoryLimit` | `5` | |
 | `probes.*` | enabled | Startup, readiness, liveness |
 | `test.image.*` | `busybox:1.37`, `IfNotPresent` | Image used only by `helm test`; override for a private registry or mirror |
-| `terminationGracePeriodSeconds` | `30` | |
+| `preStopDelaySeconds` | `5` | Keeps the listener available briefly while terminating EndpointSlice and load-balancer state propagates; `0` disables it. Must be less than the total grace period |
+| `terminationGracePeriodSeconds` | `30` | Total budget for the preStop delay and application shutdown |
 | `nodeSelector`, `tolerations`, `affinity`, `topologySpreadConstraints`, `priorityClassName`, `podAnnotations`, `podLabels`, `extraVolumes`, `extraVolumeMounts` | standard | |
 | `podSecurityContext`, `securityContext` | hardened | Non-root uid 10001, read-only root filesystem, all capabilities dropped, seccomp `RuntimeDefault` |
 | `serviceAccount.create` / `name` / `annotations` | `true` / `""` / `{}` | Annotations carry the GCP Workload Identity binding |

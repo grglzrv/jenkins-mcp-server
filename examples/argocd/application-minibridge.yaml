@@ -22,6 +22,8 @@ spec:
     helm:
       releaseName: jenkins-mcp
       valuesObject:
+        # Keep Minibridge serving while terminating routing state propagates.
+        preStopDelaySeconds: 5
         jenkins:
           url: https://jenkins.example-tailnet.ts.net
           credentials:

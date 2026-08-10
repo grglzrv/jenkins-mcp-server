@@ -22,6 +22,8 @@ spec:
     helm:
       releaseName: jenkins-mcp
       valuesObject:
+        # Tune to the slowest measured ingress/Service propagation path.
+        preStopDelaySeconds: 5
         jenkins:
           url: https://jenkins.internal.example.com
           verifyTls: true

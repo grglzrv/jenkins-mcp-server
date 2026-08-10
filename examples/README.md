@@ -79,6 +79,11 @@ replica that does not own it. Configure equivalent controller-specific affinity
 when an ingress bypasses the Service or does not preserve distinct client source
 addresses; pod restarts still require clients to reconnect.
 
+They also state a 5-second `preStopDelaySeconds` policy. The raw direct and
+Minibridge deployments carry the identical `/usr/bin/sleep` hook and a 30-second
+total grace period. Tune the delay to measured routing propagation, keep it
+below `terminationGracePeriodSeconds`, or set it to `0` to disable it.
+
 ## minibridge
 
 | Example | What it shows |

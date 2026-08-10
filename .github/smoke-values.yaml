@@ -19,6 +19,10 @@ jenkins:
 # of minAvailable 1 would then block eviction, which the chart rejects.
 replicaCount: 2
 
+# Non-default value proves the hook is rendered and installed, not just accepted
+# by the values schema.
+preStopDelaySeconds: 3
+
 ingress:
   enabled: false
 

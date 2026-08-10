@@ -117,6 +117,13 @@ jobs:
           echo "ready replicas: ${ready:-0}"
           [ "${ready:-0}" -ge 1 ]
 
+      - name: Termination drain hook is installed
+        run: |
+          command=$(kubectl -n jenkins-mcp get deploy jenkins-mcp-jenkins-mcp-server \
+            -o jsonpath='{.spec.template.spec.containers[0].lifecycle.preStop.exec.command[0]}{ " " }{.spec.template.spec.containers[0].lifecycle.preStop.exec.command[1]}')
+          echo "preStop command: $command"
+          [ "$command" = '/usr/bin/sleep 3' ]
+
       - name: Audit file configuration is live and healthy
         run: |
           for pod in $(kubectl -n jenkins-mcp get pods \

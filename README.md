@@ -255,6 +255,13 @@ External Secrets, Tailscale, and the complete values reference live in the
 [examples index](examples/README.md) maps each supported deployment shape to a
 ready-to-edit values file or manifest.
 
+The chart defaults `preStopDelaySeconds` to 5 so a terminating pod continues
+serving while EndpointSlice, Service proxy, ingress, and load-balancer state
+propagates. Set it to `0` to disable, or tune it from rollout measurements; it
+must remain below `terminationGracePeriodSeconds` because the hook and process
+shutdown share that total budget. A terminated pod's in-memory MCP sessions are
+not migrated, so affected clients still reconnect and initialize again.
+
 ## 🔌 Connecting a client
 
 ### Transports

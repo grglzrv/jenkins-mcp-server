@@ -46,11 +46,16 @@ from the matching version entry after CI validates it.
 
 - Requests in flight at Jenkins are bounded and configurable, so a burst of tool
   calls cannot crowd out the controller's other clients.
+- Kubernetes rollouts now include a bounded termination-drain window, reducing
+  requests sent to a pod while endpoint and load-balancer removal propagates.
 
 ### New Features
 
 - `jenkins.maxConcurrency` (`JENKINS_MAX_CONCURRENCY`, default 10) limits how
   many requests a replica may have in flight at Jenkins. Accepts 1 to 100.
+- `preStopDelaySeconds` (default 5) controls the Kubernetes termination-drain
+  delay and accepts `0` to disable it. It must remain below the total grace
+  period so the process still receives time to shut down after SIGTERM.
 
 ### Improvements
 
@@ -61,6 +66,10 @@ from the matching version entry after CI validates it.
   client can issue tool calls in parallel freely, so the ceiling mattered:
   before this, one replica could hold 100 requests open at a controller whose
   Jetty pool defaults to around 200 threads in total.
+- The Helm workload, raw Kubernetes deployment, and standalone Minibridge
+  deployment use the same shell-free `/usr/bin/sleep` hook. CI executes that
+  exact binary in both built image variants and the k3s smoke verifies the
+  installed lifecycle command.
 
 ### Bug Fixes
 
@@ -72,6 +81,9 @@ from the matching version entry after CI validates it.
   in flight per replica now queues beyond that. Raise `jenkins.maxConcurrency`
   if the controller has headroom, remembering the total is this value times
   `replicaCount`.
+- The chart now enables a 5-second preStop delay by default. A deployment that
+  overrides `terminationGracePeriodSeconds` to 5 or less must increase that
+  budget or explicitly set `preStopDelaySeconds: 0` before upgrading.
 
 ### Known Issues
 
@@ -86,6 +98,10 @@ from the matching version entry after CI validates it.
 - No action required. Requests above the limit queue, and a request that waits
   longer than `jenkins.timeoutSeconds` for a local slot fails as a pool timeout.
   It is treated as safe to retry because it has not reached Jenkins.
+- Measure endpoint and ingress propagation during a rollout and tune
+  `preStopDelaySeconds` when 5 seconds is insufficient. The delay mitigates
+  residual routing but does not preserve an in-memory MCP session after its pod
+  exits; affected clients reconnect and initialize a new session.
 
 ## [2.6.4] - 2026-08-10
 

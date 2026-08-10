@@ -443,6 +443,10 @@ tolerations: []
 affinity: {}
 topologySpreadConstraints: []
 priorityClassName: ""
+# Keep the process accepting residual Service/ingress traffic while Kubernetes
+# propagates the terminating EndpointSlice. Set 0 to disable. This delay is
+# part of terminationGracePeriodSeconds, so leave time for application shutdown.
+preStopDelaySeconds: 5
 terminationGracePeriodSeconds: 30
 extraVolumes: []
 extraVolumeMounts: []

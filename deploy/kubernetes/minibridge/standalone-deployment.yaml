@@ -111,6 +111,7 @@ spec:
         app.kubernetes.io/part-of: jenkins-mcp
     spec:
       automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -124,6 +125,11 @@ spec:
           # plain image does not contain them, so this tag is required.
           image: ghcr.io/grglzrv/jenkins-mcp-server:2.7.0-minibridge
           imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              exec:
+                # Same termination drain as the direct-server deployment.
+                command: ["/usr/bin/sleep", "5"]
           # No args: the entrypoint follows Acuvity's single-container pattern:
           # public Streamable HTTP in Minibridge, private stdio to Jenkins.
           envFrom:

@@ -730,6 +730,14 @@ def test_argocd_values_render_against_the_chart() -> None:
             raise AssertionError(f"{f.name}: {exc.message}") from exc
 
 
+def test_production_argocd_examples_make_termination_drain_explicit() -> None:
+    for f, app in applications():
+        configured = app["spec"]["source"]["helm"]["valuesObject"]
+        assert configured["preStopDelaySeconds"] == 5, (
+            f"{f.name} hides the production termination-drain policy"
+        )
+
+
 def test_argocd_applications_make_session_affinity_explicit() -> None:
     expected = {
         "sessionAffinity": "ClientIP",
@@ -868,6 +876,48 @@ def test_rendered_manifests_are_strictly_validated_in_ci_and_release() -> None:
         text = (ROOT / ".github/workflows" / workflow).read_text()
         assert "KUBECONFORM_VERSION: v0.8.0" in text
         assert "./scripts/validate_helm_renders.sh" in text
+
+
+def test_termination_drain_is_bounded_and_matches_raw_deployments() -> None:
+    v = values()
+    assert v["preStopDelaySeconds"] == 5
+    assert v["preStopDelaySeconds"] < v["terminationGracePeriodSeconds"]
+
+    drain_schema = schema()["properties"]["preStopDelaySeconds"]
+    assert drain_schema["minimum"] == 0
+    assert "terminationGracePeriodSeconds" in drain_schema["description"]
+
+    template = (CHART / "templates/deployment.yaml").read_text()
+    assert "if gt (int .Values.preStopDelaySeconds) 0" in template
+    assert 'command: ["/usr/bin/sleep",' in template
+    validate = (CHART / "templates/_validate.tpl").read_text()
+    assert "preStopDelaySeconds must be less" in validate
+
+    raw = yaml.safe_load((ROOT / "deploy/kubernetes/base/deployment.yaml").read_text())
+    raw_spec = raw["spec"]["template"]["spec"]
+    assert raw_spec["terminationGracePeriodSeconds"] == 30
+    assert raw_spec["containers"][0]["lifecycle"]["preStop"]["exec"]["command"] == [
+        "/usr/bin/sleep",
+        "5",
+    ]
+
+    standalone = [
+        item
+        for item in yaml.safe_load_all(
+            (ROOT / "deploy/kubernetes/minibridge/standalone-deployment.yaml").read_text()
+        )
+        if item and item["kind"] == "Deployment"
+    ][0]
+    standalone_spec = standalone["spec"]["template"]["spec"]
+    assert standalone_spec["terminationGracePeriodSeconds"] == 30
+    assert standalone_spec["containers"][0]["lifecycle"]["preStop"]["exec"][
+        "command"
+    ] == ["/usr/bin/sleep", "5"]
+
+    ci = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert ci.count("--entrypoint /usr/bin/sleep") == 2
+    smoke = (ROOT / ".github/workflows/chart-smoke.yml").read_text()
+    assert "Termination drain hook is installed" in smoke
 
 
 def test_chart_owned_nested_values_reject_typos() -> None:

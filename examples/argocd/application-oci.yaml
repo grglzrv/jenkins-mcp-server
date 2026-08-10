@@ -50,6 +50,8 @@ spec:
       # in Git and use a multi-source Application instead, so the values file
       # is reviewed like any other change.
       valuesObject:
+        # Delay SIGTERM while terminating routing state propagates.
+        preStopDelaySeconds: 5
         image:
           repository: ghcr.io/grglzrv/jenkins-mcp-server
           # Left unset on purpose: the chart uses Chart.appVersion, which is

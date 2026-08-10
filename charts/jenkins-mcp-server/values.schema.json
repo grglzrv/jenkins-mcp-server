@@ -1155,6 +1155,11 @@
     "priorityClassName": {
       "type": "string"
     },
+    "preStopDelaySeconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Seconds to keep serving during pod termination while EndpointSlice and load-balancer state propagates. Zero disables the preStop hook. Must be less than terminationGracePeriodSeconds."
+    },
     "terminationGracePeriodSeconds": {
       "type": "integer",
       "minimum": 0
