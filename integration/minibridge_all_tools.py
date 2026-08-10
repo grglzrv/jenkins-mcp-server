@@ -96,6 +96,28 @@ async def expect_minibridge_refusal(
     )
 
 
+async def expect_application_rejection(
+    session: ClientSession,
+    name: str,
+    arguments: dict,
+    expected: str,
+) -> None:
+    """Prove invalid input reaches the server but never reaches Jenkins."""
+    try:
+        result = await session.call_tool(name, arguments)
+    except MCPError as exc:
+        detail = str(exc)
+        assert exc.code != MINIBRIDGE_POLICY_ERROR_CODE, (
+            f"{name} was blocked by Minibridge instead of validated by the server: {exc}"
+        )
+        assert expected in detail, f"{name} returned the wrong validation error: {exc}"
+    else:
+        assert result.is_error, f"{name} accepted invalid input: {result_text(result) or result}"
+        detail = result_text(result)
+        assert expected in detail, f"{name} returned the wrong validation error: {detail}"
+    print(f"  PASS  {name} rejected invalid input before Jenkins")
+
+
 async def wait_for_build(
     session: ClientSession,
     called: set[str],
@@ -176,6 +198,12 @@ async def main(url: str) -> int:
                 "create_job_from_xml",
                 {"job_name": "mcp-xml-job", "config_xml": freestyle_xml},
             )
+            await expect_application_rejection(
+                session,
+                "get_job",
+                {"job_name": "/mcp-xml-job"},
+                "leading, trailing, or repeated",
+            )
             await call_allowed(session, called, "get_job", {"job_name": "mcp-xml-job"})
             await call_allowed(
                 session,
@@ -246,6 +274,12 @@ async def main(url: str) -> int:
 
             print("controller tools")
             await call_allowed(session, called, "list_nodes", {})
+            await expect_application_rejection(
+                session,
+                "get_node",
+                {"node_name": ""},
+                "node_name must not be empty",
+            )
             await call_allowed(
                 session, called, "get_node", {"node_name": "(built-in)"}
             )

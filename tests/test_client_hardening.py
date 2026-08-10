@@ -64,6 +64,13 @@ def test_job_path_rejects_traversal_segments(job_name: str) -> None:
         _job_path(job_name)
 
 
+@pytest.mark.parametrize("job_name", ["/AI/build", "AI/build/", "AI//build"])
+def test_job_path_rejects_ambiguous_separators(job_name: str) -> None:
+    """Invalid separators must not silently select a different Jenkins job."""
+    with pytest.raises(ValueError, match="leading, trailing, or repeated"):
+        _job_path(job_name)
+
+
 def test_job_path_still_accepts_normal_folder_nesting() -> None:
     assert _job_path("AI/team/build") == "job/AI/job/team/job/build"
 
@@ -83,6 +90,12 @@ def test_policy_rejects_traversal_even_when_pattern_would_match() -> None:
 def test_policy_rejects_empty_job_name() -> None:
     with pytest.raises(PolicyError, match="must not be empty"):
         policy().check_job("/")
+
+
+@pytest.mark.parametrize("job_name", ["/AI/build", "AI/build/", "AI//build"])
+def test_policy_rejects_ambiguous_job_separators(job_name: str) -> None:
+    with pytest.raises(PolicyError, match="leading, trailing, or repeated"):
+        policy().check_job(job_name)
 
 
 def test_policy_allows_legitimate_job_under_pattern() -> None:
@@ -975,4 +988,51 @@ async def test_crumb_preflight_does_not_deadlock_against_the_bound() -> None:
         asyncio.gather(*(jc.build(f"job{i}") for i in range(8))), timeout=10
     )
     assert len(results) == 8
+    await jc.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("node_name", ["", "   ", "../evil", "a/../b"])
+async def test_node_names_are_validated_like_job_names(node_name: str) -> None:
+    """An empty node name collapsed /computer/<name>/ to the collection.
+
+    set_node_offline("") is destructive: it read every node, found no
+    temporarilyOffline field, posted to /computer//toggleOffline and returned
+    {"offline": true}. The caller was told a node had been taken offline when
+    none had.
+    """
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
+        raise AssertionError("invalid node name must be rejected before Jenkins")
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(ValueError, match="node_name"):
+        await jc.node_info(node_name)
+    # offline=False is a write rather than a destructive action, so it reaches
+    # the name handling under the default policy.
+    with pytest.raises(ValueError, match="node_name"):
+        await jc.toggle_node(node_name, False)
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_valid_node_names_still_work() -> None:
+    """Validation must not reject the names Jenkins actually uses."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # raw_path keeps the encoding; url.path decodes it.
+        seen.append(request.url.raw_path.decode())
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(
+                200, json={"crumbRequestField": "C", "crumb": "c"}
+            )
+        return httpx.Response(200, json={"temporarilyOffline": True})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    # Spaces are legal in Jenkins node names and must survive encoding.
+    await jc.toggle_node("build agent 1", False)
+    assert "/computer/build%20agent%201/api/json?depth=2" in seen
+    assert any(
+        path.startswith("/computer/build%20agent%201/toggleOffline?") for path in seen
+    )
     await jc.close()

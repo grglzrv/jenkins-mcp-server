@@ -10,7 +10,44 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None.
+- None yet.
+
+### New Features
+
+- None yet.
+
+### Improvements
+
+- None yet.
+
+### Bug Fixes
+
+- None yet.
+
+### Breaking Changes
+
+- None yet.
+
+### Known Issues
+
+- None yet.
+
+### Security
+
+- None yet.
+
+### Upgrade Notes
+
+- None yet.
+
+## [2.7.1] - 2026-08-10
+
+### Highlights
+
+- `get_node` and `set_node_offline` reject invalid node names instead of
+  reading the node collection or reporting a successful write to no node.
+- Job tools reject ambiguous separators instead of silently targeting a
+  different Jenkins job.
 
 ### New Features
 
@@ -18,27 +55,40 @@ from the matching version entry after CI validates it.
 
 ### Improvements
 
-- None.
+- Node and job identifiers now share explicit validation at the client and
+  policy boundaries. The Jenkins-backed Minibridge smoke proves invalid input
+  is rejected by the server while valid non-destructive tools still work.
 
 ### Bug Fixes
 
-- None.
+- Empty or whitespace-only node names previously collapsed
+  `/computer/<name>/` to the collection endpoint. `get_node("")` returned every
+  node, while `set_node_offline("")` could post to
+  `/computer//toggleOffline` and report success for a node it never touched.
+- Leading, trailing, or repeated `/` separators in job names were normalized
+  away. Inputs such as `/folder/job` or `folder//job` could therefore operate
+  on `folder/job`; they now fail before any Jenkins request.
 
 ### Breaking Changes
 
-- None.
+- None. Inputs that previously selected a different resource or returned a
+  false result now fail validation; valid Jenkins node and job names are
+  unchanged.
 
 ### Known Issues
 
-- None.
+- None known.
 
 ### Security
 
-- None.
+- This is correctness hardening, not a path-traversal fix. Node names were
+  already percent-encoded and job traversal segments were already rejected.
 
 ### Upgrade Notes
 
-- No action required.
+- No configuration change is required. Roll out the `2.7.1` image and chart
+  together; callers that supplied malformed identifiers must pass the exact
+  Jenkins full name.
 
 ## [2.7.0] - 2026-08-10
 
