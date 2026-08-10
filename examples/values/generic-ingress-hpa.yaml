@@ -9,6 +9,8 @@
 
 jenkins:
   url: https://jenkins.internal.example.com
+  # Per replica: HPA scale-out multiplies the deployment-wide Jenkins ceiling.
+  maxConcurrency: 10
   credentials:
     # The chart creates the Secret by default; this deployment supplies its own.
     create:

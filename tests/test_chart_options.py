@@ -657,6 +657,20 @@ def test_config_env_covers_every_supported_setting() -> None:
     assert not (cfg - src), f"config.env sets unknown variables: {cfg - src}"
 
 
+def test_compose_env_example_covers_every_supported_setting() -> None:
+    """Docker users need every runtime knob, including optional commented ones."""
+    src = set(
+        re.findall(
+            r'alias="(MCP_[A-Z_]+|JENKINS_[A-Z_]+)"',
+            (ROOT / "src/jenkins_mcp_server/config.py").read_text(),
+        )
+    )
+    documented = set(
+        re.findall(r"^#? ?([A-Z][A-Z_]+)=", (ROOT / ".env.example").read_text(), re.M)
+    )
+    assert src <= documented, f".env.example is missing {src - documented}"
+
+
 def test_minibridge_overlay_and_standalone_exist_and_parse() -> None:
     overlay = DEPLOY / "minibridge/kustomization.yaml"
     standalone = DEPLOY / "minibridge/standalone-deployment.yaml"
@@ -664,6 +678,8 @@ def test_minibridge_overlay_and_standalone_exist_and_parse() -> None:
     docs = [d for d in yaml.safe_load_all(standalone.read_text()) if d]
     kinds = {d["kind"] for d in docs}
     assert {"Secret", "ConfigMap", "Deployment", "Service"} <= kinds
+    config_map = next(d for d in docs if d["kind"] == "ConfigMap")
+    assert config_map["data"]["JENKINS_MAX_CONCURRENCY"] == "10"
     dep = next(d for d in docs if d["kind"] == "Deployment")
     container = dep["spec"]["template"]["spec"]["containers"][0]
     # The minibridge image is required; the plain image has no minibridge binary.
@@ -1332,6 +1348,7 @@ def test_numeric_env_values_are_not_rendered_in_scientific_notation() -> None:
         "maxLogBytes",
         "mcp.port",
         "healthPort",
+        "maxConcurrency",
         "maxRetries",
     ]:
         # Assignment lines only. A comment mentioning the value is not a render.

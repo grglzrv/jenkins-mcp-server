@@ -136,6 +136,13 @@ failures, where the request body was not sent. They are not replayed after
 429/502/503/504 responses, read timeouts, write timeouts, or ambiguous protocol
 errors.
 
+Each server replica also limits Jenkins traffic to `JENKINS_MAX_CONCURRENCY`
+(Helm `jenkins.maxConcurrency`, default 10) requests in flight. Excess requests
+wait at most `JENKINS_TIMEOUT_SECONDS` for a local slot before failing as a pool
+timeout; that failure is safe to retry because no request reached Jenkins. The
+limit is per replica, so the deployment-wide ceiling is the configured value
+multiplied by the number of replicas.
+
 ## Authentication
 
 Username plus **API token**, sent as HTTP basic auth. Use a token, not the

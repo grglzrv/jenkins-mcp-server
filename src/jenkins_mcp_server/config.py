@@ -33,8 +33,8 @@ class Settings(BaseSettings):
         alias="JENKINS_TIMEOUT_SECONDS",
     )
     # How many requests this process may have in flight at Jenkins. httpx
-    # defaults to 100 connections, which is a sensible browser default and a
-    # poor one for a shared controller: an agent can fan out tool calls freely,
+    # defaults to 100 connections, which is a sensible general-purpose default
+    # and a poor one for a shared controller: an agent can fan out tool calls freely,
     # and Jenkins serves its UI, its agents and every other integration from one
     # Jetty thread pool. Ten keeps a replica a well-behaved client; raise it if
     # the controller has headroom.

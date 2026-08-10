@@ -210,7 +210,7 @@ jenkins:
   # UI, its agents and every other integration from one thread pool, so a
   # replica that fans out freely competes with all of them. Raise only if
   # the controller has headroom, and remember the total is this times
-  # replicaCount.
+  # replicaCount. Excess requests wait up to timeoutSeconds for a slot.
   maxConcurrency: 10
   maxRetries: 3
   # Jenkins credentials. Exactly one source must be enabled; enabling none or

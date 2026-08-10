@@ -909,9 +909,9 @@ async def test_csrf_disabled_controllers_are_still_probed_only_once() -> None:
 async def test_in_flight_requests_to_jenkins_are_bounded(limit: int) -> None:
     """An agent can fan out tool calls; Jenkins serves everything from one pool.
 
-    httpx defaults to 100 connections, which is a browser default and a poor one
-    for a shared controller. The bound is on requests rather than connections so
-    it holds whatever transport is in use.
+    httpx defaults to 100 connections, which is a general-purpose default and a
+    poor one for a shared controller. The bound is on requests rather than
+    connections so it holds whatever transport is in use.
     """
     inflight = {"now": 0, "peak": 0}
 
@@ -925,6 +925,32 @@ async def test_in_flight_requests_to_jenkins_are_bounded(limit: int) -> None:
     jc = client(handler, JENKINS_MAX_RETRIES=0, JENKINS_MAX_CONCURRENCY=limit)
     await asyncio.gather(*(jc.list_jobs() for _ in range(60)))
     assert inflight["peak"] <= limit, f"peak {inflight['peak']} exceeded limit {limit}"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_waiting_for_a_concurrency_slot_is_bounded_by_timeout() -> None:
+    """Queue time is outside HTTPX, so the application must bound it itself."""
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        entered.set()
+        await release.wait()
+        return httpx.Response(200, json={"jobs": []})
+
+    jc = client(
+        handler,
+        JENKINS_MAX_RETRIES=0,
+        JENKINS_MAX_CONCURRENCY=1,
+        JENKINS_TIMEOUT_SECONDS=0.02,
+    )
+    first = asyncio.create_task(jc.list_jobs())
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    with pytest.raises(JenkinsError, match="Timed out waiting for a Jenkins concurrency slot"):
+        await jc.list_jobs()
+    release.set()
+    await first
     await jc.close()
 
 

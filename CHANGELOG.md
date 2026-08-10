@@ -55,8 +55,8 @@ from the matching version entry after CI validates it.
 ### Improvements
 
 - The HTTP connection pool is sized to the same value instead of leaving httpx
-  at its default of 100 connections. That default suits a browser talking to
-  many hosts and not an integration talking to one controller, which serves its
+  at its general-purpose default of 100 connections. That default does not suit
+  an integration talking to one controller, which serves its
   UI, its agents and every other integration from a single thread pool. An MCP
   client can issue tool calls in parallel freely, so the ceiling mattered:
   before this, one replica could hold 100 requests open at a controller whose
@@ -83,9 +83,9 @@ from the matching version entry after CI validates it.
 
 ### Upgrade Notes
 
-- No action required. Requests above the limit queue rather than fail, and a
-  request that waits longer than `jenkins.timeoutSeconds` for a slot fails as a
-  pool timeout, which is already treated as never sent and is retried.
+- No action required. Requests above the limit queue, and a request that waits
+  longer than `jenkins.timeoutSeconds` for a local slot fails as a pool timeout.
+  It is treated as safe to retry because it has not reached Jenkins.
 
 ## [2.6.4] - 2026-08-10
 

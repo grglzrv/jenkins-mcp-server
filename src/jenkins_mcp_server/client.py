@@ -286,8 +286,20 @@ class JenkinsClient:
         request_kwargs: dict[str, Any],
         response_limit: int | None,
     ) -> httpx.Response:
-        async with self._concurrency:
+        # HTTPX timeouts start only after entering the transport. Bound the
+        # application queue separately; otherwise N saturated batches could
+        # make a caller wait N * timeoutSeconds before its request even starts.
+        try:
+            async with asyncio.timeout(self.settings.jenkins_timeout_seconds):
+                await self._concurrency.acquire()
+        except TimeoutError as exc:
+            raise httpx.PoolTimeout(
+                "Timed out waiting for a Jenkins concurrency slot"
+            ) from exc
+        try:
             return await self._send_unbounded(method, path, request_kwargs, response_limit)
+        finally:
+            self._concurrency.release()
 
     async def _send_unbounded(
         self,

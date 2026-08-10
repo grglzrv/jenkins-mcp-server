@@ -525,7 +525,8 @@
         "maxConcurrency": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 100
+          "maximum": 100,
+          "description": "Maximum Jenkins requests in flight per replica. Excess requests wait up to jenkins.timeoutSeconds for a slot. The cluster-wide ceiling is this value multiplied by the number of replicas."
         }
       }
     },

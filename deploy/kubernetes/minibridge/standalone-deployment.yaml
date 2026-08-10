@@ -50,6 +50,10 @@ data:
   # Leave enabled. Only set JENKINS_CA_BUNDLE as well if Jenkins uses a private
   # or self-signed CA; a publicly issued certificate needs nothing.
   JENKINS_VERIFY_TLS: "true"
+  JENKINS_TIMEOUT_SECONDS: "30"
+  # Per replica. Excess requests wait up to the timeout above for a slot.
+  JENKINS_MAX_CONCURRENCY: "10"
+  JENKINS_MAX_RETRIES: "3"
 
   # Server-side policy. Enforced in-process, independent of minibridge.
   MCP_ALLOWED_JOBS: "AI/*,Platform/*"

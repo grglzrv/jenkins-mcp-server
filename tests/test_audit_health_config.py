@@ -60,6 +60,8 @@ def test_settings_reject_unsafe_jenkins_urls(url: str) -> None:
     ("name", "value"),
     [
         ("JENKINS_TIMEOUT_SECONDS", 0),
+        ("JENKINS_MAX_CONCURRENCY", 0),
+        ("JENKINS_MAX_CONCURRENCY", 101),
         ("JENKINS_MAX_RETRIES", -1),
         ("JENKINS_MAX_RETRIES", 11),
         ("MCP_PORT", 65536),

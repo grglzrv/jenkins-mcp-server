@@ -226,6 +226,7 @@ and pod scheduling fields remain open by design.
 | `jenkins.caBundle.existingSecret` | `""` | ⚪ Optional | Mount a CA from a Secret. Only for a private or self-signed issuer |
 | `jenkins.caBundle.key` | `ca.crt` | ⚪ Optional | Key within that Secret |
 | `jenkins.caBundlePath` | `""` | ⚪ Optional | Path to a CA already present in the image or mounted by `extraVolumes`. Mutually exclusive with `caBundle.existingSecret` |
+| `jenkins.maxConcurrency` | `10` | — | Jenkins requests in flight per replica; accepts 1–100. Excess requests wait up to `timeoutSeconds`, and the cluster-wide ceiling is this value multiplied by the replica count |
 | `jenkins.timeoutSeconds` / `maxRetries` | `30` / `3` | — | Retries apply to safe reads and failures before a write is sent; writes are never replayed after an HTTP response |
 
 Neither CA setting is needed for a publicly issued certificate, which covers
