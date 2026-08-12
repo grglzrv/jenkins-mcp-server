@@ -40,6 +40,51 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.9.1] - 2026-08-12
+
+### Highlights
+
+- The size of an audit record is no longer chosen by whoever calls the tools.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Strings in audit fields are bounded to 1024 characters, with the identifying
+  prefix kept and the remainder marked truncated. Applied in `_line` alongside
+  query redaction, so it reaches nested containers and a call site added later
+  cannot skip it. Records operators actually read are unchanged: a job path and
+  a status are far below the bound.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None. A field long enough to be truncated was already unreadable.
+
+### Known Issues
+
+- The bound applies to the audit record, not to the tool argument itself. A very
+  large argument is still buffered by the MCP transport before any of this runs.
+
+### Security
+
+- Job and node names reach the audit record verbatim, so a refused call with a
+  two megabyte name wrote six megabytes across the audit file and the process
+  log stream. Recording refusals, added in 2.8.1, is what made that reachable
+  without any successful call: an agent that cannot touch a single job could
+  still fill the disk backing the audit volume and flood the stream a SIEM
+  ingests. Rotation bounded the file on disk but not the volume of data pushed
+  through the log pipeline.
+
+### Upgrade Notes
+
+- No action required.
+
 ## [2.9.0] - 2026-08-12
 
 ### Highlights

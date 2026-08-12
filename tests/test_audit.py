@@ -161,3 +161,45 @@ def test_process_audit_json_remains_complete_under_root_filter(
     record = json.loads(line)
     assert record["path"] == "/api/json?[redacted]"
     assert record["status"] == 200
+
+
+# --- record size is not chosen by the caller -------------------------------
+
+
+def test_long_caller_supplied_fields_are_bounded(tmp_path) -> None:
+    """Job and node names reach the record verbatim, so their length was the
+    caller's choice. A refused call must still be recorded, but the identifying
+    prefix is what makes the record useful; the rest is padding written to the
+    audit file and to the log stream a SIEM ingests.
+    """
+    log = tmp_path / "audit.jsonl"
+    audit = AuditLogger(log)
+    audit.emit("policy.denied", "denied", target="B" * (2 * 1024 * 1024))
+
+    record = json.loads(log.read_text())
+    assert len(record["target"]) <= 1024
+    assert record["target"].startswith("BBBB")
+    assert record["target"].endswith("[truncated]")
+    assert log.stat().st_size < 4096
+
+
+def test_bounding_reaches_nested_values(tmp_path) -> None:
+    log = tmp_path / "audit.jsonl"
+    AuditLogger(log).emit(
+        "policy.denied", "denied", detail={"job": "B" * 5000, "items": ["C" * 5000]}
+    )
+    record = json.loads(log.read_text())
+    assert len(record["detail"]["job"]) <= 1024
+    assert len(record["detail"]["items"][0]) <= 1024
+
+
+def test_ordinary_records_are_untouched(tmp_path) -> None:
+    """Bounding must not disturb the records operators actually read."""
+    log = tmp_path / "audit.jsonl"
+    path = "/job/AI/job/nightly/api/json"
+    AuditLogger(log).emit("api.get", "success", path=path, status=200)
+
+    record = json.loads(log.read_text())
+    assert record["path"] == path
+    assert record["status"] == 200
+    assert "truncated" not in log.read_text()

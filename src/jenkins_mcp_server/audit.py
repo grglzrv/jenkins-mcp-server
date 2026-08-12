@@ -28,6 +28,23 @@ _URL_QUERY_IN_TEXT = re.compile(
 )
 
 
+# Longest string kept in a single audit field. Job names, node names and paths
+# are caller-supplied and reach the record verbatim, so their length is chosen
+# by whoever is calling the tools. A refused call still has to be recorded, and
+# the identifying prefix is what makes the record useful; the rest is padding
+# that would be written to the audit file and to the log stream a SIEM ingests.
+_MAX_FIELD_CHARS = 1024
+
+_TRUNCATION_NOTE = "... [truncated]"
+
+
+def _bound(value: str) -> str:
+    if len(value) <= _MAX_FIELD_CHARS:
+        return value
+    keep = _MAX_FIELD_CHARS - len(_TRUNCATION_NOTE)
+    return f"{value[:keep]}{_TRUNCATION_NOTE}"
+
+
 def redact_query(value: str) -> str:
     """Remove a URL query payload while retaining the path for diagnostics.
 
@@ -47,6 +64,17 @@ def _redact_queries_in_text(value: str) -> str:
     return _URL_QUERY_IN_TEXT.sub(
         lambda match: f"{match.group('path')}?{_REDACTED}", value
     )
+
+
+def _bound_fields(value: Any) -> Any:
+    """Bound every string in a record, however deeply nested."""
+    if isinstance(value, str):
+        return _bound(value)
+    if isinstance(value, Mapping):
+        return {key: _bound_fields(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_bound_fields(item) for item in value]
+    return value
 
 
 def _scrub_queries(value: Any) -> Any:
@@ -133,7 +161,7 @@ class AuditLogger:
     def _line(action: str, outcome: str, fields: dict[str, Any]) -> str:
         # Applied centrally: every record passes through here, so a new call
         # site cannot forget it.
-        scrubbed = _scrub_queries(fields)
+        scrubbed = _bound_fields(_scrub_queries(fields))
         record = {
             **scrubbed,
             # Callers must never be able to replace the event identity or
