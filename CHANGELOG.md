@@ -44,8 +44,9 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- Credentials passed in a query string no longer reach the audit stream or the
-  process logs.
+- Arbitrary query-string content no longer reaches the server-owned audit
+  stream, HTTPX request logs, or transport-error messages returned to MCP
+  callers.
 
 ### New Features
 
@@ -54,25 +55,32 @@ from the matching version entry after CI validates it.
 ### Improvements
 
 - Redaction is applied in `AuditLogger._line`, through which every record
-  passes, so a call site added later cannot forget it. Only the values of
-  known-credential keys are replaced; `tree`, `depth` and the path itself stay
-  readable, because a record that loses those loses the detail that makes it
-  worth keeping.
+  passes, and recursively covers nested audit metadata so a later call site
+  cannot bypass it accidentally.
+- HTTPX's useful method, endpoint, protocol, status, and reason diagnostics are
+  retained. A logging filter removes the query payload before root handlers or
+  structured-log exporters render it, including verbose `httpcore` child
+  logger records.
 
 ### Bug Fixes
 
-- None.
+- Encoded or unconventional credential keys such as `%74oken`, `auth.token`,
+  and application-specific names can no longer bypass audit redaction.
+- Transport exceptions that contain the request URL no longer return its query
+  payload through an MCP error.
 
 ### Breaking Changes
 
-- None. Records keep their shape, and only credential-looking query values
-  change.
+- None. Records keep their shape. When a recorded path contains a query, its
+  complete query payload is now represented as `?[redacted]`; the endpoint path
+  remains available for correlation.
 
 ### Known Issues
 
-- Redaction keys on parameter names. A credential passed under an unrecognised
-  name, or in a request body, is not detected. Bodies were already excluded from
-  audit records; query strings were not, which is what this addresses.
+- Historical audit files, container logs, and SIEM records are not rewritten.
+- Jenkins, reverse proxies, ingress controllers, Minibridge, or other external
+  components may independently record request data. Do not put credentials in
+  URL queries even though this server now strips them from its own outputs.
 
 ### Security
 
@@ -81,14 +89,15 @@ from the matching version entry after CI validates it.
   written verbatim into the audit record. `SECURITY.md` directs operators to
   forward the audit stream to a SIEM, so the leak was into the one place a
   credential is most likely to be retained and least likely to be noticed.
-- httpx logs every request line at INFO, including the full URL, putting the
-  same secret in the process logs. Its logger is now set to WARNING, which keeps
-  transport failures visible without echoing URLs.
+- HTTPX logs every request line at INFO, including the full URL. Query redaction
+  now happens before the record reaches a handler, rather than disabling those
+  operational diagnostics.
 
 ### Upgrade Notes
 
-- No action required. Rotate any Jenkins token that may have been sent as a
-  query parameter, since earlier records and logs retain it.
+- Upgrade promptly. If a credential was ever sent in a query parameter,
+  rotate or revoke it and handle historical audit, container, and SIEM records
+  according to the organisation's incident-response and retention procedures.
 
 ## [2.8.1] - 2026-08-10
 

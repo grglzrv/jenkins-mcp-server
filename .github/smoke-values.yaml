@@ -2,7 +2,10 @@
 # no Tailscale Operator and no External Secrets. Everything that depends on
 # those is off so the test exercises the chart itself.
 jenkins:
-  url: https://jenkins.smoke.invalid
+  # Point at the pod's own health listener. The smoke can make a real HTTPX
+  # request without an external Jenkins controller and inspect both audit and
+  # process logs for a unique query-secret marker.
+  url: http://127.0.0.1:8081
   # Non-default value proves the chart carries the setting into the pod.
   maxConcurrency: 7
   credentials:
@@ -52,6 +55,7 @@ resources:
 
 mcp:
   allowedJobs: "AI/*,Platform/*"
+  allowAdminRequest: true
   maxResponseBytes: 10000000
 
 # Exercise the complete file-audit path in a real cluster. The unit tests use

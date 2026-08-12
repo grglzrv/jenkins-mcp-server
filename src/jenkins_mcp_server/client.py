@@ -10,7 +10,7 @@ from urllib.parse import quote, unquote, urlsplit
 import httpx
 
 from . import __version__
-from .audit import AuditLogger
+from .audit import AuditLogger, redact_query
 from .config import Settings
 from .diagnostics import JenkinsContact
 from .security import Policy, PolicyError
@@ -634,7 +634,10 @@ class JenkinsClient:
             path=path,
             error=type(last_error).__name__ if last_error else "unknown",
         )
-        raise JenkinsError(f"Jenkins request failed: {last_error}")
+        # Transport exceptions can include the request URL. Do not return a
+        # caller-supplied query credential through the MCP error channel.
+        error_detail = redact_query(str(last_error)) if last_error else "unknown"
+        raise JenkinsError(f"Jenkins request failed: {error_detail}")
 
     async def api(
         self,

@@ -154,7 +154,9 @@ jobs:
               "last_transport_error": None,
           }
 
-          async def refuse_out_of_scope_job():
+          marker = "SMOKE-QUERY-CREDENTIAL-MARKER"
+
+          async def exercise_policy_and_redaction():
               async with streamable_http_client("http://127.0.0.1:8000/mcp") as streams:
                   read_stream, write_stream = streams
                   async with ClientSession(read_stream, write_stream) as session:
@@ -163,9 +165,19 @@ jobs:
                           "get_job", {"job_name": "Outside/smoke"}
                       )
                       assert result.is_error, "out-of-scope job was not refused"
+                      result = await session.call_tool(
+                          "jenkins_admin_request",
+                          {
+                              "method": "GET",
+                              "path": f"/readyz?%74oken={marker}&tree=jenkins",
+                          },
+                      )
+                      assert not result.is_error, result
 
-          asyncio.run(refuse_out_of_scope_job())
-          records = [json.loads(line) for line in path.read_text().splitlines()]
+          asyncio.run(exercise_policy_and_redaction())
+          audit_text = path.read_text()
+          assert marker not in audit_text
+          records = [json.loads(line) for line in audit_text.splitlines()]
           denial = next(
               record for record in reversed(records)
               if record.get("action") == "policy.denied"
@@ -174,7 +186,19 @@ jobs:
           assert denial["target"] == "Outside/smoke"
           assert denial["job"] == "Outside/smoke"
           assert denial["outcome"] == "denied"
+          admin = next(
+              record for record in reversed(records)
+              if record.get("action") == "admin.request"
+          )
+          assert admin["outcome"] == "success"
+          assert admin["path"] == "/readyz?[redacted]"
           PY
+            logs=$(kubectl -n jenkins-mcp logs "$pod" --all-containers=true)
+            if grep -Fq 'SMOKE-QUERY-CREDENTIAL-MARKER' <<<"$logs"; then
+              echo "::error::$pod leaked the query credential marker to process logs"
+              exit 1
+            fi
+            grep -Fq '/readyz?[redacted]' <<<"$logs"
           done
 
       - name: Helm test
