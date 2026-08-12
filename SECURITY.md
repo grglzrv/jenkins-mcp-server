@@ -45,6 +45,10 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
   measured legitimate Jenkins API or job-config response; narrow folder
   queries first.
 - Rotate the Jenkins API token and never commit `.env` or certificates.
+- Never put tokens, passwords, or other credentials in a Jenkins URL query.
+  The server replaces complete query payloads with `?[redacted]` in its audit,
+  HTTPX request, and transport-error output, but Jenkins, Minibridge, ingress,
+  reverse proxies, or other infrastructure may keep their own request logs.
 
 ## Secret handling
 
@@ -58,6 +62,12 @@ values and release history and is only for disposable environments. Its Secret
 checksum rolls pods when values change. Existing and ESO-managed Secret
 rotation requires a Deployment restart because Kubernetes does not mutate a
 running process's environment.
+
+If a credential may have been sent in a query before 2.8.2, rotate or revoke it
+and treat historical audit files, container logs, and SIEM records as exposed
+secret material. Redaction is not retroactive. Prefer API-token authentication
+through `JENKINS_USERNAME` and `JENKINS_TOKEN`; do not pass the same token in an
+administrator request path.
 
 Minibridge authentication, remote-policer bearer tokens, TLS private keys, and
 encrypted-key passphrases are always referenced from Kubernetes Secrets. A TLS

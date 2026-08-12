@@ -1337,3 +1337,45 @@ async def test_admin_category_denial_does_not_audit_query_secrets(tmp_path) -> N
     assert denial["check"] == "require_write"
     assert denial["category"] == "admin"
     assert denial["target"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_admin_request_query_is_sent_but_not_audited(tmp_path) -> None:
+    """Redaction must protect records without changing the Jenkins request."""
+    marker = "ADMIN-QUERY-SECRET"
+    log = tmp_path / "audit.jsonl"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert marker in request.url.query.decode()
+        return httpx.Response(200, json={"ok": True})
+
+    jc = JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0),
+        policy(),
+        AuditLogger(log),
+        transport=httpx.MockTransport(handler),
+    )
+    result = await jc.admin_request("GET", f"/api/json?%74oken={marker}&tree=jobs")
+    await jc.close()
+
+    assert result["status"] == 200
+    text = log.read_text()
+    assert marker not in text
+    [record] = [r for r in _audit_records(log) if r["action"] == "admin.request"]
+    assert record["path"] == "/api/json?[redacted]"
+
+
+@pytest.mark.asyncio
+async def test_transport_error_does_not_return_query_secret() -> None:
+    marker = "TRANSPORT-QUERY-SECRET"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError(f"failed to reach {request.url}", request=request)
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(JenkinsError) as caught:
+        await jc.admin_request("GET", f"/api/json?token={marker}")
+    await jc.close()
+
+    assert marker not in str(caught.value)
+    assert "?[redacted]" in str(caught.value)

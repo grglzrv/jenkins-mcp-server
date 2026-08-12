@@ -63,7 +63,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.8.1 \
+  --version 2.8.2 \
   --namespace jenkins-mcp \
   --set-string jenkins.url=https://jenkins.example.com \
   --set jenkins.credentials.create.enabled=false \
@@ -463,6 +463,15 @@ policy error is returned, so ordinary pod shutdown does not race a detached
 write. These records cover the Python server policy only; a request refused by
 Minibridge never reaches the server and must be observed in Minibridge's logs.
 
+If an audited field contains a URL query, the server records the endpoint path
+and replaces the complete query payload with `?[redacted]`. The same rule is
+applied to HTTPX request diagnostics and transport-error messages. This avoids
+denylist gaps from encoded or application-specific credential names; it also
+means benign selectors such as `tree` and `depth` are intentionally omitted
+from those records. Existing logs are not rewritten, and external components
+may log requests independently, so credentials must never be placed in query
+strings.
+
 ## Example values files
 
 | File | Shows |
@@ -506,7 +515,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.8.1
+NEW_VERSION=2.8.2
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

@@ -40,6 +40,65 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.8.2] - 2026-08-12
+
+### Highlights
+
+- Arbitrary query-string content no longer reaches the server-owned audit
+  stream, HTTPX request logs, or transport-error messages returned to MCP
+  callers.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Redaction is applied in `AuditLogger._line`, through which every record
+  passes, and recursively covers nested audit metadata so a later call site
+  cannot bypass it accidentally.
+- HTTPX's useful method, endpoint, protocol, status, and reason diagnostics are
+  retained. A logging filter removes the query payload before root handlers or
+  structured-log exporters render it, including verbose `httpcore` child
+  logger records.
+
+### Bug Fixes
+
+- Encoded or unconventional credential keys such as `%74oken`, `auth.token`,
+  and application-specific names can no longer bypass audit redaction.
+- Transport exceptions that contain the request URL no longer return its query
+  payload through an MCP error.
+
+### Breaking Changes
+
+- None. Records keep their shape. When a recorded path contains a query, its
+  complete query payload is now represented as `?[redacted]`; the endpoint path
+  remains available for correlation.
+
+### Known Issues
+
+- Historical audit files, container logs, and SIEM records are not rewritten.
+- Jenkins, reverse proxies, ingress controllers, Minibridge, or other external
+  components may independently record request data. Do not put credentials in
+  URL queries even though this server now strips them from its own outputs.
+
+### Security
+
+- `jenkins_admin_request` takes a caller-supplied path, and Jenkins accepts a
+  token as a query parameter, so a secret could arrive in the URL. That URL was
+  written verbatim into the audit record. `SECURITY.md` directs operators to
+  forward the audit stream to a SIEM, so the leak was into the one place a
+  credential is most likely to be retained and least likely to be noticed.
+- HTTPX logs every request line at INFO, including the full URL. Query redaction
+  now happens before the record reaches a handler, rather than disabling those
+  operational diagnostics.
+
+### Upgrade Notes
+
+- Upgrade promptly. If a credential was ever sent in a query parameter,
+  rotate or revoke it and handle historical audit, container, and SIEM records
+  according to the organisation's incident-response and retention procedures.
+
 ## [2.8.1] - 2026-08-10
 
 ### Highlights
