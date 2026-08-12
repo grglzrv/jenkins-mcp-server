@@ -41,6 +41,12 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
   when applicable. Each refused call produces one record before its policy
   error is returned. Minibridge refusals never reach the Python server, so
   collect Minibridge's logs as a separate policy source when it is enabled.
+- Audit JSON is capped at 16 KiB per record. Individual strings are bounded by
+  their JSON-encoded size; truncated values retain the prefix, original UTF-8
+  byte count, and SHA-256 digest so a SIEM can correlate equal values without
+  accepting caller-controlled log volume. The MCP transport has already
+  received the tool argument at that point, so this protects audit sinks rather
+  than process memory.
 - Keep `MCP_MAX_RESPONSE_BYTES` bounded. Raise the 10 MB default only for a
   measured legitimate Jenkins API or job-config response; narrow folder
   queries first.

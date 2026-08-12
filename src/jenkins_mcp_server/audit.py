@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -28,6 +29,60 @@ _URL_QUERY_IN_TEXT = re.compile(
 )
 
 
+# Audit records go to both the process log and the optional JSONL file. Bound
+# the JSON representation, not Python character counts: one non-ASCII character
+# can occupy twelve bytes after JSON escaping. The record ceiling is a second
+# line of defence for containers containing many individually small values.
+_MAX_FIELD_JSON_BYTES = 1024
+_MAX_RECORD_BYTES = 16 * 1024
+_MAX_RECORD_VALUES = 128
+_MAX_RECORD_DEPTH = 8
+
+
+def _json_char_bytes(character: str) -> int:
+    """Return this character's size inside json.dumps' string payload."""
+    codepoint = ord(character)
+    if character in {'"', "\\", "\b", "\f", "\n", "\r", "\t"}:
+        return 2
+    if codepoint < 0x20:
+        return 6
+    if codepoint < 0x80:
+        return 1
+    if codepoint <= 0xFFFF:
+        return 6
+    return 12
+
+
+def _bound(value: str) -> str:
+    """Bound one JSON string while retaining evidence about its full value."""
+    json_bytes = 0
+    utf8_bytes = 0
+    digest = hashlib.sha256()
+    for offset in range(0, len(value), 4096):
+        chunk = value[offset : offset + 4096]
+        encoded = chunk.encode("utf-8", errors="surrogatepass")
+        digest.update(encoded)
+        utf8_bytes += len(encoded)
+        json_bytes += sum(_json_char_bytes(character) for character in chunk)
+    if json_bytes <= _MAX_FIELD_JSON_BYTES:
+        return value
+
+    note = (
+        "... [truncated "
+        f"sha256={digest.hexdigest()} bytes={utf8_bytes}]"
+    )
+    keep_bytes = _MAX_FIELD_JSON_BYTES - len(note)
+    kept: list[str] = []
+    used = 0
+    for character in value:
+        width = _json_char_bytes(character)
+        if used + width > keep_bytes:
+            break
+        kept.append(character)
+        used += width
+    return f"{''.join(kept)}{note}"
+
+
 def redact_query(value: str) -> str:
     """Remove a URL query payload while retaining the path for diagnostics.
 
@@ -49,17 +104,115 @@ def _redact_queries_in_text(value: str) -> str:
     )
 
 
-def _scrub_queries(value: Any) -> Any:
-    """Recursively scrub strings in audit metadata containers."""
+def _bounded_fields(
+    value: Any,
+    remaining: list[int],
+    depth: int = 0,
+) -> Any:
+    """Make audit metadata JSON-safe with bounded depth and cardinality."""
+    if remaining[0] <= 0:
+        return "[audit values omitted]"
+    remaining[0] -= 1
+    if depth >= _MAX_RECORD_DEPTH:
+        return "[audit nesting omitted]"
     if isinstance(value, str):
-        return redact_query(value)
+        return _bound(redact_query(value))
+    if value is None or isinstance(value, bool | int | float):
+        return value
+    if isinstance(value, bytes | bytearray | memoryview):
+        raw = bytes(value)
+        return (
+            f"[binary sha256={hashlib.sha256(raw).hexdigest()} "
+            f"bytes={len(raw)}]"
+        )
     if isinstance(value, Mapping):
-        return {key: _scrub_queries(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_scrub_queries(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_scrub_queries(item) for item in value)
-    return value
+        bounded: dict[str, Any] = {}
+        processed = 0
+        for key, item in value.items():
+            if remaining[0] <= 0:
+                break
+            bounded_key = _bound(redact_query(str(key)))
+            bounded[bounded_key] = _bounded_fields(item, remaining, depth + 1)
+            processed += 1
+        omitted = max(len(value) - processed, 0)
+        if omitted:
+            bounded["_audit_items_omitted"] = omitted
+        return bounded
+    if isinstance(value, list | tuple | set | frozenset):
+        bounded_items: list[Any] = []
+        for item in value:
+            if remaining[0] <= 0:
+                break
+            bounded_items.append(_bounded_fields(item, remaining, depth + 1))
+        omitted = max(len(value) - len(bounded_items), 0)
+        if omitted:
+            bounded_items.append({"_audit_items_omitted": omitted})
+        return bounded_items
+    return _bound(redact_query(str(value)))
+
+
+def _encode_record(record: dict[str, Any]) -> str:
+    return json.dumps(record, sort_keys=True)
+
+
+def _cap_record(record: dict[str, Any]) -> str:
+    """Apply a strict final ceiling while retaining event identity and proof."""
+    line = _encode_record(record)
+    encoded = line.encode("utf-8")
+    if len(encoded) <= _MAX_RECORD_BYTES:
+        return line
+
+    summary: dict[str, Any] = {
+        "ts": record["ts"],
+        "action": record["action"],
+        "outcome": record["outcome"],
+        "audit_record_truncated": True,
+        "audit_record_pre_cap_bytes": len(encoded),
+        "audit_record_sha256": hashlib.sha256(encoded).hexdigest(),
+    }
+    omitted: list[str] = []
+    identity = {"ts", "action", "outcome"}
+    priority = (
+        "check",
+        "target",
+        "reason",
+        "job",
+        "path",
+        "status",
+        "error",
+        "category",
+        "policy_action",
+        "queue_item",
+        "request_bytes",
+        "request_limit_bytes",
+    )
+    keys = [key for key in priority if key in record]
+    keys.extend(sorted(key for key in record if key not in identity | set(keys)))
+    for key in keys:
+        candidate = {**summary, key: record[key]}
+        if len(_encode_record(candidate).encode("utf-8")) <= _MAX_RECORD_BYTES:
+            summary[key] = record[key]
+        else:
+            omitted.append(key)
+    if omitted:
+        candidate = {**summary, "audit_fields_omitted": omitted}
+        if len(_encode_record(candidate).encode("utf-8")) <= _MAX_RECORD_BYTES:
+            summary = candidate
+    capped = _encode_record(summary)
+    if len(capped.encode("utf-8")) > _MAX_RECORD_BYTES:
+        # The identity fields are themselves bounded, so this emergency shape
+        # remains finite even if a future edit accidentally grows the summary.
+        capped = _encode_record(
+            {
+                "ts": record["ts"],
+                "action": record["action"],
+                "outcome": record["outcome"],
+                "audit_record_truncated": True,
+                "audit_record_pre_cap_bytes": len(encoded),
+                "audit_record_sha256": hashlib.sha256(encoded).hexdigest(),
+            }
+        )
+    return capped
 
 
 class QueryRedactingLogFilter(logging.Filter):
@@ -133,16 +286,16 @@ class AuditLogger:
     def _line(action: str, outcome: str, fields: dict[str, Any]) -> str:
         # Applied centrally: every record passes through here, so a new call
         # site cannot forget it.
-        scrubbed = _scrub_queries(fields)
+        scrubbed = _bounded_fields(fields, [_MAX_RECORD_VALUES])
         record = {
             **scrubbed,
             # Callers must never be able to replace the event identity or
             # timestamp through an overlapping metadata field.
             "ts": datetime.now(UTC).isoformat(),
-            "action": action,
-            "outcome": outcome,
+            "action": _bound(action),
+            "outcome": _bound(outcome),
         }
-        return json.dumps(record, sort_keys=True, default=str)
+        return _cap_record(record)
 
     def _rotate(self, incoming_bytes: int) -> None:
         if not self.path or not self.max_bytes or not self.backup_count:

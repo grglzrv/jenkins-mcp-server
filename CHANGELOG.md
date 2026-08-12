@@ -40,6 +40,61 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.9.1] - 2026-08-12
+
+### Highlights
+
+- The size of an audit record is no longer chosen by whoever calls the tools.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Each audit record is capped at 16 KiB. Strings are bounded to 1024 encoded
+  JSON bytes and keep an identifying prefix, original UTF-8 byte count, and
+  SHA-256 digest when truncated. Container cardinality and depth, mapping keys,
+  tuples, binary values, and non-JSON objects are bounded centrally in `_line`,
+  so many individually small fields cannot bypass the record ceiling. Ordinary
+  job paths and statuses remain byte-for-byte unchanged.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None. A field long enough to be truncated was already unreadable.
+
+### Known Issues
+
+- The bound applies to the audit record, not to the tool argument itself. A very
+  large argument is still buffered by the MCP transport before any of this runs.
+- A deliberately long identifier is not retained in full. Use the SHA-256
+  digest embedded in the truncated field to correlate equal values; retain the
+  originating MCP gateway record separately when the complete argument is
+  required for an investigation.
+
+### Security
+
+- Job and node names reach the audit record verbatim, so a refused call with a
+  two megabyte name wrote six megabytes across the audit file and the process
+  log stream. Recording refusals, added in 2.8.1, is what made that reachable
+  without any successful call: an agent that cannot touch a single job could
+  still fill the disk backing the audit volume and flood the stream a SIEM
+  ingests. Rotation bounded the file on disk but not the volume of data pushed
+  through the log pipeline.
+- The initial per-string character limit was insufficient: JSON escaping,
+  mapping keys, tuples, and containers with many smaller values could still
+  exceed the intended boundary. Enforcement now uses serialized-byte and
+  complete-record limits, and the direct k3s smoke verifies a live oversized
+  policy denial through Streamable HTTP.
+
+### Upgrade Notes
+
+- No action required.
+
 ## [2.9.0] - 2026-08-12
 
 ### Highlights
