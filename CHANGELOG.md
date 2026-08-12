@@ -52,11 +52,12 @@ from the matching version entry after CI validates it.
 
 ### Improvements
 
-- Strings in audit fields are bounded to 1024 characters, with the identifying
-  prefix kept and the remainder marked truncated. Applied in `_line` alongside
-  query redaction, so it reaches nested containers and a call site added later
-  cannot skip it. Records operators actually read are unchanged: a job path and
-  a status are far below the bound.
+- Each audit record is capped at 16 KiB. Strings are bounded to 1024 encoded
+  JSON bytes and keep an identifying prefix, original UTF-8 byte count, and
+  SHA-256 digest when truncated. Container cardinality and depth, mapping keys,
+  tuples, binary values, and non-JSON objects are bounded centrally in `_line`,
+  so many individually small fields cannot bypass the record ceiling. Ordinary
+  job paths and statuses remain byte-for-byte unchanged.
 
 ### Bug Fixes
 
@@ -70,6 +71,10 @@ from the matching version entry after CI validates it.
 
 - The bound applies to the audit record, not to the tool argument itself. A very
   large argument is still buffered by the MCP transport before any of this runs.
+- A deliberately long identifier is not retained in full. Use the SHA-256
+  digest embedded in the truncated field to correlate equal values; retain the
+  originating MCP gateway record separately when the complete argument is
+  required for an investigation.
 
 ### Security
 
@@ -80,6 +85,11 @@ from the matching version entry after CI validates it.
   still fill the disk backing the audit volume and flood the stream a SIEM
   ingests. Rotation bounded the file on disk but not the volume of data pushed
   through the log pipeline.
+- The initial per-string character limit was insufficient: JSON escaping,
+  mapping keys, tuples, and containers with many smaller values could still
+  exceed the intended boundary. Enforcement now uses serialized-byte and
+  complete-record limits, and the direct k3s smoke verifies a live oversized
+  policy denial through Streamable HTTP.
 
 ### Upgrade Notes
 

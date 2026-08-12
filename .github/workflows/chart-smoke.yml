@@ -131,7 +131,7 @@ jobs:
             -o name); do
             echo "checking $pod"
             kubectl -n jenkins-mcp exec -i "$pod" -- python - <<'PY'
-          import asyncio, json, os, stat, urllib.request
+          import asyncio, hashlib, json, os, stat, urllib.request
           from pathlib import Path
           from mcp import ClientSession
           from mcp.client.streamable_http import streamable_http_client
@@ -167,6 +167,10 @@ jobs:
                       )
                       assert result.is_error, "out-of-scope job was not refused"
                       result = await session.call_tool(
+                          "get_job", {"job_name": "Outside/" + "Z" * 8192}
+                      )
+                      assert result.is_error, "oversized denial was not refused"
+                      result = await session.call_tool(
                           "jenkins_admin_request",
                           {
                               "method": "POST",
@@ -198,11 +202,22 @@ jobs:
           denial = next(
               record for record in reversed(records)
               if record.get("action") == "policy.denied"
+              and record.get("target") == "Outside/smoke"
           )
           assert denial["check"] == "check_job"
           assert denial["target"] == "Outside/smoke"
           assert denial["job"] == "Outside/smoke"
           assert denial["outcome"] == "denied"
+          long_denial = next(
+              record for record in reversed(records)
+              if record.get("action") == "policy.denied"
+              and "sha256=" in record.get("target", "")
+          )
+          digest = hashlib.sha256(("Outside/" + "Z" * 8192).encode()).hexdigest()
+          assert digest in long_denial["target"]
+          assert digest in long_denial["job"]
+          assert len(json.dumps(long_denial).encode()) <= 16384
+          assert all(len(line.encode()) <= 16384 for line in audit_text.splitlines())
           oversized = next(
               record for record in reversed(records)
               if record.get("status") == "request_too_large"

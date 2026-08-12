@@ -464,6 +464,13 @@ policy error is returned, so ordinary pod shutdown does not race a detached
 write. These records cover the Python server policy only; a request refused by
 Minibridge never reaches the server and must be observed in Minibridge's logs.
 
+Each JSON record is capped at 16 KiB. A string that would exceed its 1024-byte
+JSON field budget keeps an identifying prefix plus the original UTF-8 byte
+count and SHA-256 digest. Container depth, item count, mapping keys, tuples, and
+the complete serialized record are bounded centrally, so many smaller values
+cannot bypass the line limit. Use the digest to correlate a truncated target;
+the full caller-supplied value is intentionally not forwarded to the SIEM.
+
 If an audited field contains a URL query, the server records the endpoint path
 and replaces the complete query payload with `?[redacted]`. The same rule is
 applied to HTTPX request diagnostics and transport-error messages. This avoids

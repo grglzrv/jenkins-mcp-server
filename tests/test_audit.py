@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 
@@ -9,6 +10,8 @@ import pytest
 
 from jenkins_mcp_server.__main__ import configure_logging
 from jenkins_mcp_server.audit import (
+    _MAX_FIELD_JSON_BYTES,
+    _MAX_RECORD_BYTES,
     AuditLogger,
     QueryRedactingLogFilter,
     redact_query,
@@ -179,7 +182,9 @@ def test_long_caller_supplied_fields_are_bounded(tmp_path) -> None:
     record = json.loads(log.read_text())
     assert len(record["target"]) <= 1024
     assert record["target"].startswith("BBBB")
-    assert record["target"].endswith("[truncated]")
+    assert "[truncated sha256=" in record["target"]
+    assert hashlib.sha256(b"B" * (2 * 1024 * 1024)).hexdigest() in record["target"]
+    assert "bytes=2097152]" in record["target"]
     assert log.stat().st_size < 4096
 
 
@@ -191,6 +196,76 @@ def test_bounding_reaches_nested_values(tmp_path) -> None:
     record = json.loads(log.read_text())
     assert len(record["detail"]["job"]) <= 1024
     assert len(record["detail"]["items"][0]) <= 1024
+
+
+def test_bounding_covers_unicode_keys_and_tuples(tmp_path) -> None:
+    """Character counts, mapping values, and lists are not a complete bound."""
+    log = tmp_path / "audit.jsonl"
+    long_key = "K" * (2 * 1024 * 1024)
+    AuditLogger(log).emit(
+        "policy.denied",
+        "denied",
+        unicode="😀" * 1024,
+        detail={long_key: ("T" * (2 * 1024 * 1024),)},
+    )
+
+    raw = log.read_bytes()
+    record = json.loads(raw)
+    assert len(raw) <= _MAX_RECORD_BYTES + 1  # JSONL newline
+    assert len(json.dumps(record["unicode"])[1:-1]) <= _MAX_FIELD_JSON_BYTES
+    [bounded_key] = record["detail"]
+    assert "sha256=" in bounded_key
+    assert "sha256=" in record["detail"][bounded_key][0]
+
+
+def test_many_individually_small_values_cannot_bypass_record_cap(tmp_path) -> None:
+    """A per-field limit alone still allowed a multi-megabyte record."""
+    log = tmp_path / "audit.jsonl"
+    AuditLogger(log).emit(
+        "policy.denied",
+        "denied",
+        target="AI/nightly",
+        detail=["x" * 1024] * 10_000,
+    )
+
+    raw = log.read_bytes()
+    record = json.loads(raw)
+    assert len(raw) <= _MAX_RECORD_BYTES + 1
+    assert record["target"] == "AI/nightly"
+    assert record["audit_record_truncated"] is True
+    assert record["audit_record_pre_cap_bytes"] > _MAX_RECORD_BYTES
+    assert len(record["audit_record_sha256"]) == 64
+
+
+def test_truncated_values_with_same_prefix_retain_distinct_evidence(tmp_path) -> None:
+    log = tmp_path / "audit.jsonl"
+    prefix = "same-prefix/" + "A" * 5000
+    audit = AuditLogger(log)
+    audit.emit("policy.denied", "denied", target=f"{prefix}/one")
+    audit.emit("policy.denied", "denied", target=f"{prefix}/two")
+
+    records = [json.loads(line) for line in log.read_text().splitlines()]
+    assert records[0]["target"] != records[1]["target"]
+    assert all("sha256=" in record["target"] for record in records)
+
+
+def test_file_and_process_sink_receive_the_same_bounded_record(
+    tmp_path, caplog: pytest.LogCaptureFixture
+) -> None:
+    log = tmp_path / "audit.jsonl"
+    with caplog.at_level(logging.INFO, logger="jenkins_mcp.audit"):
+        AuditLogger(log).emit(
+            "policy.denied", "denied", target="Z" * (2 * 1024 * 1024)
+        )
+
+    file_line = log.read_text().strip()
+    process_line = next(
+        record.getMessage().removeprefix("AUDIT ")
+        for record in caplog.records
+        if record.name == "jenkins_mcp.audit"
+    )
+    assert file_line == process_line
+    assert len(file_line.encode()) <= _MAX_RECORD_BYTES
 
 
 def test_ordinary_records_are_untouched(tmp_path) -> None:
