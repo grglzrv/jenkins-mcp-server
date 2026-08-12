@@ -40,6 +40,56 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.8.2] - 2026-08-12
+
+### Highlights
+
+- Credentials passed in a query string no longer reach the audit stream or the
+  process logs.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Redaction is applied in `AuditLogger._line`, through which every record
+  passes, so a call site added later cannot forget it. Only the values of
+  known-credential keys are replaced; `tree`, `depth` and the path itself stay
+  readable, because a record that loses those loses the detail that makes it
+  worth keeping.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None. Records keep their shape, and only credential-looking query values
+  change.
+
+### Known Issues
+
+- Redaction keys on parameter names. A credential passed under an unrecognised
+  name, or in a request body, is not detected. Bodies were already excluded from
+  audit records; query strings were not, which is what this addresses.
+
+### Security
+
+- `jenkins_admin_request` takes a caller-supplied path, and Jenkins accepts a
+  token as a query parameter, so a secret could arrive in the URL. That URL was
+  written verbatim into the audit record. `SECURITY.md` directs operators to
+  forward the audit stream to a SIEM, so the leak was into the one place a
+  credential is most likely to be retained and least likely to be noticed.
+- httpx logs every request line at INFO, including the full URL, putting the
+  same secret in the process logs. Its logger is now set to WARNING, which keeps
+  transport failures visible without echoing URLs.
+
+### Upgrade Notes
+
+- No action required. Rotate any Jenkins token that may have been sent as a
+  query parameter, since earlier records and logs retain it.
+
 ## [2.8.1] - 2026-08-10
 
 ### Highlights

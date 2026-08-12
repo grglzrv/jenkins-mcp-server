@@ -17,6 +17,60 @@ except ImportError:  # pragma: no cover - exercised only on Windows
 log = logging.getLogger("jenkins_mcp.audit")
 
 
+
+# Query parameters whose value is a credential rather than a locator. Jenkins
+# accepts a token in a query string, and jenkins_admin_request takes a
+# caller-supplied path, so a secret can arrive here as part of the URL. The
+# audit stream is forwarded to a SIEM by design, which is precisely where a
+# credential should not be duplicated.
+_SECRET_QUERY_KEYS = frozenset(
+    {
+        "token",
+        "api_token",
+        "apitoken",
+        "apikey",
+        "api_key",
+        "password",
+        "passwd",
+        "pass",
+        "secret",
+        "credential",
+        "credentials",
+        "auth",
+        "authorization",
+        "access_token",
+        "refresh_token",
+        "private_key",
+        "signature",
+        "sig",
+        "key",
+    }
+)
+
+_REDACTED = "[redacted]"
+
+
+def redact_query(value: str) -> str:
+    """Replace credential-looking query values, keeping the rest readable.
+
+    Redacting the whole query would remove the detail that makes an audit
+    record useful: which endpoint, with which selector. Only the values of
+    known-sensitive keys are replaced, and the key names are kept so the record
+    still shows what was sent.
+    """
+    head, separator, query = value.partition("?")
+    if not separator or not query:
+        return value
+    parts = []
+    for pair in query.split("&"):
+        name, assign, _ = pair.partition("=")
+        if assign and name.strip().lower() in _SECRET_QUERY_KEYS:
+            parts.append(f"{name}={_REDACTED}")
+        else:
+            parts.append(pair)
+    return f"{head}?{'&'.join(parts)}"
+
+
 class AuditLogger:
     def __init__(
         self,
@@ -53,8 +107,14 @@ class AuditLogger:
 
     @staticmethod
     def _line(action: str, outcome: str, fields: dict[str, Any]) -> str:
+        # Applied centrally: every record passes through here, so a new call
+        # site cannot forget it.
+        scrubbed = {
+            key: redact_query(value) if isinstance(value, str) else value
+            for key, value in fields.items()
+        }
         record = {
-            **fields,
+            **scrubbed,
             # Callers must never be able to replace the event identity or
             # timestamp through an overlapping metadata field.
             "ts": datetime.now(UTC).isoformat(),

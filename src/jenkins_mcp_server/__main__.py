@@ -15,6 +15,12 @@ def main() -> None:
     args = parser.parse_args()
     settings = get_settings()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+    # httpx logs every request line at INFO, including the full URL. A path
+    # reaching Jenkins can carry a credential in its query string, and
+    # jenkins_admin_request takes a caller-supplied path, so that line can put a
+    # secret in the process logs the audit stream is deliberately kept clean of.
+    # WARNING keeps transport problems visible without echoing URLs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     transport = args.transport or settings.transport
     if transport == "stdio":
         mcp.run(transport="stdio")
