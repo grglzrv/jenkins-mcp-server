@@ -172,7 +172,13 @@ jobs:
                               "path": f"/readyz?%74oken={marker}&tree=jenkins",
                           },
                       )
-                      assert not result.is_error, result
+                      # The health handler deliberately matches the complete
+                      # request target and therefore returns 404 when a query
+                      # is attached. Requiring that error plus the audit status
+                      # below proves the call reached HTTPX, rather than being
+                      # refused before the leak-prone logging path.
+                      assert result.is_error, result
+                      assert "Jenkins returned 404" in str(result), result
 
           asyncio.run(exercise_policy_and_redaction())
           audit_text = path.read_text()
@@ -190,7 +196,8 @@ jobs:
               record for record in reversed(records)
               if record.get("action") == "admin.request"
           )
-          assert admin["outcome"] == "success"
+          assert admin["outcome"] == "failure"
+          assert admin["status"] == 404
           assert admin["path"] == "/readyz?[redacted]"
           PY
             logs=$(kubectl -n jenkins-mcp logs "$pod" --all-containers=true)
