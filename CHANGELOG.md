@@ -10,7 +10,42 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None.
+- None yet.
+
+### New Features
+
+- None yet.
+
+### Improvements
+
+- None yet.
+
+### Bug Fixes
+
+- None yet.
+
+### Breaking Changes
+
+- None yet.
+
+### Known Issues
+
+- None yet.
+
+### Security
+
+- None yet.
+
+### Upgrade Notes
+
+- None yet.
+
+## [2.9.2] - 2026-08-12
+
+### Highlights
+
+- Release and smoke image builds tolerate short upstream asset-delivery
+  interruptions instead of stranding an otherwise valid release.
 
 ### New Features
 
@@ -18,11 +53,17 @@ from the matching version entry after CI validates it.
 
 ### Improvements
 
-- None.
+- The pinned Minibridge archive and checksum downloads use the same bounded
+  retry policy in every Docker build path.
+- k3s smoke jobs retry the complete installer only when its binary or checksum
+  download fails; deterministic install and service-start failures still fail
+  immediately.
 
 ### Bug Fixes
 
-- None.
+- Fixed intermittent release failures caused by transient HTTP 503 responses,
+  connection resets, and incomplete downloads from upstream release-asset
+  endpoints.
 
 ### Breaking Changes
 
@@ -30,15 +71,16 @@ from the matching version entry after CI validates it.
 
 ### Known Issues
 
-- None.
+- A persistent upstream outage still fails after the bounded retries; rerun the
+  failed workflow after the upstream service recovers.
 
 ### Security
 
-- None.
+- None. Downloaded Minibridge archives remain pinned and checksum-verified.
 
 ### Upgrade Notes
 
-- No action required.
+- No runtime or configuration change. No action required.
 
 ## [2.9.1] - 2026-08-12
 

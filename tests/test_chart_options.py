@@ -1319,6 +1319,24 @@ def test_smoke_test_is_reused_not_duplicated() -> None:
         assert "get.k3s.io" not in text, f"{name} duplicates the smoke steps"
 
 
+def test_release_asset_download_failures_are_retried() -> None:
+    """A transient release-CDN reset must not strand an otherwise valid release."""
+    ci = (ROOT / ".github/workflows/ci.yml").read_text()
+    smoke = (ROOT / ".github/workflows/chart-smoke.yml").read_text()
+    minibridge = (ROOT / "docker/Dockerfile.minibridge").read_text()
+    installer_path = ROOT / "integration/install_k3s_with_retry.sh"
+    installer = installer_path.read_text()
+
+    assert smoke.count("sh integration/install_k3s_with_retry.sh") == 4
+    assert "--retry 3 --retry-all-errors" in installer
+    assert "INSTALL_K3S_VERSION" in installer
+    assert "Do not hide a deterministic installer" in installer
+    assert "max-parallel: 1" not in smoke
+    assert "Minibridge image build attempt $attempt failed" not in smoke
+    assert minibridge.count("--retry 4 --retry-delay 2 --retry-all-errors") == 2
+    assert "curl -fsSL --retry 4 --retry-delay 2 --retry-all-errors" in ci
+
+
 def test_release_is_gated_on_the_smoke_test() -> None:
     release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
     assert "chart-smoke" in release["jobs"]
