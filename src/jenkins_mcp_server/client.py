@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -460,6 +461,69 @@ class JenkinsClient:
         self.contact.record_contact()
         return response
 
+    @staticmethod
+    def _encode_request_body(
+        data: Any,
+        json_body: Any,
+    ) -> tuple[bytes | None, str | None]:
+        """Serialize once, returning the exact body and generated media type.
+
+        Form values must be encoded before measuring. Counting their input
+        characters lets reserved and non-ASCII characters expand past the cap
+        during application/x-www-form-urlencoded serialization. Reusing the
+        resulting bytes prevents a second serializer from drifting or doubling
+        peak memory for JSON and form bodies.
+        """
+        if data is None and json_body is None:
+            return None, None
+        if isinstance(data, bytearray):
+            data = bytes(data)
+        if isinstance(data, str | bytes):
+            request = httpx.Request(
+                "POST", "http://request-size.invalid/", content=data
+            )
+        elif isinstance(data, Mapping):
+            request = httpx.Request(
+                "POST", "http://request-size.invalid/", data=data
+            )
+        elif data is not None:
+            # Preserve the generic internal request API while forcing any
+            # iterable body to be consumed and bounded before Jenkins contact.
+            request = httpx.Request(
+                "POST", "http://request-size.invalid/", data=data
+            )
+            request.read()
+        else:
+            request = httpx.Request(
+                "POST", "http://request-size.invalid/", json=json_body
+            )
+        return request.content, request.headers.get("Content-Type")
+
+    async def _enforce_request_size(
+        self,
+        action: str,
+        path: str,
+        body: bytes | None,
+    ) -> None:
+        """Refuse and audit a body larger than the configured cap."""
+        size = len(body) if body is not None else None
+        limit = self.settings.max_request_bytes
+        if size is None or size <= limit:
+            return
+        await self.audit.emit_async(
+            action,
+            "failure",
+            status="request_too_large",
+            path=path,
+            request_bytes=size,
+            request_limit_bytes=limit,
+        )
+        raise ValueError(
+            f"Request body for {action} is {size} bytes, over the "
+            f"{limit} byte MCP_MAX_REQUEST_BYTES limit. Raise the limit "
+            "or send a smaller definition."
+        )
+
     async def request(
         self,
         method: str,
@@ -475,7 +539,13 @@ class JenkinsClient:
         allow_truncated: bool = False,
     ) -> httpx.Response:
         method_upper = method.upper()
+        encoded_body, generated_content_type = self._encode_request_body(data, json)
+        # Checked before the crumb is fetched, so an oversized call costs no
+        # round trip and never reaches the controller.
+        await self._enforce_request_size(action, path, encoded_body)
         request_headers = dict(headers or {})
+        if generated_content_type:
+            request_headers.setdefault("Content-Type", generated_content_type)
         crumb: tuple[str, str] | None = None
         if method_upper not in REPLAY_SAFE_METHODS:
             try:
@@ -499,13 +569,10 @@ class JenkinsClient:
             try:
                 request_kwargs: dict[str, Any] = {
                     "params": params,
-                    "json": json,
                     "headers": request_headers,
                 }
-                if isinstance(data, (str, bytes)):
-                    request_kwargs["content"] = data
-                else:
-                    request_kwargs["data"] = data
+                if encoded_body is not None:
+                    request_kwargs["content"] = encoded_body
 
                 response = await self._send(
                     method,

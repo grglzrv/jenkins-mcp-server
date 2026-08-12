@@ -65,6 +65,7 @@ mcp:
   allowJobUpdate: true
   allowBuildStop: true
   allowedJobs: "mcp-*"
+  maxRequestBytes: 10000000
   maxResponseBytes: 10000000
 
 # This job tests Jenkins tools through Minibridge, not optional file storage.

@@ -367,6 +367,9 @@ mcp:
   allowedJobs: "AI/*,Platform/*"
   # Hard limit on every complete Jenkins API, config, and crumb response.
   # Increase only when a known controller response legitimately exceeds 10 MB.
+  # Largest encoded body this server will send to Jenkins. Refused before any
+  # controller or crumb request; raise only for a measured legitimate request.
+  maxRequestBytes: 10000000
   maxResponseBytes: 10000000
   # Hard limit on bytes downloaded for console and administrator responses.
   maxLogBytes: 1000000

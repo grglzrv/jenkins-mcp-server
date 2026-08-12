@@ -40,6 +40,60 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.9.0] - 2026-08-12
+
+### Highlights
+
+- Request bodies sent to Jenkins are now bounded, closing the asymmetry with
+  responses.
+
+### New Features
+
+- `mcp.maxRequestBytes` (`MCP_MAX_REQUEST_BYTES`, default 10000000) caps the body
+  this server will send to Jenkins.
+
+### Improvements
+
+- HTTPX-compatible serialization happens once before the CSRF crumb is fetched,
+  so the exact bytes checked are the bytes later sent and an oversized call
+  costs no round trip. Strings, byte bodies, JSON bodies and encoded form
+  mappings all share the same limit.
+- Oversized refusals emit an audit record with the measured and configured byte
+  counts, without recording the rejected body.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- A job definition, administrator body, or encoded build-parameter set above
+  10 MB is now refused. Raise `mcp.maxRequestBytes` before upgrading if a
+  measured legitimate request exceeds it.
+
+### Known Issues
+
+- The cap measures the body this server constructs, not the memory the MCP
+  transport used to receive the tool call in the first place. A very large tool
+  argument is still buffered by the transport before this check sees it.
+- Request-target and header sizes remain governed by HTTPX, the HTTP protocol
+  stack, and Jenkins rather than `MCP_MAX_REQUEST_BYTES`; this setting is an
+  encoded-body boundary, not a complete request-envelope limit.
+
+### Security
+
+- Responses were capped by `MCP_MAX_RESPONSE_BYTES` while the request direction,
+  the one an agent actually controls, had no limit. A tool call carrying a
+  20 MB `config.xml` was buffered in this process and pushed at a controller
+  shared with every other Jenkins client, so a single agent could turn a
+  malformed generation into pressure on shared infrastructure.
+
+### Upgrade Notes
+
+- No action required unless a legitimate encoded request body exceeds 10 MB.
+  Measure the body and configure `mcp.maxRequestBytes` explicitly before
+  upgrading in that case.
+
 ## [2.8.2] - 2026-08-12
 
 ### Highlights

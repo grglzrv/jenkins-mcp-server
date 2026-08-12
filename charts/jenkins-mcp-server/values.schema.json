@@ -547,6 +547,7 @@
         "allowAdminRequest",
         "allowScriptConsole",
         "allowedJobs",
+        "maxRequestBytes",
         "maxResponseBytes",
         "maxLogBytes",
         "allowDestructive",
@@ -640,6 +641,12 @@
         "allowScriptConsole": {
           "type": "boolean",
           "description": "Additional in-process opt-in for the Jenkins Groovy script console. Requires allowAdminRequest too. Minibridge sensitive-pattern-detection independently refuses script-console paths when active."
+        },
+        "maxRequestBytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 100000000,
+          "description": "Maximum encoded request-body bytes sent to Jenkins. Enforced before any controller or CSRF-crumb request."
         }
       }
     },

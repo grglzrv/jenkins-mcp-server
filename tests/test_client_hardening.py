@@ -1379,3 +1379,114 @@ async def test_transport_error_does_not_return_query_secret() -> None:
 
     assert marker not in str(caught.value)
     assert "?[redacted]" in str(caught.value)
+
+
+# --- request bodies are bounded --------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_oversized_request_bodies_are_refused() -> None:
+    """Responses were capped; the request direction was not.
+
+    A tool call carries whatever config.xml the model produced, and an
+    oversized POST is buffered here and then pushed at a controller shared with
+    every other Jenkins client.
+    """
+    sent: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request.url.path)
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        return httpx.Response(200, text="ok")
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0, MCP_MAX_REQUEST_BYTES=4096)
+    with pytest.raises(ValueError, match="MCP_MAX_REQUEST_BYTES"):
+        await jc.create_job("job", "<x>" + "A" * 8192 + "</x>")
+    assert not sent, "an oversized body triggered a Jenkins or crumb request"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_form_parameters_count_towards_the_request_cap() -> None:
+    """Build parameters are a mapping, not a string, and were not measured."""
+    jc = client(
+        lambda request: httpx.Response(201, headers={"Location": "/queue/1"}),
+        JENKINS_MAX_RETRIES=0,
+        MCP_MAX_REQUEST_BYTES=4096,
+    )
+    with pytest.raises(ValueError, match="MCP_MAX_REQUEST_BYTES"):
+        await jc.build("job", {"BIG": "A" * 8192})
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_form_limit_measures_the_encoded_wire_body() -> None:
+    """Reserved form characters expand to three bytes and must not bypass."""
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(201, headers={"Location": "/queue/1"})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0, MCP_MAX_REQUEST_BYTES=4096)
+    # The input is about 2 KB, but URL encoding makes the body 6004 bytes.
+    with pytest.raises(ValueError, match="6004 bytes"):
+        await jc.build("job", {"BIG": "&" * 2000})
+    assert not requests
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_preencoded_form_body_is_not_encoded_twice() -> None:
+    """Measure once and reuse those bytes without changing Jenkins semantics."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(404)
+        assert request.content == b"A=x+y%26z"
+        assert request.headers["Content-Type"] == "application/x-www-form-urlencoded"
+        return httpx.Response(201, headers={"Location": "/queue/1"})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0, MCP_MAX_REQUEST_BYTES=4096)
+    assert (await jc.build("job", {"A": "x y&z"}))["queued"] is True
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_oversized_request_is_audited_without_recording_the_body(tmp_path) -> None:
+    log = tmp_path / "audit.jsonl"
+    marker = "OVERSIZED-BODY-MARKER"
+    jc = JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0, MCP_MAX_REQUEST_BYTES=4096),
+        policy(),
+        AuditLogger(log),
+        transport=httpx.MockTransport(
+            lambda request: pytest.fail(f"oversized call reached Jenkins: {request.url}")
+        ),
+    )
+
+    with pytest.raises(ValueError, match="MCP_MAX_REQUEST_BYTES"):
+        await jc.admin_request("POST", "/api/json", marker * 1024)
+    await jc.close()
+
+    text = log.read_text()
+    assert marker not in text
+    [record] = [r for r in _audit_records(log) if r["action"] == "admin.request"]
+    assert record["outcome"] == "failure"
+    assert record["status"] == "request_too_large"
+    assert record["request_bytes"] > record["request_limit_bytes"] == 4096
+
+
+@pytest.mark.asyncio
+async def test_normal_bodies_are_unaffected() -> None:
+    """A real job definition is far below the default limit."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        return httpx.Response(200, text="ok")
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    await jc.create_job("job", "<project><description>real</description></project>")
+    await jc.close()

@@ -44,6 +44,10 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Keep `MCP_MAX_RESPONSE_BYTES` bounded. Raise the 10 MB default only for a
   measured legitimate Jenkins API or job-config response; narrow folder
   queries first.
+- Keep `MCP_MAX_REQUEST_BYTES` bounded. Its 10 MB default is applied to the
+  exact encoded body before any Jenkins or CSRF-crumb request, limiting the
+  controller impact of an oversized generated configuration or parameter set.
+  It does not cap the MCP request already buffered by the transport.
 - Rotate the Jenkins API token and never commit `.env` or certificates.
 - Never put tokens, passwords, or other credentials in a Jenkins URL query.
   The server replaces complete query payloads with `?[redacted]` in its audit,

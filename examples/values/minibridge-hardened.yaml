@@ -31,6 +31,7 @@ jenkins:
 mcp:
   readOnly: true
   allowedJobs: "AI/*"
+  maxRequestBytes: 10000000
   maxResponseBytes: 10000000
   allowScriptConsole: false
   allowDestructive: false

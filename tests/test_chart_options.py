@@ -51,6 +51,7 @@ def test_destructive_flags_exist_with_safe_defaults() -> None:
     # Deleting a job is irreversible, so it must not be on by default.
     assert mcp["allowJobDelete"] is False
     assert mcp["allowDestructive"] is False
+    assert mcp["maxRequestBytes"] == 10_000_000
     assert mcp["maxResponseBytes"] == 10_000_000
 
 
@@ -96,6 +97,7 @@ def test_every_values_example_states_security_and_network_intent() -> None:
         example = yaml.safe_load(path.read_text())
         assert example["mcp"]["allowDestructive"] is False, path.name
         assert example["mcp"]["allowScriptConsole"] is False, path.name
+        assert example["mcp"]["maxRequestBytes"] == 10_000_000, path.name
         assert example["mcp"]["maxResponseBytes"] == 10_000_000, path.name
         assert example["audit"]["fileEnabled"] is False, path.name
         policy = example["networkPolicy"]
@@ -113,6 +115,7 @@ def test_every_argocd_application_states_security_and_network_intent() -> None:
         values_object = application["spec"]["source"]["helm"]["valuesObject"]
         assert values_object["mcp"]["allowDestructive"] is False, path.name
         assert values_object["mcp"]["allowScriptConsole"] is False, path.name
+        assert values_object["mcp"]["maxRequestBytes"] == 10_000_000, path.name
         assert values_object["mcp"]["maxResponseBytes"] == 10_000_000, path.name
         assert values_object["audit"]["fileEnabled"] is False, path.name
         policy = values_object["networkPolicy"]
@@ -164,6 +167,9 @@ def test_destructive_flags_are_in_the_schema() -> None:
     assert "allowScriptConsole" in mcp["properties"]
     assert "allowScriptConsole" in mcp["required"]
     assert mcp["properties"]["allowScriptConsole"]["description"]
+    assert "maxRequestBytes" in mcp["properties"]
+    assert "maxRequestBytes" in mcp["required"]
+    assert mcp["properties"]["maxRequestBytes"]["description"]
 
 
 def test_chart_env_names_match_the_settings_aliases() -> None:
@@ -1366,8 +1372,11 @@ def test_smoke_values_disable_what_the_cluster_lacks() -> None:
     assert v["networkPolicy"]["enabled"] is True
     for path in sorted((ROOT / ".github").glob("smoke-values*.yaml")):
         smoke_values = yaml.safe_load(path.read_text())
+        expected_request_limit = 4096 if path.name == "smoke-values.yaml" else 10_000_000
+        assert smoke_values["mcp"]["maxRequestBytes"] == expected_request_limit, path.name
         assert smoke_values["mcp"]["maxResponseBytes"] == 10_000_000, path.name
     workflow = (ROOT / ".github/workflows/chart-smoke.yml").read_text()
+    assert 'os.environ["MCP_MAX_REQUEST_BYTES"] == "4096"' in workflow
     assert 'os.environ["MCP_MAX_RESPONSE_BYTES"] == "10000000"' in workflow
 
 
@@ -1405,6 +1414,7 @@ def test_numeric_env_values_are_not_rendered_in_scientific_notation() -> None:
     """
     cm = (CHART / "templates/configmap.yaml").read_text()
     for key in [
+        "maxRequestBytes",
         "maxResponseBytes",
         "maxLogBytes",
         "mcp.port",
@@ -1427,12 +1437,15 @@ def test_settings_reject_scientific_notation_so_the_cast_matters() -> None:
 
     base = dict(JENKINS_URL="https://j.test", JENKINS_USERNAME="u", JENKINS_TOKEN="t")
     assert Settings(**base, MCP_MAX_LOG_BYTES="1000000").max_log_bytes == 1000000
+    assert Settings(**base, MCP_MAX_REQUEST_BYTES="10000000").max_request_bytes == 10000000
     assert Settings(**base, MCP_MAX_RESPONSE_BYTES="10000000").max_response_bytes == 10000000
     import pydantic
     import pytest
 
     with pytest.raises(pydantic.ValidationError):
         Settings(**base, MCP_MAX_LOG_BYTES="1e+06")
+    with pytest.raises(pydantic.ValidationError):
+        Settings(**base, MCP_MAX_REQUEST_BYTES="1e+07")
     with pytest.raises(pydantic.ValidationError):
         Settings(**base, MCP_MAX_RESPONSE_BYTES="1e+07")
 
