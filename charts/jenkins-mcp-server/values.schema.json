@@ -547,6 +547,7 @@
         "allowAdminRequest",
         "allowScriptConsole",
         "allowedJobs",
+        "maxRequestBytes",
         "maxResponseBytes",
         "maxLogBytes",
         "allowDestructive",
@@ -644,7 +645,8 @@
         "maxRequestBytes": {
           "type": "integer",
           "minimum": 1024,
-          "maximum": 100000000
+          "maximum": 100000000,
+          "description": "Maximum encoded request-body bytes sent to Jenkins. Enforced before any controller or CSRF-crumb request."
         }
       }
     },

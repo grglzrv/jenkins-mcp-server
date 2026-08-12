@@ -125,6 +125,7 @@ by this server.
 | --- | --- |
 | Thousands of jobs | `list_jobs` filters Jenkins results through `MCP_ALLOWED_JOBS`; use the folder argument to avoid fetching a large root listing before filtering |
 | Very large API or job-config response | Every complete response is streamed up to `MCP_MAX_RESPONSE_BYTES`, default 10 MB, then refused rather than returned partially. Narrow folder queries first; raise the bound only for a measured legitimate response |
+| Very large job definition, administrator body, or build parameters | The exact encoded body is refused above `MCP_MAX_REQUEST_BYTES`, default 10 MB, before a crumb or Jenkins request. Reduce it or raise the bound only for a measured legitimate request |
 | Very large console logs | Streamed only up to `MCP_MAX_LOG_BYTES`, default 1 MB, and paginated. The response reports `truncated` and the offset to resume from without buffering the full Jenkins response |
 | Busy queue | `trigger_build` returns as soon as the item is queued. The build number does not exist until it leaves the queue, so poll `get_build_info` before addressing a build by number |
 | Multiple MCP replicas | Each maintains its own crumb and session. No shared state, so replicas do not interfere |

@@ -57,7 +57,9 @@ data:
 
   # Server-side policy. Enforced in-process, independent of minibridge.
   MCP_ALLOWED_JOBS: "AI/*,Platform/*"
-  # Bound complete Jenkins API/config responses separately from console text.
+  # Bound encoded requests and complete Jenkins API/config responses separately
+  # from console text.
+  MCP_MAX_REQUEST_BYTES: "10000000"
   MCP_MAX_RESPONSE_BYTES: "10000000"
   MCP_MAX_LOG_BYTES: "1000000"
   MCP_ALLOW_NODE_WRITE: "false"

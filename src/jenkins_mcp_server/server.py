@@ -117,7 +117,7 @@ async def create_job_from_xml(job_name: str, config_xml: str) -> Any:
     Fails if the name already exists. Prefer create_pipeline_job or
     create_multibranch_pipeline unless you need full control of the XML. Do
     not place plaintext credentials in the XML; reference Jenkins-managed
-    credential IDs."""
+    credential IDs. The encoded body must fit MCP_MAX_REQUEST_BYTES."""
     return await get_client().create_job(job_name, config_xml)
 
 
@@ -129,7 +129,8 @@ async def update_job_config(job_name: str, config_xml: str) -> Any:
     by this server, and any setting absent from the XML you supply is lost.
     Read the current config first with get_job_config, and do not place
     plaintext credentials in the XML. Requires MCP_ALLOW_JOB_WRITE,
-    MCP_ALLOW_DESTRUCTIVE and MCP_ALLOW_JOB_UPDATE."""
+    MCP_ALLOW_DESTRUCTIVE and MCP_ALLOW_JOB_UPDATE. The encoded body must fit
+    MCP_MAX_REQUEST_BYTES."""
     return await get_client().update_job(job_name, config_xml)
 
 
@@ -181,7 +182,8 @@ async def create_pipeline_job(
 
     The script runs in the Groovy sandbox. Requires workflow-job and
     workflow-cps, both included in the workflow-aggregator plugin. Reference
-    Jenkins credential IDs; do not put plaintext secrets in the Jenkinsfile."""
+    Jenkins credential IDs; do not put plaintext secrets in the Jenkinsfile.
+    The generated XML must fit MCP_MAX_REQUEST_BYTES."""
     config_xml = pipeline_job_xml(jenkinsfile, description)
     return await get_client().create_job(job_name, config_xml)
 
@@ -200,7 +202,8 @@ async def create_multibranch_pipeline(
     Requires the workflow-multibranch, branch-api and git plugins. Run
     scan_multibranch_pipeline afterwards to populate branches immediately.
     credentials_id names a credential already stored in Jenkins; never pass a
-    token, password or private key in that field."""
+    token, password or private key in that field. The generated XML must fit
+    MCP_MAX_REQUEST_BYTES."""
     config_xml = multibranch_github_xml(
         repository_url,
         credentials_id,
@@ -227,7 +230,8 @@ async def trigger_build(
     Returns queue_url, not a build number: the build has not started yet. Poll
     get_queue, or use get_build_info once it has. For a parameterised job pass
     parameters, using an empty object to accept every default; omitting it
-    entirely makes Jenkins reject the trigger."""
+    entirely makes Jenkins reject the trigger. Their encoded form must fit
+    MCP_MAX_REQUEST_BYTES."""
     return await get_client().build(job_name, parameters)
 
 
@@ -346,5 +350,5 @@ async def jenkins_admin_request(
     delete Jenkins state and are not gated by MCP_ALLOW_DESTRUCTIVE; confirm the
     exact method, path and body first. path must be Jenkins-relative and
     absolute, for example /api/json. Session and CSRF headers are withheld from
-    the response."""
+    the response. The encoded body must fit MCP_MAX_REQUEST_BYTES."""
     return await get_client().admin_request(method, path, body, content_type)

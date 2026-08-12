@@ -39,6 +39,7 @@ spec:
         # bypassed by a client.
         mcp:
           allowedJobs: "AI/*,Platform/*"
+          maxRequestBytes: 10000000
           maxResponseBytes: 10000000
           allowDestructive: false
           allowJobDelete: false

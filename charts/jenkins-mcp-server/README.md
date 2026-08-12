@@ -350,6 +350,7 @@ jenkins:
 | `mcp.allowDestructive` | **`false`** — master switch; all irreversible actions are opt-in |
 | `mcp.allowJobDelete` | **`false`** — irreversible, opt-in |
 | `mcp.allowJobUpdate` / `allowBuildStop` | `true` |
+| `mcp.maxRequestBytes` | `10000000` — exact encoded-body limit applied before any Jenkins or crumb request |
 | `mcp.maxResponseBytes` | `10000000` — hard streamed-response limit for complete Jenkins API, config, and crumb responses |
 | `mcp.maxLogBytes` | `1000000` — hard streamed-response limit for console and administrator calls |
 | `mcp.extraEnv` | `[]` — additional variables such as `HTTP_PROXY`; names are case-sensitive, while chart-owned server, Minibridge, OTEL, policy, guardrail, and auth names are rejected in any capitalisation |

@@ -49,15 +49,17 @@ from the matching version entry after CI validates it.
 
 ### New Features
 
-- `mcp.maxRequestBytes` (`MCP_MAX_REQUEST_BYTES`, default 1000000) caps the body
+- `mcp.maxRequestBytes` (`MCP_MAX_REQUEST_BYTES`, default 10000000) caps the body
   this server will send to Jenkins.
 
 ### Improvements
 
-- The check runs before the CSRF crumb is fetched, so an oversized call costs no
-  round trip and never reaches the controller. Strings, byte bodies, JSON bodies
-  and form mappings are all measured, so build parameters count towards the same
-  limit as a `config.xml`.
+- HTTPX-compatible serialization happens once before the CSRF crumb is fetched,
+  so the exact bytes checked are the bytes later sent and an oversized call
+  costs no round trip. Strings, byte bodies, JSON bodies and encoded form
+  mappings all share the same limit.
+- Oversized refusals emit an audit record with the measured and configured byte
+  counts, without recording the rejected body.
 
 ### Bug Fixes
 
@@ -65,15 +67,18 @@ from the matching version entry after CI validates it.
 
 ### Breaking Changes
 
-- A job definition or build parameter set above 1 MB is now refused. That is far
-  above a real definition, but raise `mcp.maxRequestBytes` if a generated
-  `config.xml` legitimately exceeds it.
+- A job definition, administrator body, or encoded build-parameter set above
+  10 MB is now refused. Raise `mcp.maxRequestBytes` before upgrading if a
+  measured legitimate request exceeds it.
 
 ### Known Issues
 
 - The cap measures the body this server constructs, not the memory the MCP
   transport used to receive the tool call in the first place. A very large tool
   argument is still buffered by the transport before this check sees it.
+- Request-target and header sizes remain governed by HTTPX, the HTTP protocol
+  stack, and Jenkins rather than `MCP_MAX_REQUEST_BYTES`; this setting is an
+  encoded-body boundary, not a complete request-envelope limit.
 
 ### Security
 
@@ -85,7 +90,9 @@ from the matching version entry after CI validates it.
 
 ### Upgrade Notes
 
-- No action required unless a legitimate job definition exceeds 1 MB.
+- No action required unless a legitimate encoded request body exceeds 10 MB.
+  Measure the body and configure `mcp.maxRequestBytes` explicitly before
+  upgrading in that case.
 
 ## [2.8.2] - 2026-08-12
 

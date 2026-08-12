@@ -54,6 +54,7 @@ resources:
 
 mcp:
   allowedJobs: "*"
+  maxRequestBytes: 10000000
   maxResponseBytes: 10000000
 
 # Minibridge exposes its own health endpoint, while server audit JSONL remains

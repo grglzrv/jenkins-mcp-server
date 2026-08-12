@@ -373,3 +373,24 @@ def test_creation_descriptions_keep_plaintext_secrets_out_of_tool_arguments() ->
     multibranch = tools["create_multibranch_pipeline"]
     for phrase in ["credentials_id", "stored in jenkins", "never pass", "private key"]:
         assert phrase in multibranch
+
+
+def test_body_carrying_tools_advertise_the_request_limit() -> None:
+    """Agents should learn the boundary before generating an oversized body."""
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    for name in [
+        "create_job_from_xml",
+        "update_job_config",
+        "create_pipeline_job",
+        "create_multibranch_pipeline",
+        "trigger_build",
+        "jenkins_admin_request",
+    ]:
+        assert "mcp_max_request_bytes" in tools[name], name

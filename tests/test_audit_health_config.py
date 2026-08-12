@@ -65,6 +65,8 @@ def test_settings_reject_unsafe_jenkins_urls(url: str) -> None:
         ("JENKINS_MAX_RETRIES", -1),
         ("JENKINS_MAX_RETRIES", 11),
         ("MCP_PORT", 65536),
+        ("MCP_MAX_REQUEST_BYTES", 1023),
+        ("MCP_MAX_REQUEST_BYTES", 100_000_001),
         ("MCP_MAX_RESPONSE_BYTES", 1023),
         ("MCP_MAX_LOG_BYTES", 0),
     ],
