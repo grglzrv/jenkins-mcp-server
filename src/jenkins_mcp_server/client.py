@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import random
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -460,6 +462,36 @@ class JenkinsClient:
         self.contact.record_contact()
         return response
 
+    def _check_request_size(self, action: str, data: Any, json_body: Any) -> None:
+        """Refuse a body larger than the configured cap.
+
+        Responses are capped already. The request direction is the one an agent
+        controls: a tool call carries whatever config.xml or Jenkinsfile the
+        model produced, and an oversized POST is buffered in this process and
+        then pushed at a controller shared with every other Jenkins client.
+        """
+        limit = self.settings.max_request_bytes
+        if isinstance(data, str):
+            size = len(data.encode("utf-8"))
+        elif isinstance(data, bytes | bytearray):
+            size = len(data)
+        elif isinstance(data, Mapping):
+            # Form fields, for example build parameters.
+            size = sum(
+                len(str(key).encode("utf-8")) + len(str(value).encode("utf-8")) + 2
+                for key, value in data.items()
+            )
+        elif json_body is not None:
+            size = len(_json.dumps(json_body, default=str).encode("utf-8"))
+        else:
+            return
+        if size > limit:
+            raise ValueError(
+                f"Request body for {action} is {size} bytes, over the "
+                f"{limit} byte MCP_MAX_REQUEST_BYTES limit. Raise the limit "
+                "or send a smaller definition."
+            )
+
     async def request(
         self,
         method: str,
@@ -475,6 +507,9 @@ class JenkinsClient:
         allow_truncated: bool = False,
     ) -> httpx.Response:
         method_upper = method.upper()
+        # Checked before the crumb is fetched, so an oversized call costs no
+        # round trip and never reaches the controller.
+        self._check_request_size(action, data, json)
         request_headers = dict(headers or {})
         crumb: tuple[str, str] | None = None
         if method_upper not in REPLAY_SAFE_METHODS:

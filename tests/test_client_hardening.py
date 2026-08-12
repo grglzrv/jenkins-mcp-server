@@ -1379,3 +1379,56 @@ async def test_transport_error_does_not_return_query_secret() -> None:
 
     assert marker not in str(caught.value)
     assert "?[redacted]" in str(caught.value)
+
+
+# --- request bodies are bounded --------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_oversized_request_bodies_are_refused() -> None:
+    """Responses were capped; the request direction was not.
+
+    A tool call carries whatever config.xml the model produced, and an
+    oversized POST is buffered here and then pushed at a controller shared with
+    every other Jenkins client.
+    """
+    sent: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        sent.append(len(request.content or b""))
+        return httpx.Response(200, text="ok")
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0, MCP_MAX_REQUEST_BYTES=4096)
+    with pytest.raises(ValueError, match="MCP_MAX_REQUEST_BYTES"):
+        await jc.create_job("job", "<x>" + "A" * 8192 + "</x>")
+    assert not sent, "an oversized body reached Jenkins"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_form_parameters_count_towards_the_request_cap() -> None:
+    """Build parameters are a mapping, not a string, and were not measured."""
+    jc = client(
+        lambda request: httpx.Response(201, headers={"Location": "/queue/1"}),
+        JENKINS_MAX_RETRIES=0,
+        MCP_MAX_REQUEST_BYTES=4096,
+    )
+    with pytest.raises(ValueError, match="MCP_MAX_REQUEST_BYTES"):
+        await jc.build("job", {"BIG": "A" * 8192})
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_normal_bodies_are_unaffected() -> None:
+    """A real job definition is far below the default limit."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
+        return httpx.Response(200, text="ok")
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    await jc.create_job("job", "<project><description>real</description></project>")
+    await jc.close()

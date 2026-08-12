@@ -40,6 +40,53 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.9.0] - 2026-08-12
+
+### Highlights
+
+- Request bodies sent to Jenkins are now bounded, closing the asymmetry with
+  responses.
+
+### New Features
+
+- `mcp.maxRequestBytes` (`MCP_MAX_REQUEST_BYTES`, default 1000000) caps the body
+  this server will send to Jenkins.
+
+### Improvements
+
+- The check runs before the CSRF crumb is fetched, so an oversized call costs no
+  round trip and never reaches the controller. Strings, byte bodies, JSON bodies
+  and form mappings are all measured, so build parameters count towards the same
+  limit as a `config.xml`.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- A job definition or build parameter set above 1 MB is now refused. That is far
+  above a real definition, but raise `mcp.maxRequestBytes` if a generated
+  `config.xml` legitimately exceeds it.
+
+### Known Issues
+
+- The cap measures the body this server constructs, not the memory the MCP
+  transport used to receive the tool call in the first place. A very large tool
+  argument is still buffered by the transport before this check sees it.
+
+### Security
+
+- Responses were capped by `MCP_MAX_RESPONSE_BYTES` while the request direction,
+  the one an agent actually controls, had no limit. A tool call carrying a
+  20 MB `config.xml` was buffered in this process and pushed at a controller
+  shared with every other Jenkins client, so a single agent could turn a
+  malformed generation into pressure on shared infrastructure.
+
+### Upgrade Notes
+
+- No action required unless a legitimate job definition exceeds 1 MB.
+
 ## [2.8.2] - 2026-08-12
 
 ### Highlights

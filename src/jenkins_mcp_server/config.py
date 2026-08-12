@@ -81,6 +81,15 @@ class Settings(BaseSettings):
     # Bound every response from Jenkins. Console and administrator calls use
     # the smaller max_log_bytes limit because their payload is returned as
     # text; ordinary API and config responses must be complete to be useful.
+    # Cap on what this server sends to Jenkins. Responses are already capped by
+    # max_response_bytes, but the request direction is the one an agent
+    # controls: a tool call carries a config.xml or a Jenkinsfile of whatever
+    # size the model produced, and an oversized POST is buffered here and then
+    # pushed at a controller shared with every other Jenkins client. One
+    # megabyte is far above a real job definition.
+    max_request_bytes: int = Field(
+        default=1_000_000, ge=1024, le=100_000_000, alias="MCP_MAX_REQUEST_BYTES"
+    )
     max_response_bytes: int = Field(
         default=10_000_000,
         ge=1024,
