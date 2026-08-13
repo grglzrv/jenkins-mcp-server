@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import urlopen
@@ -336,43 +337,31 @@ def test_connection_limit_warning_is_rate_limited(caplog, monkeypatch) -> None:
         server.server_close()
 
 
-def test_health_responses_do_not_advertise_the_runtime_version() -> None:
-    """BaseHTTPRequestHandler names the interpreter's patch level by default.
-
-    "BaseHTTP/0.6 Python/3.12.3" tells a scanner which CVEs to try before it
-    has sent a second request, on a port reachable from anywhere the probe is.
-    The endpoint answers a liveness check and has no reason to identify the
-    runtime. The MCP port sends only "uvicorn", with no version, so this was
-    the one place a version was exposed.
-    """
-    import socket
-    import sys
-    import time
-
-    settings = Settings(
-        JENKINS_URL="https://jenkins.test",
-        JENKINS_USERNAME="u",
-        JENKINS_TOKEN="t",
-        MCP_HEALTH_PORT=8487,
+def test_health_responses_do_not_advertise_a_server_banner() -> None:
+    server = start_health_server(
+        settings(MCP_HEALTH_HOST="127.0.0.1", MCP_HEALTH_PORT=0),
+        None,
+        JenkinsContact(),
     )
-    start_health_server(settings, None, JenkinsContact())
-    time.sleep(0.3)
-
-    connection = socket.create_connection(("127.0.0.1", 8487), timeout=3)
-    connection.sendall(b"GET /healthz HTTP/1.1\r\nHost: probe\r\n\r\n")
-    # Headers and body can arrive in separate segments; read to close.
-    chunks = []
-    while True:
-        chunk = connection.recv(1024)
-        if not chunk:
-            break
-        chunks.append(chunk)
-    connection.close()
-    response = b"".join(chunks).decode(errors="replace")
-
-    headers = response.split("\r\n\r\n")[0]
-    assert "Python/" not in headers, headers
-    assert "BaseHTTP" not in headers, headers
-    assert sys.version.split()[0] not in headers, headers
-    # The response itself must still be correct.
-    assert '"status":"ok"' in response
+    host, port = server.server_address
+    try:
+        for method, path, expected in [
+            ("GET", "/healthz", 200),
+            ("GET", "/readyz", 200),
+            ("GET", "/missing", 404),
+            # Unsupported methods use BaseHTTPRequestHandler.send_error(), not
+            # the JSON response helper. Cover that independent response path.
+            ("POST", "/readyz", 501),
+        ]:
+            connection = HTTPConnection(host, port, timeout=2)
+            connection.request(method, path, body=b"" if method == "POST" else None)
+            response = connection.getresponse()
+            body = response.read()
+            assert response.status == expected
+            assert response.getheader("Server") is None
+            if path == "/healthz":
+                assert body == b'{"status":"ok"}'
+            connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()

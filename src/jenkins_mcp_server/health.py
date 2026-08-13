@@ -146,16 +146,11 @@ class HealthHandler(BaseHTTPRequestHandler):
             return
         self._json(404, {"error": "not_found"})
 
-    def version_string(self) -> str:
-        """Suppress the default Server banner.
-
-        BaseHTTPRequestHandler advertises "BaseHTTP/0.6 Python/3.12.3", naming
-        the interpreter's patch level on an endpoint that is reachable from
-        anywhere the probe port is. That tells a scanner which CVEs to try
-        before it has sent a second request. The endpoint answers a liveness
-        check; it has no reason to identify the runtime.
-        """
-        return "jenkins-mcp-server"
+    def send_header(self, keyword: str, value: str) -> None:
+        """Omit the unnecessary runtime fingerprint from every response path."""
+        if keyword.casefold() == "server":
+            return
+        super().send_header(keyword, value)
 
     def log_message(self, format: str, *args: Any) -> None:
         log.debug("health: " + format, *args)
