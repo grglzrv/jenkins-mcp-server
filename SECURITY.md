@@ -16,6 +16,8 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Restrict `MCP_ALLOWED_JOBS` to controlled folders. It filters job discovery,
   queue and running-build visibility, job/build mutations, and job URLs reached
   through `jenkins_admin_request`, including view and percent-encoded forms.
+  Node tools return status only and exclude executor/current-build objects so
+  they cannot disclose job names outside that boundary.
 - Keep `MCP_ALLOW_ADMIN_REQUEST=false` unless a reviewed use case requires it.
 - Keep `MCP_ALLOW_SCRIPT_CONSOLE=false`. Enabling it additionally permits
   `/script` and `/scriptText` for direct-server clients; Minibridge continues to

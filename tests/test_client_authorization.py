@@ -1,6 +1,7 @@
 """Regression tests for job scoping, path validation, and bounded responses."""
 
 import gzip
+import json
 from collections.abc import Callable
 
 import httpx
@@ -119,6 +120,79 @@ async def test_queue_and_running_builds_are_filtered_by_job_allowlist() -> None:
     assert [build["url"] for build in running] == [
         "https://jenkins.test/job/AI/job/build/1/"
     ]
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_node_tools_do_not_leak_out_of_scope_executables() -> None:
+    """Node status must not bypass MCP_ALLOWED_JOBS through executor details."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/computer/api/json":
+            assert request.url.params["depth"] == "0"
+            assert "currentExecutable" not in request.url.params["tree"]
+            return httpx.Response(
+                200,
+                json={
+                    "busyExecutors": 1,
+                    "totalExecutors": 2,
+                    "computer": [
+                        {
+                            "displayName": "agent",
+                            "offline": False,
+                            "idle": False,
+                            "temporarilyOffline": False,
+                            "numExecutors": 2,
+                            "executors": [
+                                {
+                                    "currentExecutable": {
+                                        "fullDisplayName": "Production/secret #9",
+                                        "url": (
+                                            "https://jenkins.test/job/Production/"
+                                            "job/secret/9/"
+                                        ),
+                                    }
+                                }
+                            ],
+                        }
+                    ],
+                },
+            )
+        if request.url.path == "/computer/agent/api/json":
+            assert request.url.params["depth"] == "0"
+            assert "currentExecutable" not in request.url.params["tree"]
+            return httpx.Response(
+                200,
+                json={
+                    "displayName": "agent",
+                    "offline": False,
+                    "idle": False,
+                    "temporarilyOffline": False,
+                    "numExecutors": 2,
+                    "executors": [
+                        {
+                            "currentExecutable": {
+                                "fullDisplayName": "Production/secret #9",
+                                "url": (
+                                    "https://jenkins.test/job/Production/"
+                                    "job/secret/9/"
+                                ),
+                            }
+                        }
+                    ],
+                },
+            )
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    client = make_client(handler)
+    listed = await client.nodes()
+    detail = await client.node_info("agent")
+
+    assert listed["busyExecutors"] == 1
+    assert listed["computer"][0]["displayName"] == "agent"
+    assert detail["displayName"] == "agent"
+    assert "Production/secret" not in json.dumps([listed, detail])
+    assert "currentExecutable" not in json.dumps([listed, detail])
     await client.close()
 
 

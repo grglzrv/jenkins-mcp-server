@@ -10,7 +10,42 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None.
+- None yet.
+
+### New Features
+
+- None yet.
+
+### Improvements
+
+- None yet.
+
+### Bug Fixes
+
+- None yet.
+
+### Breaking Changes
+
+- None yet.
+
+### Known Issues
+
+- None yet.
+
+### Security
+
+- None yet.
+
+### Upgrade Notes
+
+- None yet.
+
+## [2.9.5] - 2026-08-13
+
+### Highlights
+
+- Node inspection no longer reveals running-job details outside the configured
+  job allowlist.
 
 ### New Features
 
@@ -18,15 +53,21 @@ from the matching version entry after CI validates it.
 
 ### Improvements
 
-- None.
+- `list_nodes` and `get_node` request and return only their documented node
+  status fields, reducing Jenkins response size and avoiding accidental
+  coupling to undocumented executor payloads.
 
 ### Bug Fixes
 
-- None.
+- Node APIs previously returned raw `currentExecutable` objects from Jenkins.
+  Those objects could contain names and URLs for jobs outside
+  `MCP_ALLOWED_JOBS`, bypassing the visibility boundary enforced by queue and
+  running-build tools.
 
 ### Breaking Changes
 
-- None.
+- None. The documented node-status contract is preserved; only undocumented
+  raw executor/current-build fields are removed.
 
 ### Known Issues
 
@@ -34,7 +75,10 @@ from the matching version entry after CI validates it.
 
 ### Security
 
-- None.
+- Node status is now projected through an explicit allowlist on both the
+  Jenkins query and the returned payload. Executor and current-build details
+  are excluded even if an upstream response contains fields that were not
+  requested.
 
 ### Upgrade Notes
 

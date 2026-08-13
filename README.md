@@ -54,8 +54,8 @@ credential.
 | `@read` | `get_build_console` | Progressive, size-bounded console log |
 | `@read` | `list_running_builds` | Builds currently executing |
 | `@read` | `get_queue` | Inspect the build queue |
-| `@read` | `list_nodes` | List agents |
-| `@read` | `get_node` | Agent details |
+| `@read` | `list_nodes` | List agent status without executor/job details |
+| `@read` | `get_node` | Agent status without executor/job details |
 | `@write` | `create_job_from_xml` | Create a job from `config.xml` |
 | `@write` | `create_pipeline_job` | Create a Pipeline job |
 | `@write` | `create_multibranch_pipeline` | Create a Git multibranch Pipeline |
@@ -238,7 +238,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.9.4 \
+  --version 2.9.5 \
   --namespace jenkins-mcp \
   --values examples/values/existing-secret.yaml \
   --set-string jenkins.url=https://jenkins.example.com
@@ -502,7 +502,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.9.4
+NEW_VERSION=2.9.5
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 
