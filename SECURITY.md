@@ -21,6 +21,12 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Queue and running-build tools request and return only their documented
   scheduling/build identity fields. Plugin actions, build-parameter values, and
   other arbitrary nested response objects are excluded even for allowed jobs.
+- Job-list and job-detail tools likewise project documented identity, state,
+  health, and build-reference fields; plugin actions and upstream/downstream job
+  objects cannot cross the allowlist through an allowed job's response.
+- Build details project documented result/timing fields and parameter metadata.
+  Values are redacted for secret-like names and password, token, credential, or
+  secret parameter classes; non-scalar plugin values are not returned.
 - Keep `MCP_ALLOW_ADMIN_REQUEST=false` unless a reviewed use case requires it.
 - Treat an unexpected mutation redirect as a failed action. Typed tools
   validate normal Jenkins `302` responses and reject

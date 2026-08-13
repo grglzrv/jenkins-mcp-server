@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -84,6 +85,90 @@ NODE_STATUS_FIELDS = (
 )
 NODE_STATUS_TREE = ",".join(NODE_STATUS_FIELDS)
 
+JOB_LIST_FIELDS = ("name", "fullName", "url", "color", "_class")
+JOB_LIST_TREE = f"jobs[{','.join(JOB_LIST_FIELDS)}]"
+
+JOB_INFO_FIELDS = (
+    "_class",
+    "name",
+    "fullName",
+    "displayName",
+    "fullDisplayName",
+    "url",
+    "description",
+    "buildable",
+    "color",
+    "inQueue",
+    "keepDependencies",
+    "nextBuildNumber",
+    "concurrentBuild",
+    "disabled",
+)
+JOB_HEALTH_FIELDS = ("description", "iconClassName", "iconUrl", "score")
+BUILD_REFERENCE_FIELDS = ("number", "displayName", "fullDisplayName", "url")
+JOB_BUILD_REFERENCE_FIELDS = (
+    "firstBuild",
+    "lastBuild",
+    "lastCompletedBuild",
+    "lastFailedBuild",
+    "lastStableBuild",
+    "lastSuccessfulBuild",
+    "lastUnstableBuild",
+    "lastUnsuccessfulBuild",
+)
+JOB_INFO_TREE = ",".join(
+    [
+        *JOB_INFO_FIELDS,
+        f"healthReport[{','.join(JOB_HEALTH_FIELDS)}]",
+        f"builds[{','.join(BUILD_REFERENCE_FIELDS)}]",
+        *(
+            f"{field}[{','.join(BUILD_REFERENCE_FIELDS)}]"
+            for field in JOB_BUILD_REFERENCE_FIELDS
+        ),
+    ]
+)
+
+BUILD_INFO_FIELDS = (
+    "_class",
+    "name",
+    "fullName",
+    "building",
+    "description",
+    "displayName",
+    "fullDisplayName",
+    "id",
+    "number",
+    "queueId",
+    "result",
+    "timestamp",
+    "duration",
+    "estimatedDuration",
+    "url",
+    "builtOn",
+    "keepLog",
+)
+BUILD_INFO_TREE = ",".join(
+    [
+        *BUILD_INFO_FIELDS,
+        "actions[parameters[name,value,_class]]",
+        f"previousBuild[{','.join(BUILD_REFERENCE_FIELDS)}]",
+        f"nextBuild[{','.join(BUILD_REFERENCE_FIELDS)}]",
+    ]
+)
+
+SENSITIVE_PARAMETER_COMPONENTS = frozenset(
+    {"password", "passwd", "secret", "token", "credential", "credentials", "apikey"}
+)
+SENSITIVE_PARAMETER_CLASS_MARKERS = (
+    "password",
+    "secret",
+    "token",
+    "credential",
+    "privatekey",
+)
+REDACTED_PARAMETER_VALUE = "[redacted]"
+UNSUPPORTED_PARAMETER_VALUE = "[unsupported non-scalar value]"
+
 QUEUE_ITEM_FIELDS = (
     "id",
     "cancelled",
@@ -110,6 +195,137 @@ RUNNING_BUILD_TREE = (
 def _selected_fields(payload: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
     """Project an upstream object onto the documented response contract."""
     return {name: payload[name] for name in fields if name in payload}
+
+
+def _selected_scalar_fields(
+    payload: dict[str, Any], fields: tuple[str, ...]
+) -> dict[str, Any]:
+    """Project fields whose public contract is a JSON scalar."""
+    return {
+        name: payload[name]
+        for name in fields
+        if name in payload
+        and (payload[name] is None or isinstance(payload[name], str | bool | int | float))
+    }
+
+
+def _project_object_list(
+    payload: Any,
+    fields: tuple[str, ...],
+    error: str,
+) -> list[dict[str, Any]]:
+    if not isinstance(payload, list):
+        raise JenkinsError(error)
+    projected: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            raise JenkinsError(error)
+        projected.append(_selected_scalar_fields(item, fields))
+    return projected
+
+
+def _project_optional_object(
+    payload: Any,
+    fields: tuple[str, ...],
+    error: str,
+) -> dict[str, Any] | None:
+    if payload is None:
+        return None
+    if not isinstance(payload, dict):
+        raise JenkinsError(error)
+    return _selected_scalar_fields(payload, fields)
+
+
+def _parameter_is_sensitive(parameter: dict[str, Any]) -> bool:
+    class_name = parameter.get("_class")
+    if isinstance(class_name, str):
+        compact_class = re.sub(r"[^a-z0-9]", "", class_name.casefold())
+        if any(marker in compact_class for marker in SENSITIVE_PARAMETER_CLASS_MARKERS):
+            return True
+    name = parameter.get("name")
+    if not isinstance(name, str):
+        return False
+    component_list = [
+        component
+        for component in re.split(r"[^a-z0-9]+", name.casefold())
+        if component
+    ]
+    components = set(component_list)
+    compact_name = "".join(component_list)
+    return bool(
+        components & SENSITIVE_PARAMETER_COMPONENTS
+        or compact_name in SENSITIVE_PARAMETER_COMPONENTS
+        or compact_name.endswith(
+            ("password", "passwd", "secret", "token", "credential", "credentials")
+        )
+        or "privatekey" in compact_name
+    )
+
+
+def _project_parameters(payload: Any) -> list[dict[str, Any]]:
+    error = "Jenkins returned malformed build JSON"
+    if not isinstance(payload, list):
+        raise JenkinsError(error)
+    projected: list[dict[str, Any]] = []
+    for parameter in payload:
+        if not isinstance(parameter, dict):
+            raise JenkinsError(error)
+        summary = _selected_scalar_fields(parameter, ("name", "_class"))
+        if "value" in parameter:
+            value = parameter["value"]
+            if _parameter_is_sensitive(parameter):
+                summary["value"] = REDACTED_PARAMETER_VALUE
+            elif value is None or isinstance(value, str | bool | int | float):
+                summary["value"] = value
+            else:
+                summary["value"] = UNSUPPORTED_PARAMETER_VALUE
+        projected.append(summary)
+    return projected
+
+
+def _project_job_info(payload: Any) -> dict[str, Any]:
+    error = "Jenkins returned malformed job JSON"
+    if not isinstance(payload, dict):
+        raise JenkinsError(error)
+    result = _selected_scalar_fields(payload, JOB_INFO_FIELDS)
+    if "healthReport" in payload:
+        result["healthReport"] = _project_object_list(
+            payload["healthReport"], JOB_HEALTH_FIELDS, error
+        )
+    if "builds" in payload:
+        result["builds"] = _project_object_list(
+            payload["builds"], BUILD_REFERENCE_FIELDS, error
+        )
+    for field in JOB_BUILD_REFERENCE_FIELDS:
+        if field in payload:
+            result[field] = _project_optional_object(
+                payload[field], BUILD_REFERENCE_FIELDS, error
+            )
+    return result
+
+
+def _project_build_info(payload: Any) -> dict[str, Any]:
+    error = "Jenkins returned malformed build JSON"
+    if not isinstance(payload, dict):
+        raise JenkinsError(error)
+    result = _selected_scalar_fields(payload, BUILD_INFO_FIELDS)
+    for field in ("previousBuild", "nextBuild"):
+        if field in payload:
+            result[field] = _project_optional_object(
+                payload[field], BUILD_REFERENCE_FIELDS, error
+            )
+    if "actions" in payload:
+        if not isinstance(payload["actions"], list):
+            raise JenkinsError(error)
+        actions: list[dict[str, Any]] = []
+        for action in payload["actions"]:
+            if not isinstance(action, dict):
+                raise JenkinsError(error)
+            if "parameters" in action:
+                actions.append({"parameters": _project_parameters(action["parameters"])})
+        if actions:
+            result["actions"] = actions
+    return result
 
 
 def _node_status(payload: dict[str, Any]) -> dict[str, Any]:
@@ -887,13 +1103,13 @@ class JenkinsClient:
                     job=folder,
                 )
         path = _job_path(folder) if folder else ""
-        result = await self.api(path, tree="jobs[name,fullName,url,color,_class]")
+        result = await self.api(path, tree=JOB_LIST_TREE)
         if not isinstance(result, dict) or not isinstance(result.get("jobs"), list):
             raise JenkinsError("Jenkins returned malformed job-list JSON")
-        visible: list[Any] = []
+        visible: list[dict[str, Any]] = []
         for entry in result["jobs"]:
             if not isinstance(entry, dict):
-                continue
+                raise JenkinsError("Jenkins returned malformed job-list JSON")
             name = entry.get("fullName") or entry.get("name")
             if not isinstance(name, str) or not name:
                 continue
@@ -901,14 +1117,18 @@ class JenkinsClient:
                 name = f"{folder.strip('/')}/{name}"
             try:
                 if self.policy.allows_job_or_descendant(name):
-                    visible.append(entry)
+                    summary = _selected_scalar_fields(entry, JOB_LIST_FIELDS)
+                    summary.setdefault("fullName", name)
+                    visible.append(summary)
             except PolicyError:
                 continue
-        return {**result, "jobs": visible}
+        return {"jobs": visible}
 
     async def get_job(self, job_name: str) -> Any:
         await self._check_job(job_name)
-        return await self.api(_job_path(job_name), depth=2)
+        return _project_job_info(
+            await self.api(_job_path(job_name), depth=0, tree=JOB_INFO_TREE)
+        )
 
     async def get_job_config(self, job_name: str) -> str:
         await self._check_job(job_name)
@@ -1042,7 +1262,13 @@ class JenkinsClient:
     ) -> Any:
         await self._check_job(job_name)
         selector = _build_selector(build_number)
-        return await self.api(f"{_job_path(job_name)}/{selector}", depth=2)
+        return _project_build_info(
+            await self.api(
+                f"{_job_path(job_name)}/{selector}",
+                depth=0,
+                tree=BUILD_INFO_TREE,
+            )
+        )
 
     async def console(
         self,
@@ -1052,8 +1278,8 @@ class JenkinsClient:
     ) -> dict[str, Any]:
         await self._check_job(job_name)
         selector = _build_selector(build_number)
-        if start < 0:
-            raise ValueError("start must not be negative")
+        if isinstance(start, bool) or not isinstance(start, int) or start < 0:
+            raise ValueError("start must be a non-negative integer")
         response = await self.request(
             "GET",
             f"/{_job_path(job_name)}/{selector}/logText/progressiveText",
@@ -1071,18 +1297,28 @@ class JenkinsClient:
             next_start = start + len(raw)
             more_data = True
         else:
-            more_data = response.headers.get("X-More-Data", "false").lower() == "true"
+            more_header = response.headers.get("X-More-Data")
+            if more_header is None:
+                more_data = False
+            elif more_header.strip().casefold() == "true":
+                more_data = True
+            elif more_header.strip().casefold() == "false":
+                more_data = False
+            else:
+                raise JenkinsError("Jenkins returned an invalid X-More-Data header")
             offset = response.headers.get("X-Text-Size")
+            if more_data and offset is None:
+                raise JenkinsError("Jenkins omitted X-Text-Size while more data remains")
             try:
                 next_start = start + len(raw) if offset is None else int(offset)
             except ValueError as exc:
                 raise JenkinsError("Jenkins returned an invalid X-Text-Size header") from exc
             # X-Text-Size is Jenkins' raw-log cursor, not a byte count for the
             # rendered progressiveText body. Console-note processing means the
-            # two lengths are not directly comparable. Reject only a negative
-            # cursor, or a response with visible data that claims more data but
-            # does not move beyond the requested cursor.
-            if next_start < 0 or (more_data and raw and next_start <= start):
+            # two lengths are not directly comparable. Reject a cursor behind
+            # the requested position, or a response with visible data that
+            # claims more data but does not move beyond that position.
+            if next_start < start or (more_data and raw and next_start == start):
                 raise JenkinsError("Jenkins returned an invalid X-Text-Size header")
         return {
             "text": raw.decode(response.encoding or "utf-8", errors="replace"),
