@@ -47,10 +47,7 @@ jobs:
         run: |
           # --disable traefik: the chart's ingress is off for this test, and an
           # unused controller only adds startup time.
-          curl -sfL https://get.k3s.io | \
-            INSTALL_K3S_VERSION='${{ matrix.k3s }}' \
-            INSTALL_K3S_EXEC='--disable traefik --disable metrics-server' \
-            sh -
+          sh integration/install_k3s_with_retry.sh '${{ matrix.k3s }}'
           sudo chmod 644 /etc/rancher/k3s/k3s.yaml
           echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> "$GITHUB_ENV"
 
@@ -328,10 +325,7 @@ jobs:
 
       - name: Start k3s
         run: |
-          curl -sfL https://get.k3s.io | \
-            INSTALL_K3S_VERSION='v1.36.2+k3s1' \
-            INSTALL_K3S_EXEC='--disable traefik --disable metrics-server' \
-            sh -
+          sh integration/install_k3s_with_retry.sh 'v1.36.2+k3s1'
           sudo chmod 644 /etc/rancher/k3s/k3s.yaml
           export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
           echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> "$GITHUB_ENV"
@@ -567,10 +561,7 @@ jobs:
 
       - name: Start k3s ${{ matrix.k3s }}
         run: |
-          curl -sfL https://get.k3s.io | \
-            INSTALL_K3S_VERSION='${{ matrix.k3s }}' \
-            INSTALL_K3S_EXEC='--disable traefik --disable metrics-server' \
-            sh -
+          sh integration/install_k3s_with_retry.sh '${{ matrix.k3s }}'
           sudo chmod 644 /etc/rancher/k3s/k3s.yaml
           echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> "$GITHUB_ENV"
 
@@ -668,10 +659,7 @@ jobs:
 
       - name: Start k3s v1.36.2+k3s1
         run: |
-          curl -sfL https://get.k3s.io | \
-            INSTALL_K3S_VERSION='v1.36.2+k3s1' \
-            INSTALL_K3S_EXEC='--disable traefik --disable metrics-server' \
-            sh -
+          sh integration/install_k3s_with_retry.sh 'v1.36.2+k3s1'
           sudo chmod 644 /etc/rancher/k3s/k3s.yaml
           export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
           echo "KUBECONFIG=$KUBECONFIG" >> "$GITHUB_ENV"

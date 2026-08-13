@@ -25,8 +25,10 @@ RUN apk add --no-cache curl unzip \
  && arch="${TARGETARCH:-amd64}" \
  && base="https://github.com/acuvity/minibridge/releases/download/v${MINIBRIDGE_VERSION}" \
  && archive="minibridge_${MINIBRIDGE_VERSION}_linux_${arch}.zip" \
- && curl -fsSL -o "/tmp/${archive}" "${base}/${archive}" \
- && curl -fsSL -o /tmp/checksums.txt "${base}/minibridge_${MINIBRIDGE_VERSION}_checksums.txt" \
+ && curl -fsSL --retry 4 --retry-delay 2 --retry-all-errors \
+      -o "/tmp/${archive}" "${base}/${archive}" \
+ && curl -fsSL --retry 4 --retry-delay 2 --retry-all-errors \
+      -o /tmp/checksums.txt "${base}/minibridge_${MINIBRIDGE_VERSION}_checksums.txt" \
  && ( cd /tmp && grep "${archive}" checksums.txt | sha256sum -c - ) \
  && unzip -o "/tmp/${archive}" minibridge -d /out \
  && chmod 0755 /out/minibridge
