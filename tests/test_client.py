@@ -56,7 +56,7 @@ async def test_create_build_stop_delete_and_tls_client() -> None:
         if request.url.path == "/job/demo/7/stop":
             return httpx.Response(200)
         if request.url.path == "/job/demo/doDelete":
-            return httpx.Response(302)
+            return httpx.Response(302, headers={"Location": "/"})
         return httpx.Response(404, text="unexpected")
 
     client = JenkinsClient(

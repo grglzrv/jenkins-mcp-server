@@ -238,6 +238,69 @@ async def test_redirect_error_explains_context_path_and_proxy_causes() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "location",
+    [
+        "/login?from=/job/demo/build",
+        "/securityRealm/commenceLogin?from=/job/demo/build",
+        "https://sso.example.test/login",
+        "http://[invalid",
+        None,
+    ],
+)
+async def test_write_redirect_cannot_report_a_false_success(
+    location: str | None,
+) -> None:
+    """A proxy/SSO redirect is not evidence that Jenkins performed a write."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(404)
+        headers = {"Location": location} if location is not None else {}
+        return httpx.Response(302, headers=headers)
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(JenkinsError, match="Unexpected redirect"):
+        await jc.build("demo")
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_write_accepts_a_same_controller_success_redirect() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(404)
+        # A job can legitimately be named "login"; route detection must not
+        # confuse /job/login with Jenkins' top-level /login endpoint.
+        return httpx.Response(302, headers={"Location": "/job/login/"})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    result = await jc.enable_job("login", True)
+    assert result == {"job": "login", "enabled": True}
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_write_rejects_login_redirect_below_a_jenkins_context_path() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(404)
+        return httpx.Response(
+            302,
+            headers={"Location": "/jenkins/securityRealm/commenceLogin"},
+        )
+
+    jc = client(
+        handler,
+        JENKINS_URL="https://jenkins.test/jenkins",
+        JENKINS_MAX_RETRIES=0,
+    )
+    with pytest.raises(JenkinsError, match="Unexpected redirect"):
+        await jc.build("demo")
+    await jc.close()
+
+
+@pytest.mark.asyncio
 async def test_read_permission_403_does_not_suggest_crumb_troubleshooting() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(403, text="user is missing the Job/Read permission")
@@ -1164,6 +1227,40 @@ def _audit_records(path) -> list[dict]:
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+@pytest.mark.asyncio
+async def test_rejected_success_redirect_is_audited_as_failure(tmp_path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("crumbIssuer/api/json"):
+            return httpx.Response(404)
+        return httpx.Response(302, headers={"Location": "/login"})
+
+    audit_path = tmp_path / "audit.jsonl"
+    jc = JenkinsClient(
+        settings(JENKINS_MAX_RETRIES=0),
+        policy(),
+        AuditLogger(audit_path),
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(JenkinsError, match="Unexpected redirect"):
+        await jc.build("demo")
+    await jc.close()
+
+    records = [
+        record
+        for record in _audit_records(audit_path)
+        if record["action"] == "build.trigger"
+    ]
+    assert len(records) == 1
+    records[0].pop("ts")
+    assert records[0] == {
+        "action": "build.trigger",
+        "error": "unexpected_redirect",
+        "outcome": "failure",
+        "path": "/job/demo/build",
+        "status": 302,
+    }
 
 
 @pytest.mark.asyncio

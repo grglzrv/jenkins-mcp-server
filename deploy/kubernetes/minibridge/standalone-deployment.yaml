@@ -126,7 +126,7 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:2.9.5-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.9.6-minibridge
           imagePullPolicy: IfNotPresent
           lifecycle:
             preStop:

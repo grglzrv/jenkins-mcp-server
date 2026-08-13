@@ -35,6 +35,13 @@ CRUMB_REJECTION_MARKERS = (
     "csrf crumb",
 )
 
+# A reverse proxy or SSO layer commonly redirects unauthenticated API traffic
+# to one of these controller routes. Typed write tools accept Jenkins' normal
+# same-controller 302 responses, so these must be distinguished from success.
+AUTHENTICATION_REDIRECT_ROUTES = frozenset(
+    {"login", "loginerror", "securityrealm"}
+)
+
 BUILD_ALIASES = frozenset(
     {
         "lastBuild",
@@ -384,6 +391,42 @@ class JenkinsClient:
             return False
         return method.upper() in REPLAY_SAFE_METHODS
 
+    def _redirect_problem(self, response: httpx.Response) -> str | None:
+        """Return why a redirect cannot prove a typed Jenkins action succeeded."""
+        location = response.headers.get("Location")
+        if not location:
+            return "without a Location header"
+        try:
+            target = response.request.url.join(location)
+        except (httpx.InvalidURL, ValueError):
+            return "with an invalid Location header"
+
+        request_url = response.request.url
+        if (
+            target.scheme,
+            target.host,
+            target.port,
+        ) != (
+            request_url.scheme,
+            request_url.host,
+            request_url.port,
+        ):
+            return "outside the configured Jenkins origin"
+
+        # Strip the configured context path before identifying Jenkins' route.
+        # A job called "login" appears under /job/login and must stay valid.
+        route = unquote(target.path)
+        context_path = self.http.base_url.path.rstrip("/")
+        if context_path and route.startswith(f"{context_path}/"):
+            route = route[len(context_path) :]
+        first_segment = next(
+            (segment.casefold() for segment in route.split("/") if segment),
+            "",
+        )
+        if first_segment in AUTHENTICATION_REDIRECT_ROUTES:
+            return "to a Jenkins authentication endpoint"
+        return None
+
     @staticmethod
     def _retry_delay(response: httpx.Response, attempt: int) -> float:
         """Use Retry-After when supplied, with a bounded operational wait."""
@@ -588,6 +631,7 @@ class JenkinsClient:
         expected: tuple[int, ...] = (200,),
         response_limit: int | None = None,
         allow_truncated: bool = False,
+        allow_raw_redirect: bool = False,
     ) -> httpx.Response:
         method_upper = method.upper()
         encoded_body, generated_content_type = self._encode_request_body(data, json)
@@ -635,6 +679,22 @@ class JenkinsClient:
                     else self.settings.max_response_bytes,
                 )
                 if response.status_code in expected:
+                    if 300 <= response.status_code < 400 and not allow_raw_redirect:
+                        redirect_problem = self._redirect_problem(response)
+                        if redirect_problem:
+                            await self.audit.emit_async(
+                                action,
+                                "failure",
+                                status=response.status_code,
+                                path=path,
+                                error="unexpected_redirect",
+                            )
+                            raise JenkinsError(
+                                f"Unexpected redirect {redirect_problem}; the Jenkins "
+                                "action was not reported as successful. Check the "
+                                "JENKINS_URL context path and configure the proxy/SSO "
+                                "to accept Jenkins API-token authentication."
+                            )
                     if (
                         response.extensions.get("jenkins_mcp_truncated", False)
                         and not allow_truncated
@@ -1198,6 +1258,10 @@ class JenkinsClient:
             expected=tuple(range(200, 400)),
             response_limit=self.settings.max_log_bytes,
             allow_truncated=True,
+            # This tool intentionally exposes raw Jenkins HTTP behavior. Typed
+            # mutation tools validate 3xx success separately so an SSO redirect
+            # cannot masquerade as a completed action.
+            allow_raw_redirect=True,
         )
         return {
             "status": response.status_code,
