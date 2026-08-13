@@ -51,6 +51,7 @@ spec:
               tokenKey: JENKINS_TOKEN
         mcp:
           allowedJobs: "AI/*,Platform/*"
+          maxRequestTargetBytes: 8192
           maxRequestBytes: 10000000
           maxResponseBytes: 10000000
           allowScriptConsole: false

@@ -1515,6 +1515,66 @@ async def test_overlong_request_targets_are_refused() -> None:
 
 
 @pytest.mark.asyncio
+async def test_request_target_limit_includes_encoded_query_and_context_path() -> None:
+    sent: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(200, json={})
+
+    jc = client(
+        handler,
+        JENKINS_URL="https://jenkins.test/jenkins/",
+        MCP_MAX_REQUEST_TARGET_BYTES=256,
+    )
+    path = "/api/json"
+    params = {"tree": "jobs[name]" * 30}
+    preview = jc.http.build_request("GET", path, params=params)
+    assert len(path.encode()) < 256 < len(preview.url.raw_path)
+
+    with pytest.raises(ValueError, match="MCP_MAX_REQUEST_TARGET_BYTES"):
+        await jc.request("GET", path, action="api.get", params=params)
+    assert not sent
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_overlong_request_target_is_audited_with_query_redacted(tmp_path) -> None:
+    log = tmp_path / "audit.jsonl"
+    marker = "TARGET-QUERY-SECRET"
+    jc = JenkinsClient(
+        settings(
+            JENKINS_URL="https://jenkins.test/jenkins/",
+            MCP_MAX_REQUEST_TARGET_BYTES=256,
+        ),
+        policy(),
+        AuditLogger(log),
+        transport=httpx.MockTransport(
+            lambda request: pytest.fail(
+                f"overlong target reached Jenkins: {request.url}"
+            )
+        ),
+    )
+    path = f"/api/json?token={marker}&padding={'x' * 300}"
+    expected_bytes = len(jc.http.build_request("GET", path).url.raw_path)
+
+    with pytest.raises(ValueError, match=f"is {expected_bytes} bytes"):
+        await jc.admin_request("GET", path)
+    await jc.close()
+
+    text = log.read_text()
+    assert marker not in text
+    [record] = [
+        item
+        for item in _audit_records(log)
+        if item["status"] == "request_target_too_long"
+    ]
+    assert record["path"] == "/api/json?[redacted]"
+    assert record["target_bytes"] == expected_bytes
+    assert record["target_limit_bytes"] == 256
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "job_name",
     ["AI/nightly", "/".join(["folder"] * 20) + "/job", "/".join(["s"] * 100)],

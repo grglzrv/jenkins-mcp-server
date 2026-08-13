@@ -342,6 +342,9 @@ mcp:
   path: /mcp
   healthHost: 0.0.0.0
   healthPort: 8081
+  # Direct-server health-handler slots. Incomplete requests time out after five
+  # seconds, so a slow client cannot retain a slot indefinitely.
+  healthMaxConnections: 64
   readOnly: false
   allowJobWrite: true
   allowBuildWrite: true
@@ -365,15 +368,15 @@ mcp:
   allowBuildStop: true
   # Applied to job discovery, queue/running-build visibility, and mutations.
   allowedJobs: "AI/*,Platform/*"
-  # Hard limit on every complete Jenkins API, config, and crumb response.
-  # Increase only when a known controller response legitimately exceeds 10 MB.
+  # Encoded path + query boundary, including any Jenkins context path.
+  # Proxy and Jenkins request-line limits vary; raise only after measuring the
+  # complete target accepted throughout the deployment path.
+  maxRequestTargetBytes: 8192
   # Largest encoded body this server will send to Jenkins. Refused before any
   # controller or crumb request; raise only for a measured legitimate request.
-  # Cap on the request line, which maxRequestBytes does not cover: a job name
-  # is a URL component, so a deeply nested name expands into the target. 8192
-  # matches the default header buffer of nginx and most reverse proxies.
-  maxRequestTargetBytes: 8192
   maxRequestBytes: 10000000
+  # Hard limit on every complete Jenkins API, config, and crumb response.
+  # Increase only when a known controller response legitimately exceeds 10 MB.
   maxResponseBytes: 10000000
   # Hard limit on bytes downloaded for console and administrator responses.
   maxLogBytes: 1000000

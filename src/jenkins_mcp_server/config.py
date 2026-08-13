@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     mount_path: str = Field(default="/mcp", alias="MCP_PATH")
     health_host: str = Field(default="0.0.0.0", alias="MCP_HEALTH_HOST")
     health_port: int = Field(default=8081, ge=0, le=65535, alias="MCP_HEALTH_PORT")
+    # Reserve health-handler capacity before spawning a thread. Combined with
+    # the per-socket timeout, this bounds slow or incomplete probe traffic.
+    health_max_connections: int = Field(
+        default=64, ge=1, le=1024, alias="MCP_HEALTH_MAX_CONNECTIONS"
+    )
 
     read_only: bool = Field(default=False, alias="MCP_READ_ONLY")
     allow_job_write: bool = Field(default=True, alias="MCP_ALLOW_JOB_WRITE")
@@ -78,27 +83,21 @@ class Settings(BaseSettings):
     allow_job_update: bool = Field(default=True, alias="MCP_ALLOW_JOB_UPDATE")
     allow_build_stop: bool = Field(default=True, alias="MCP_ALLOW_BUILD_STOP")
     allowed_jobs: str = Field(default="*", alias="MCP_ALLOWED_JOBS")
-    # Bound every response from Jenkins. Console and administrator calls use
-    # the smaller max_log_bytes limit because their payload is returned as
-    # text; ordinary API and config responses must be complete to be useful.
-    # Cap on what this server sends to Jenkins. Responses are already capped by
-    # max_response_bytes, but the request direction is the one an agent
-    # controls: a tool call carries a config.xml or a Jenkinsfile of whatever
-    # size the model produced, and an oversized POST is buffered here and then
-    # pushed at a controller shared with every other Jenkins client. The 10 MB
-    # default matches the complete-response boundary and avoids
-    # imposing a smaller, unsurveyed limit on existing job definitions.
-    # Cap on the request line, which the body cap does not cover. A job name is
-    # a URL component, so a deeply nested name expands into the target rather
-    # than the body. 8192 matches the default header buffer of nginx and most
-    # reverse proxies: past it the request is refused by the proxy rather than
-    # by Jenkins, and the failure is opaque.
+    # Cap on the encoded request target, which the body cap does not cover.
+    # 8192 is a conservative interoperability boundary and remains configurable
+    # because proxy and Jenkins request-line limits vary by deployment.
     max_request_target_bytes: int = Field(
         default=8192, ge=256, le=65536, alias="MCP_MAX_REQUEST_TARGET_BYTES"
     )
+    # Cap the exact encoded request body before any Jenkins or crumb request.
+    # Ten MB matches the response boundary without imposing a smaller,
+    # unsurveyed limit on existing job definitions.
     max_request_bytes: int = Field(
         default=10_000_000, ge=1024, le=100_000_000, alias="MCP_MAX_REQUEST_BYTES"
     )
+    # Bound every response from Jenkins. Console and administrator calls use
+    # the smaller max_log_bytes limit because their payload is returned as
+    # text; ordinary API and config responses must be complete to be useful.
     max_response_bytes: int = Field(
         default=10_000_000,
         ge=1024,

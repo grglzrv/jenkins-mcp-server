@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -71,7 +73,65 @@ def readiness(
     return ready, payload
 
 
+class BoundedHealthServer(ThreadingHTTPServer):
+    """Bound health-handler threads and expire incomplete requests."""
+
+    daemon_threads = True
+    _warning_interval_seconds = 60.0
+
+    def __init__(self, *args: Any, max_connections: int = 64, **kwargs: Any) -> None:
+        self._slots = threading.BoundedSemaphore(max_connections)
+        self._last_limit_warning: float | None = None
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request: Any, client_address: Any) -> None:
+        """Reserve capacity before ThreadingMixIn creates a handler thread."""
+        if not self._slots.acquire(blocking=False):
+            now = time.monotonic()
+            if (
+                self._last_limit_warning is None
+                or now - self._last_limit_warning >= self._warning_interval_seconds
+            ):
+                self._last_limit_warning = now
+                log.warning("health: connection limit reached; refusing excess traffic")
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            # Thread creation can fail after the slot is reserved.
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        error = sys.exc_info()[1]
+        if isinstance(
+            error,
+            (
+                BrokenPipeError,
+                ConnectionAbortedError,
+                ConnectionResetError,
+                TimeoutError,
+            ),
+        ):
+            # Slow/incomplete requests and probes disconnecting mid-response
+            # are routine. Keep those bounded events out of stderr tracebacks.
+            log.debug("health: client disconnected or timed out")
+            return
+        # Do not hide programming errors or unexpected handler failures.
+        super().handle_error(request, client_address)
+
+
 class HealthHandler(BaseHTTPRequestHandler):
+    # StreamRequestHandler applies this to the accepted socket in setup().
+    # Without it, a partial request line owns a handler slot indefinitely.
+    timeout = 5
     settings: Settings
     audit: AuditLogger | None = None
     contact: JenkinsContact
@@ -107,14 +167,18 @@ def start_health_server(
     settings: Settings,
     audit: AuditLogger | None = None,
     contact: JenkinsContact | None = None,
-) -> ThreadingHTTPServer:
+) -> BoundedHealthServer:
     shared_contact = contact or JenkinsContact()
     handler = type(
         "ConfiguredHealthHandler",
         (HealthHandler,),
         {"settings": settings, "audit": audit, "contact": shared_contact},
     )
-    server = ThreadingHTTPServer((settings.health_host, settings.health_port), handler)
+    server = BoundedHealthServer(
+        (settings.health_host, settings.health_port),
+        handler,
+        max_connections=settings.health_max_connections,
+    )
     thread = threading.Thread(target=server.serve_forever, name="health-server", daemon=True)
     thread.start()
     log.info(

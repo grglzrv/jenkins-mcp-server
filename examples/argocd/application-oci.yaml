@@ -74,6 +74,7 @@ spec:
         mcp:
           # Restrict the agent to the folders it legitimately needs.
           allowedJobs: "AI/*,Platform/*"
+          maxRequestTargetBytes: 8192
           maxRequestBytes: 10000000
           maxResponseBytes: 10000000
           allowNodeWrite: false

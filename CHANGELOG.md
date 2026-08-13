@@ -40,50 +40,71 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
-## [2.9.3] - 2026-08-12
+## [2.9.3] - 2026-08-13
 
 ### Highlights
 
-- The request line is bounded, closing the gap the request-body cap does not
-  cover.
+- Direct health traffic and Jenkins request targets now have explicit,
+  configurable boundaries instead of inheriting unbounded or dependency-owned
+  behavior.
 
 ### New Features
 
 - `mcp.maxRequestTargetBytes` (`MCP_MAX_REQUEST_TARGET_BYTES`, default 8192)
-  caps the length of the URL this server sends to Jenkins.
+  caps the exact encoded path and query this server sends to Jenkins, including
+  a configured Jenkins context path.
+- `mcp.healthMaxConnections` (`MCP_HEALTH_MAX_CONNECTIONS`, default 64) caps
+  concurrent connections to the direct server's `/healthz` and `/readyz`
+  listener. Minibridge continues to publish its own health endpoint.
 
 ### Improvements
 
-- The check runs alongside the body cap, before the CSRF crumb is fetched, and
-  records a `request_target_too_long` audit entry so a refusal is visible rather
-  than silent.
+- Request-target measurement uses HTTPX's prepared URL, so percent-encoding,
+  query parameters, and a Jenkins context path cannot escape the boundary. The
+  check runs before the CSRF crumb is fetched and records a redacted
+  `request_target_too_long` audit entry.
+- Health capacity is reserved before `ThreadingHTTPServer` creates a handler
+  thread. Partial request lines expire after five seconds, excess connections
+  are closed, and refusal warnings are rate-limited to prevent a second log
+  amplification path.
 
 ### Bug Fixes
 
-- None.
+- Unexpected health-handler exceptions once again reach the standard server
+  error path; only routine disconnect and timeout errors are suppressed.
 
 ### Breaking Changes
 
-- A job or node name that expands past 8192 bytes as a URL is refused. Twenty
-  nested folders is roughly 260 bytes, so a real hierarchy is far below it.
+- A path or query whose exact encoded request target exceeds 8192 bytes is
+  refused before contacting Jenkins. Raise `mcp.maxRequestTargetBytes` before
+  upgrading only if a measured legitimate request needs more and every proxy
+  and Jenkins is configured to accept it.
 
 ### Known Issues
 
-- None.
+- The MCP transport has already parsed tool arguments before the request-target
+  boundary runs; this protects Jenkins egress and proxy interoperability, not
+  the memory used to receive an MCP call.
+- The direct health listener still uses one Python thread per admitted
+  connection. The connection cap and timeout bound that exposure; they do not
+  turn the health server into an asynchronous server.
 
 ### Security
 
-- `MCP_MAX_REQUEST_BYTES` bounds the body. A job name is a URL component, so it
-  expands into the request target instead: 2000 path segments produced a 12 KB
-  URL. That is past the 8 KB default header buffer of nginx and most reverse
-  proxies, so the request is rejected at the proxy rather than by Jenkins and
-  the caller sees an opaque failure. httpx refuses somewhere above 16 KB, well
-  past the point a real deployment has already broken, so the effective limit
-  was set by a dependency rather than by policy.
+- `MCP_MAX_REQUEST_BYTES` bounds the body, not an agent-controlled path or
+  query. Oversized targets are now rejected predictably before Jenkins or an
+  intermediary chooses a different limit.
+- The direct health listener previously accepted held-open partial requests
+  without a socket timeout or connection bound, allowing an exposed health port
+  to create unbounded handler threads. Admission and timeout are now bounded;
+  keep the health Service private unless external monitoring requires it.
 
 ### Upgrade Notes
 
-- No action required.
+- No action is required for the shipped defaults. Operators with unusually long
+  Jenkins request targets or more than 64 legitimate simultaneous direct health
+  connections should measure demand and set the corresponding typed Helm value
+  explicitly before upgrading.
 
 ## [2.9.2] - 2026-08-12
 

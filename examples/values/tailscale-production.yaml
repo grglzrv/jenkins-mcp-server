@@ -49,6 +49,7 @@ mcp:
   allowScriptConsole: false
   allowDestructive: false
   allowedJobs: "AI/*,Platform/*"
+  maxRequestTargetBytes: 8192
   maxRequestBytes: 10000000
   maxResponseBytes: 10000000
 
