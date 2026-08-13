@@ -150,7 +150,7 @@ crumb or create request reaches Jenkins.
 | Very large API or job-config response | Every complete response is streamed up to `MCP_MAX_RESPONSE_BYTES`, default 10 MB, then refused rather than returned partially. Narrow folder queries first; raise the bound only for a measured legitimate response |
 | Very large job definition, administrator body, or build parameters | The exact encoded body is refused above `MCP_MAX_REQUEST_BYTES`, default 10 MB, before a crumb or Jenkins request. Reduce it or raise the bound only for a measured legitimate request |
 | Very large console logs | Streamed only up to `MCP_MAX_LOG_BYTES`, default 1 MB, and paginated. The response reports `truncated` and the offset to resume from without buffering the full Jenkins response |
-| Malformed progressive-log offset | A non-integer, negative, or forward-pagination offset behind the delivered bytes is rejected as an invalid Jenkins response instead of causing a raw exception or pagination loop |
+| Malformed progressive-log offset | A non-integer or negative offset, or a response with visible data that claims more data without advancing beyond the requested cursor, is rejected instead of causing a raw exception or pagination loop. Jenkins' raw-log cursor is intentionally not compared with rendered response length |
 | Busy queue | `trigger_build` returns as soon as the item is queued. The build number does not exist until it leaves the queue, so poll `get_build_info` before addressing a build by number |
 | Multiple MCP replicas | Each maintains its own crumb and session. No shared state, so replicas do not interfere |
 

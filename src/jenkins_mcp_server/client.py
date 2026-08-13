@@ -1077,7 +1077,12 @@ class JenkinsClient:
                 next_start = start + len(raw) if offset is None else int(offset)
             except ValueError as exc:
                 raise JenkinsError("Jenkins returned an invalid X-Text-Size header") from exc
-            if next_start < 0 or (more_data and next_start < start + len(raw)):
+            # X-Text-Size is Jenkins' raw-log cursor, not a byte count for the
+            # rendered progressiveText body. Console-note processing means the
+            # two lengths are not directly comparable. Reject only a negative
+            # cursor, or a response with visible data that claims more data but
+            # does not move beyond the requested cursor.
+            if next_start < 0 or (more_data and raw and next_start <= start):
                 raise JenkinsError("Jenkins returned an invalid X-Text-Size header")
         return {
             "text": raw.decode(response.encoding or "utf-8", errors="replace"),

@@ -182,7 +182,7 @@ async def test_running_builds_projects_documented_fields() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("offset", ["not-an-integer", "-1", "9"])
+@pytest.mark.parametrize("offset", ["not-an-integer", "-1", "9", "10"])
 async def test_console_rejects_malformed_or_regressive_jenkins_offset(offset: str) -> None:
     client = make_client(
         lambda request: httpx.Response(
@@ -195,4 +195,23 @@ async def test_console_rejects_malformed_or_regressive_jenkins_offset(offset: st
     with pytest.raises(JenkinsError, match="invalid X-Text-Size"):
         await client.console("AI/build", 7, start=10)
 
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_console_accepts_advancing_jenkins_cursor_smaller_than_rendered_body() -> None:
+    rendered = b"rendered console text is longer than the raw-log cursor delta"
+    client = make_client(
+        lambda request: httpx.Response(
+            200,
+            content=rendered,
+            headers={"X-Text-Size": "11", "X-More-Data": "true"},
+        )
+    )
+
+    result = await client.console("AI/build", 7, start=10)
+
+    assert result["text"] == rendered.decode()
+    assert result["next_start"] == 11
+    assert result["more_data"] is True
     await client.close()
