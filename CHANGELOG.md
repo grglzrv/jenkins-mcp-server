@@ -40,6 +40,46 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.9.4] - 2026-08-13
+
+### Highlights
+
+- The health endpoint no longer names the Python interpreter's patch level.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- `Server` on `/healthz` and `/readyz` is now `jenkins-mcp-server`.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None. Only the `Server` header changes; status codes, bodies and the other
+  headers are unchanged.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- `BaseHTTPRequestHandler` advertises `BaseHTTP/0.6 Python/3.12.3` by default,
+  so every health response named the exact interpreter build. That tells a
+  scanner which interpreter CVEs to try before it has sent a second request, on
+  a port reachable from anywhere the probe is. The MCP port was checked as well
+  and sends only `uvicorn` with no version, so the health port was the single
+  place a version was exposed.
+
+### Upgrade Notes
+
+- No action required.
+
 ## [2.9.3] - 2026-08-13
 
 ### Highlights
