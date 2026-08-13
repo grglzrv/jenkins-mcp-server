@@ -356,5 +356,7 @@ async def jenkins_admin_request(
     delete Jenkins state and are not gated by MCP_ALLOW_DESTRUCTIVE; confirm the
     exact method, path and body first. path must be Jenkins-relative and
     absolute, for example /api/json. Session and CSRF headers are withheld from
-    the response. The encoded body must fit MCP_MAX_REQUEST_BYTES."""
+    the response. Unlike typed mutation tools, raw 3xx responses are returned
+    for the caller to interpret. The encoded body must fit
+    MCP_MAX_REQUEST_BYTES."""
     return await get_client().admin_request(method, path, body, content_type)

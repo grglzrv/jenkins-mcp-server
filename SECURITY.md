@@ -19,6 +19,11 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
   Node tools return status only and exclude executor/current-build objects so
   they cannot disclose job names outside that boundary.
 - Keep `MCP_ALLOW_ADMIN_REQUEST=false` unless a reviewed use case requires it.
+- Treat an unexpected mutation redirect as a failed action. Typed tools
+  validate normal Jenkins `302` responses and reject
+  login/SSO, cross-origin, invalid, or headerless redirects rather than
+  reporting a false success. The generic administrator tool intentionally
+  returns raw 3xx responses for the caller to interpret.
 - Keep `MCP_ALLOW_SCRIPT_CONSOLE=false`. Enabling it additionally permits
   `/script` and `/scriptText` for direct-server clients; Minibridge continues to
   refuse those paths while `sensitive-pattern-detection` is active.

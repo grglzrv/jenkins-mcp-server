@@ -40,6 +40,54 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.9.6] - 2026-08-13
+
+### Highlights
+
+- Typed Jenkins mutations no longer mistake proxy or SSO redirects for
+  successful writes.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Successful Jenkins `302` responses are now validated as same-controller,
+  non-authentication destinations while preserving normal job and queue
+  redirects.
+
+### Bug Fixes
+
+- Create, update, delete, enable/disable, build, queue, node and multibranch
+  operations accepted `302` as a normal Jenkins success code. A login/SSO
+  interception, cross-origin destination, invalid `Location`, or missing
+  `Location` therefore produced a false success even though Jenkins had not
+  performed the action.
+
+### Breaking Changes
+
+- None. Legitimate same-controller Jenkins redirects remain accepted; only
+  responses that cannot prove a typed action succeeded now fail.
+
+### Known Issues
+
+- `jenkins_admin_request` intentionally returns raw 3xx responses because it is
+  the generic HTTP escape hatch. Callers of that opt-in tool must interpret the
+  returned status and headers themselves.
+
+### Security
+
+- Typed mutation tools reject authentication and cross-origin redirects without
+  returning their destinations, preventing an SSO flow or untrusted redirect
+  from being treated as authorization to report a completed Jenkins action.
+
+### Upgrade Notes
+
+- No action required. If a write begins reporting an unexpected redirect after
+  upgrade, configure the proxy/SSO for Jenkins API-token authentication and
+  verify the full Jenkins context path instead of suppressing the error.
+
 ## [2.9.5] - 2026-08-13
 
 ### Highlights
