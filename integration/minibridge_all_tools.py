@@ -287,15 +287,21 @@ async def main(url: str) -> int:
             )
 
             print("controller tools")
-            await call_allowed(session, called, "list_nodes", {})
+            nodes = await call_allowed(session, called, "list_nodes", {})
+            assert "currentExecutable" not in result_text(nodes), (
+                "list_nodes exposed executor job details instead of node status"
+            )
             await expect_application_rejection(
                 session,
                 "get_node",
                 {"node_name": ""},
                 "node_name must not be empty",
             )
-            await call_allowed(
+            node = await call_allowed(
                 session, called, "get_node", {"node_name": "(built-in)"}
+            )
+            assert "currentExecutable" not in result_text(node), (
+                "get_node exposed executor job details instead of node status"
             )
             await call_allowed(
                 session,

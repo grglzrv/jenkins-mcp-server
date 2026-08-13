@@ -307,14 +307,20 @@ async def cancel_queue_item(item_id: int) -> Any:
 
 @mcp.tool()
 async def list_nodes() -> Any:
-    """List build nodes with their online, idle and temporarily-offline state."""
+    """List build nodes with their capacity, idle and offline state.
+
+    Executor/current-build details are intentionally excluded; use
+    list_running_builds for running jobs filtered through MCP_ALLOWED_JOBS."""
     return await get_client().nodes()
 
 
 @mcp.tool()
 async def get_node(node_name: str) -> Any:
-    """Get one node's state: executors, offline reason and current load.
-    Node names are case sensitive and must not be empty."""
+    """Get one node's capacity, idle state and offline reason.
+
+    Current-build details are intentionally excluded; use list_running_builds
+    for running jobs filtered through MCP_ALLOWED_JOBS. Node names are case
+    sensitive and must not be empty."""
     return await get_client().node_info(node_name)
 
 

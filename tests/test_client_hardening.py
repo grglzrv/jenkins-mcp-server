@@ -1050,7 +1050,12 @@ async def test_valid_node_names_still_work() -> None:
     jc = client(handler, JENKINS_MAX_RETRIES=0)
     # Spaces are legal in Jenkins node names and must survive encoding.
     await jc.toggle_node("build agent 1", False)
-    assert "/computer/build%20agent%201/api/json?depth=2" in seen
+    node_reads = [
+        path for path in seen if path.startswith("/computer/build%20agent%201/api/json?")
+    ]
+    assert len(node_reads) == 1
+    assert "depth=0" in node_reads[0]
+    assert "currentExecutable" not in node_reads[0]
     assert any(
         path.startswith("/computer/build%20agent%201/toggleOffline?") for path in seen
     )

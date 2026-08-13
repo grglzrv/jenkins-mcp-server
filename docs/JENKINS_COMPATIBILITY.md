@@ -53,7 +53,7 @@ Nothing exotic. This is the complete surface:
 
 | Endpoint | Used by |
 | --- | --- |
-| `GET /api/json` | `list_jobs`, `list_nodes` |
+| `GET /api/json` | `list_jobs` |
 | `GET /crumbIssuer/api/json` | Initial CSRF crumb plus stale-crumb and transient-404 recovery |
 | `GET /job/…/api/json` | `get_job`, `get_build_info`, `get_queue` |
 | `GET /job/…/config.xml` | `get_job_config` |
@@ -66,6 +66,10 @@ Nothing exotic. This is the complete surface:
 | `POST /job/…/<n>/stop`, `/term`, `/kill` | `stop_build` |
 | `POST /queue/cancelItem` | `cancel_queue_item` |
 | `GET /computer/api/json`, `POST /computer/<n>/toggleOffline` | `list_nodes`, `get_node`, `set_node_offline` |
+
+`list_nodes` and `get_node` deliberately request and return only node status.
+Executor and `currentExecutable` fields are excluded; use
+`list_running_builds` for allowlist-filtered running-job visibility.
 
 `/term` and `/kill` are Pipeline-only. On a freestyle job only `stop` applies;
 the other two return an error from Jenkins, which surfaces as a tool error

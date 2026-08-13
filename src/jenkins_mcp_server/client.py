@@ -63,6 +63,25 @@ SENSITIVE_RESPONSE_HEADERS = frozenset(
     }
 )
 
+# Node APIs include executor.currentExecutable at depth two. Returning the raw
+# payload would let list_nodes/get_node disclose names and URLs for builds
+# outside MCP_ALLOWED_JOBS, bypassing the filtering applied to queue and
+# running-build tools. These are the node-status fields those tools document.
+NODE_STATUS_FIELDS = (
+    "displayName",
+    "offline",
+    "idle",
+    "temporarilyOffline",
+    "offlineCauseReason",
+    "numExecutors",
+)
+NODE_STATUS_TREE = ",".join(NODE_STATUS_FIELDS)
+
+
+def _node_status(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return documented node state without executor/job details."""
+    return {name: payload[name] for name in NODE_STATUS_FIELDS if name in payload}
+
 
 def _node_path(node_name: str) -> str:
     """Encode a node name for a /computer/<name> URL.
@@ -1032,10 +1051,34 @@ class JenkinsClient:
         return running
 
     async def nodes(self) -> Any:
-        return await self.api("computer", depth=2)
+        result = await self.api(
+            "computer",
+            depth=0,
+            tree=f"busyExecutors,totalExecutors,computer[{NODE_STATUS_TREE}]",
+        )
+        if not isinstance(result, dict) or not isinstance(result.get("computer"), list):
+            raise JenkinsError("Jenkins returned malformed node-list JSON")
+        summaries = [
+            _node_status(node)
+            for node in result["computer"]
+            if isinstance(node, dict)
+        ]
+        response: dict[str, Any] = {"computer": summaries}
+        for name in ("busyExecutors", "totalExecutors"):
+            value = result.get(name)
+            if isinstance(value, int) and not isinstance(value, bool):
+                response[name] = value
+        return response
 
     async def node_info(self, node_name: str) -> Any:
-        return await self.api(f"computer/{_node_path(node_name)}", depth=2)
+        result = await self.api(
+            f"computer/{_node_path(node_name)}",
+            depth=0,
+            tree=NODE_STATUS_TREE,
+        )
+        if not isinstance(result, dict):
+            raise JenkinsError("Jenkins returned malformed node JSON")
+        return _node_status(result)
 
     async def toggle_node(
         self,
