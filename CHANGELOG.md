@@ -40,6 +40,68 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.9.7] - 2026-08-13
+
+### Highlights
+
+- Multibranch job creation now rejects credential-bearing repository URLs and
+  non-canonical Jenkinsfile paths before Jenkins persists or acts on them.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Multibranch repository and script-path validation runs while generating the
+  job definition, before any Jenkins request or CSRF-crumb fetch.
+- The MCP tool description now tells clients to use Jenkins credential IDs and
+  canonical repository-relative script paths.
+
+### Bug Fixes
+
+- HTTP(S) usernames or tokens embedded in a repository URL were copied into
+  Jenkins `config.xml`; callers must now reference a stored Jenkins credential.
+- Passwords embedded in structured Git URLs were accepted and persisted.
+- Repository query strings and fragments, including credential-bearing query
+  parameters, were accepted even though they are not a safe authentication or
+  revision-selection mechanism for Jenkins Git SCM.
+- Empty repository URLs and URLs with surrounding whitespace, raw controls, or
+  ambiguous backslash separators were sent upstream and failed late or could be
+  interpreted differently by URL consumers.
+- Absolute POSIX and Windows-drive `script_path` values were accepted even
+  though Jenkins expects an SCM repository-relative Jenkinsfile path.
+- Traversing or ambiguous script paths containing `.`, `..`, repeated `/`, or
+  backslash separators were written into the multibranch job definition.
+- XML escaping did not reject control characters and lone surrogates that XML
+  1.0 cannot represent, allowing generated Pipeline and multibranch definitions
+  to be malformed before Jenkins parsed them.
+
+### Breaking Changes
+
+- None. Normal HTTPS, `ssh://git@host/path`, and `git@host:path` remotes remain
+  supported. Inputs that embedded secrets or could not name a canonical
+  repository file are intentionally rejected.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Repository authentication material can no longer be placed in URL userinfo or
+  query components through `create_multibranch_pipeline`, reducing exposure in
+  Jenkins job configuration, configuration backups, and administrative views.
+- Generated job XML now fails closed on characters forbidden by XML 1.0 instead
+  of forwarding a malformed controller request.
+
+### Upgrade Notes
+
+- Move any repository URL credentials into Jenkins and pass the resulting
+  credential ID through `credentials_id`.
+- Replace absolute or normalized-at-runtime `script_path` values with their
+  canonical repository-relative equivalent, for example `ci/Jenkinsfile`.
+
 ## [2.9.6] - 2026-08-13
 
 ### Highlights

@@ -65,6 +65,12 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
   the exact encoded Jenkins context path, path, and query before any Jenkins or
   CSRF-crumb request. Confirm every proxy and Jenkins accepts a larger value
   before raising it.
+- Give `create_multibranch_pipeline` a credential reference through
+  `credentials_id`; never embed a username, token, or password in
+  `repository_url`. Repository query strings and fragments are rejected because
+  Jenkins persists the remote in job configuration. Keep `script_path`
+  canonical and repository-relative; absolute, backslash, empty, `.` and `..`
+  segments are rejected before Jenkins is contacted.
 - Keep the direct health port private. `MCP_HEALTH_MAX_CONNECTIONS` reserves
   capacity before handler-thread creation and incomplete requests time out after
   five seconds, but each admitted direct-server connection still owns a thread.

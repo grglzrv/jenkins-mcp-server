@@ -270,6 +270,53 @@ async def main(url: str) -> int:
             await call_allowed(session, called, "get_queue", {})
 
             print("multibranch tools")
+            await expect_application_rejection(
+                session,
+                "create_multibranch_pipeline",
+                {
+                    "job_name": "mcp-invalid-multibranch",
+                    "repository_url": "https://token@example.invalid/repo.git",
+                },
+                "repository_url must not contain embedded credentials",
+            )
+            await expect_application_rejection(
+                session,
+                "create_multibranch_pipeline",
+                {
+                    "job_name": "mcp-invalid-multibranch",
+                    "repository_url": "https://example.invalid/repo.git?token=secret",
+                },
+                "repository_url must not contain a query string or fragment",
+            )
+            await expect_application_rejection(
+                session,
+                "create_multibranch_pipeline",
+                {
+                    "job_name": "mcp-invalid-multibranch",
+                    "repository_url": "https://example.invalid/repo.git",
+                    "script_path": "../Jenkinsfile",
+                },
+                "script_path must be a canonical repository-relative path",
+            )
+            await expect_application_rejection(
+                session,
+                "create_multibranch_pipeline",
+                {
+                    "job_name": "mcp-invalid-multibranch",
+                    "repository_url": "https://example.invalid/repo.git",
+                    "script_path": "/Jenkinsfile",
+                },
+                "script_path must be repository-relative",
+            )
+            await expect_application_rejection(
+                session,
+                "create_multibranch_pipeline",
+                {
+                    "job_name": "mcp-invalid-multibranch",
+                    "repository_url": "https://example.invalid/repo.git\u0000",
+                },
+                "XML 1.0 cannot represent",
+            )
             await call_allowed(
                 session,
                 called,

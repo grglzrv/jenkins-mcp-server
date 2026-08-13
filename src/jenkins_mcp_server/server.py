@@ -201,8 +201,10 @@ async def create_multibranch_pipeline(
 
     Requires the workflow-multibranch, branch-api and git plugins. Run
     scan_multibranch_pipeline afterwards to populate branches immediately.
-    credentials_id names a credential already stored in Jenkins; never pass a
-    token, password or private key in that field. The generated XML must fit
+    repository_url must not contain embedded credentials, a query string, or a
+    fragment. credentials_id names a credential already stored in Jenkins;
+    never pass a token, password or private key in that field. script_path must
+    be a canonical repository-relative path. The generated XML must fit
     MCP_MAX_REQUEST_BYTES."""
     config_xml = multibranch_github_xml(
         repository_url,

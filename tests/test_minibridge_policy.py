@@ -373,6 +373,27 @@ def test_creation_descriptions_keep_plaintext_secrets_out_of_tool_arguments() ->
     multibranch = tools["create_multibranch_pipeline"]
     for phrase in ["credentials_id", "stored in jenkins", "never pass", "private key"]:
         assert phrase in multibranch
+    for phrase in [
+        "repository_url",
+        "embedded credentials",
+        "query string",
+        "fragment",
+        "script_path",
+        "repository-relative",
+    ]:
+        assert phrase in multibranch
+
+
+def test_all_tools_smoke_exercises_multibranch_input_boundaries() -> None:
+    smoke = (ROOT / "integration" / "minibridge_all_tools.py").read_text()
+    for invalid in [
+        "https://token@example.invalid/repo.git",
+        "https://example.invalid/repo.git?token=secret",
+        '"script_path": "../Jenkinsfile"',
+        '"script_path": "/Jenkinsfile"',
+        'repo.git\\u0000',
+    ]:
+        assert invalid in smoke
 
 
 def test_body_carrying_tools_advertise_the_request_limit() -> None:
