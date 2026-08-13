@@ -95,6 +95,19 @@ The job XML this server generates references plugins **without version pins**
 accepts whatever version is installed. There is no plugin version floor imposed
 by this server.
 
+### Multibranch input contract
+
+`create_multibranch_pipeline` accepts ordinary HTTPS URLs, SSH URLs with a
+username such as `ssh://git@host/org/repo.git`, and SCP-style Git remotes such as
+`git@host:org/repo.git`. Authentication belongs in a Jenkins credential named by
+`credentials_id`; URL passwords, non-SSH userinfo, query strings, and fragments
+are rejected rather than persisted in `config.xml`.
+
+`script_path` is a repository-relative SCM path. Use `Jenkinsfile` or a canonical
+forward-slash path such as `ci/Jenkinsfile`. Absolute paths, Windows drive paths,
+backslashes, repeated separators, and `.` or `..` segments fail locally before a
+crumb or create request reaches Jenkins.
+
 ## Verified as non-issues
 
 | Configuration | Behaviour |
