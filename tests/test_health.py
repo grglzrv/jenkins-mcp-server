@@ -1,8 +1,7 @@
 import json
 import logging
-import socket
-import threading
 import time
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import urlopen
 
@@ -11,7 +10,12 @@ import httpx
 from jenkins_mcp_server.audit import AuditLogger
 from jenkins_mcp_server.config import Settings
 from jenkins_mcp_server.diagnostics import JenkinsContact
-from jenkins_mcp_server.health import HealthHandler, readiness, start_health_server
+from jenkins_mcp_server.health import (
+    BoundedHealthServer,
+    HealthHandler,
+    readiness,
+    start_health_server,
+)
 
 
 def settings(**overrides: object) -> Settings:
@@ -250,49 +254,40 @@ def test_transport_failure_warning_is_rate_limited_and_recovery_is_logged(caplog
     assert "second" not in caplog.text
 
 
-def test_health_capacity_is_reserved_before_a_handler_thread_is_created() -> None:
-    server = start_health_server(
-        settings(
-            MCP_HEALTH_HOST="127.0.0.1",
-            MCP_HEALTH_PORT=0,
-            MCP_HEALTH_MAX_CONNECTIONS=2,
-        )
+def test_health_capacity_is_reserved_before_a_handler_thread_is_created(
+    monkeypatch,
+) -> None:
+    """Assert at the thread-creation boundary without relying on TCP backlog timing."""
+    server = BoundedHealthServer(
+        ("127.0.0.1", 0),
+        HealthHandler,
+        max_connections=1,
     )
-    acquired_by: list[str] = []
-    slots = server._slots
+    created: list[object] = []
+    refused: list[object] = []
 
-    class RecordingSlots:
-        def acquire(self, *args, **kwargs):
-            acquired_by.append(threading.current_thread().name)
-            return slots.acquire(*args, **kwargs)
+    def create_handler_thread(self, request, client_address):
+        created.append(request)
+        # ThreadingHTTPServer.process_request is the method that creates the
+        # handler thread. The only slot must already be held when it is called.
+        assert self._slots.acquire(blocking=False) is False
 
-        def release(self):
-            return slots.release()
-
-    server._slots = RecordingSlots()  # type: ignore[assignment]
-    held: list[socket.socket] = []
+    monkeypatch.setattr(ThreadingHTTPServer, "process_request", create_handler_thread)
+    monkeypatch.setattr(server, "shutdown_request", refused.append)
+    first = object()
+    excess = object()
     try:
-        host, port = server.server_address
-        for _ in range(20):
-            sock = socket.create_connection((host, port), timeout=1)
-            sock.sendall(b"GET /readyz HTTP/1.1\r\nHost: test\r\n")
-            held.append(sock)
-        deadline = time.monotonic() + 2
-        while len(acquired_by) < 3 and time.monotonic() < deadline:
-            time.sleep(0.01)
+        server.process_request(first, ("127.0.0.1", 1))
+        assert created == [first]
 
-        assert acquired_by
-        assert set(acquired_by) == {"health-server"}
-        handler_threads = [
-            thread
-            for thread in threading.enumerate()
-            if "process_request_thread" in thread.name
-        ]
-        assert len(handler_threads) <= 2
+        # The fake base method deliberately does not start a thread, so the
+        # first slot remains held. A second request must be closed without ever
+        # reaching the thread-creation method.
+        server.process_request(excess, ("127.0.0.1", 2))
+        assert created == [first]
+        assert refused == [excess]
     finally:
-        for sock in held:
-            sock.close()
-        server.shutdown()
+        server._slots.release()
         server.server_close()
 
 
@@ -315,34 +310,27 @@ def test_unexpected_health_handler_errors_are_not_suppressed(capsys) -> None:
         server.server_close()
 
 
-def test_connection_limit_warning_is_rate_limited(caplog) -> None:
-    server = start_health_server(
-        settings(
-            MCP_HEALTH_HOST="127.0.0.1",
-            MCP_HEALTH_PORT=0,
-            MCP_HEALTH_MAX_CONNECTIONS=1,
-        )
+def test_connection_limit_warning_is_rate_limited(caplog, monkeypatch) -> None:
+    server = BoundedHealthServer(
+        ("127.0.0.1", 0),
+        HealthHandler,
+        max_connections=1,
     )
-    held: list[socket.socket] = []
+    refused: list[object] = []
+    assert server._slots.acquire(blocking=False) is True
+    monkeypatch.setattr(server, "shutdown_request", refused.append)
     caplog.set_level(logging.WARNING)
     try:
-        host, port = server.server_address
-        first = socket.create_connection((host, port), timeout=1)
-        first.sendall(b"GET /readyz HTTP/1.1\r\nHost: test\r\n")
-        held.append(first)
-        time.sleep(0.05)
-        for _ in range(20):
-            sock = socket.create_connection((host, port), timeout=1)
-            held.append(sock)
-        time.sleep(0.1)
+        requests = [object() for _ in range(20)]
+        for request in requests:
+            server.process_request(request, ("127.0.0.1", 1))
         messages = [
             record
             for record in caplog.records
             if "connection limit reached" in record.getMessage()
         ]
         assert len(messages) == 1
+        assert refused == requests
     finally:
-        for sock in held:
-            sock.close()
-        server.shutdown()
+        server._slots.release()
         server.server_close()
