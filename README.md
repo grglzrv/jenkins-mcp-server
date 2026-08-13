@@ -3,7 +3,7 @@
 **Secure-by-design MCP server for Jenkins, with runtime guardrails between the
 agent and your CI.**
 
-Exposes 23 Jenkins tools to any MCP client over the two transports the current
+Exposes 24 Jenkins tools to any MCP client over the two transports the current
 specification defines: **Streamable HTTP** for remote use and **stdio** for a
 local subprocess. Ships with an optional
 [Minibridge](https://github.com/acuvity/minibridge) proxy by
@@ -43,7 +43,7 @@ credential.
 
 ## 🧰 Tools
 
-23 tools, grouped as the guardrail policy groups them.
+24 tools, grouped as the guardrail policy groups them.
 
 | Group | Tool | Purpose |
 | --- | --- | --- |
@@ -54,6 +54,7 @@ credential.
 | `@read` | `get_build_console` | Progressive, size-bounded console log |
 | `@read` | `list_running_builds` | Builds currently executing |
 | `@read` | `get_queue` | Inspect the build queue |
+| `@read` | `get_queue_item` | Follow a queue ID until Jenkins assigns a build number |
 | `@read` | `list_nodes` | List agent status without executor/job details |
 | `@read` | `get_node` | Agent status without executor/job details |
 | `@write` | `create_job_from_xml` | Create a job from `config.xml` |
@@ -87,7 +88,7 @@ these at either layer.
 
 "Verified" means the full end-to-end suite ran against that core in CI: create a
 Pipeline job, trigger it, stream the console, stop the build, delete the job,
-with all 23 tools reachable. Reproduce any row with
+with all 24 tools reachable. Reproduce any row with
 [`compatibility.yml`](.github/workflows/compatibility.yml).
 
 Run the current LTS line where possible: it is the only line receiving security
@@ -117,7 +118,7 @@ depend on it.
 - Job list/read/create/update/delete/copy/enable/disable.
 - Pipeline and Git multibranch Pipeline creation and scanning.
 - Build trigger, parameterized builds, running-build discovery, stop/terminate/kill.
-- Queue inspection and cancellation.
+- Queue inspection, queue-to-build tracking, and cancellation.
 - Node inspection and optional online/offline management.
 - Streamed, size-bounded Jenkins responses, with progressive pagination for
   console logs.
@@ -238,7 +239,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.9.9 \
+  --version 2.10.0 \
   --namespace jenkins-mcp \
   --values examples/values/existing-secret.yaml \
   --set-string jenkins.url=https://jenkins.example.com
@@ -376,7 +377,7 @@ and session cookies.
 | `shadowing-pattern-detection` | Identifies tool descriptions that override or redirect other tools |
 | `schema-misuse-prevention` | Rejects out-of-schema arguments used to smuggle instructions |
 | `cross-origin-tool-access` | Blocks references to tools outside this server |
-| `secrets-redaction` | Redacts Jenkins API tokens, crumbs and session cookies from responses |
+| `secrets-redaction` | Redacts Jenkins API tokens, crumbs, session cookies, and complete PEM private-key blocks from responses |
 | `basic authentication` | Optional shared secret restricting which clients may reach the server |
 
 Each is enabled individually, so only the protections your environment needs are
@@ -411,6 +412,7 @@ Applied in-process, so it holds whether or not the proxy is deployed.
 | Setting | Default | Effect |
 | --- | --- | --- |
 | `mcp.allowedJobs` | `AI/*,Platform/*` | Glob allowlist for job reads, discovery, builds, and mutations. Queue cancellation resolves the owning job before authorization; traversal segments are rejected |
+| `mcp.redactParameterPatterns` | `[]` | Additional case-insensitive globs for build parameter names whose values `get_build_info` redacts; built-in secret detection remains active |
 | `mcp.readOnly` | `false` | Refuses every write tool |
 | `mcp.allowDestructive` | **`false`** | Master gate for job updates/deletes, build stops, queue cancellation, and node offlining |
 | `mcp.allowJobDelete` | **`false`** | `delete_job` is opt-in; deletion is irreversible |
@@ -430,7 +432,7 @@ Tool policy accepts individual names or these groups:
 
 | Group | Tools |
 | --- | --- |
-| `@read` | `list_jobs`, `get_job`, `get_job_config`, `get_build_info`, `get_build_console`, `list_running_builds`, `get_queue`, `list_nodes`, `get_node` |
+| `@read` | `list_jobs`, `get_job`, `get_job_config`, `get_build_info`, `get_build_console`, `list_running_builds`, `get_queue`, `get_queue_item`, `list_nodes`, `get_node` |
 | `@write` | `create_job_from_xml`, `copy_job`, `enable_job`, `disable_job`, `create_pipeline_job`, `create_multibranch_pipeline`, `scan_multibranch_pipeline`, `trigger_build` |
 | `@destructive` | `update_job_config`, `delete_job`, `stop_build`, `cancel_queue_item`, `set_node_offline` |
 | `@admin` | `jenkins_admin_request` |
@@ -502,7 +504,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.9.9
+NEW_VERSION=2.10.0
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 

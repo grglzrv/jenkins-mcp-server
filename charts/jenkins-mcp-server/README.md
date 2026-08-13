@@ -63,7 +63,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.9.9 \
+  --version 2.10.0 \
   --namespace jenkins-mcp \
   --set-string jenkins.url=https://jenkins.example.com \
   --set jenkins.credentials.create.enabled=false \
@@ -344,6 +344,7 @@ jenkins:
 | --- | --- |
 | `mcp.readOnly` | `false` |
 | `mcp.allowedJobs` | `AI/*,Platform/*` — applies to job discovery, queue/running-build visibility, mutations, and job URLs sent through `jenkins_admin_request`; node tools expose status but never executor/current-job details |
+| `mcp.redactParameterPatterns` | `[]` — additional case-insensitive globs for local secret parameter names whose values `get_build_info` redacts; built-in password/token/credential detection remains active |
 | `mcp.allowJobWrite` / `allowBuildWrite` | `true` |
 | `mcp.allowNodeWrite` / `allowAdminRequest` | `false` |
 | `mcp.allowScriptConsole` | **`false`** — additional in-process gate for `/script` and `/scriptText`; when Minibridge is enabled, `sensitive-pattern-detection` independently refuses these paths |
@@ -525,7 +526,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.9.9
+NEW_VERSION=2.10.0
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

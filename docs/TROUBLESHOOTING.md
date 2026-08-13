@@ -54,7 +54,11 @@ instead. Do not paste Jenkins tokens or Secret output into an issue.
 | `get_job_config` alone returns 403 | The account lacks `Job/ExtendedRead` | Grant `Job/ExtendedRead` for the allowed job scope |
 | A parameterised build is rejected | `trigger_build` was called without the `parameters` field and therefore used `/build` | Pass `parameters`; `{}` selects the job's configured defaults through `/buildWithParameters` |
 | A job or node tool reports an invalid-name error without contacting Jenkins | The identifier is empty, whitespace-only, contains traversal segments, or a job name has leading, trailing, or repeated `/` separators | Pass the exact Jenkins full name. Invalid separators are rejected rather than normalized to a different resource |
-| `create_multibranch_pipeline` rejects the repository URL or script path before contacting Jenkins | The URL is empty, malformed, contains whitespace/control characters, embedded credentials, a query, or a fragment; or the script path is not canonical and repository-relative | Put Git credentials in Jenkins and pass their ID through `credentials_id`. Use a normal HTTPS URL, `ssh://git@host/path`, or `git@host:path`, and a path such as `Jenkinsfile` or `ci/Jenkinsfile` |
+| `create_multibranch_pipeline` rejects the repository URL or script path before contacting Jenkins | The URL is empty, malformed, uses `file:`/external-helper/another unsupported scheme, contains whitespace/control characters, embedded credentials, a query, or a fragment; or the script path is not canonical and repository-relative | Put Git credentials in Jenkins and pass their ID through `credentials_id`. Use HTTP(S), `ssh://git@host/path`, `git+ssh`, `git`, or canonical `git@host:path`, and a path such as `Jenkinsfile` or `ci/Jenkinsfile` |
+| `trigger_build` reports an invalid queue Location | Jenkins or an intermediary accepted the POST without a same-origin `/queue/item/<id>/` Location, so the server cannot prove which queue item was created | Check reverse-proxy Location rewriting and the complete `JENKINS_URL` context path. Do not treat the trigger as trackable until Jenkins returns its canonical queue item |
+| A build is queued but has no build number yet | Jenkins assigns the number only when an executor starts the item | Pass `queue_id` from `trigger_build` to `get_queue_item`; when `executable.number` appears, use it with `get_build_info` |
+| A custom string build parameter is not redacted | Its name and Jenkins class do not match the built-in password/token/secret/credential rules | Add its local name convention to `MCP_REDACT_PARAMETER_PATTERNS` or Helm `mcp.redactParameterPatterns`, for example `*_AUTH`; keep actual secrets in Jenkins credential/password parameter types |
+| `set_node_offline` says Jenkins acknowledged the toggle but did not reach the requested state | The node changed concurrently, disappeared, or a cloud plugin did not preserve the state | Re-read the node and inspect its cloud/agent lifecycle. The tool deliberately refuses to report success without post-write verification |
 | Tool descriptions are still empty after upgrading | The MCP client cached an older `tools/list` response | Reconnect and initialize a new MCP session so the client refreshes tool metadata |
 | A tool is absent from `tools/list` | Minibridge denied it through `minibridge.tools` | Check `tools.allow` and `tools.deny`; deny wins. Server-side `mcp.allow*` flags do not hide tools |
 | A visible tool is refused with a policy/destructive-action error | The in-process server policy rejected the call | Check `mcp.readOnly`, `mcp.allowedJobs`, the category flag, `mcp.allowDestructive`, and the operation-specific flag |
@@ -102,7 +106,7 @@ kubectl -n jenkins-mcp rollout status deployment/jenkins-mcp-jenkins-mcp-server
 
 ## Tool policy has two layers
 
-The server always registers all 23 tools. Its `mcp.allow*`, destructive-action,
+The server always registers all 24 tools. Its `mcp.allow*`, destructive-action,
 read-only, and job-allowlist settings enforce authorization when a tool is
 called. Optional Minibridge policy runs in front of the server and can remove a
 denied tool from discovery as well as refuse it on call. Seeing a tool therefore

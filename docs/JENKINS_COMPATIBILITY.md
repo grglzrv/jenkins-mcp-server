@@ -57,6 +57,7 @@ Nothing exotic. This is the complete surface:
 | `GET /crumbIssuer/api/json` | Initial CSRF crumb plus stale-crumb and transient-404 recovery |
 | `GET /job/…/api/json` | `get_job`, `get_build_info` |
 | `GET /queue/api/json` | `get_queue` |
+| `GET /queue/item/<id>/api/json` | `get_queue_item`, queue authorization before `cancel_queue_item` |
 | `GET /job/…/config.xml` | `get_job_config` |
 | `POST /job/…/config.xml` | `update_job_config` |
 | `POST /createItem` | `create_job_from_xml`, `create_pipeline_job`, `create_multibranch_pipeline`, `copy_job` |
@@ -79,7 +80,8 @@ actions, build-parameter values, and arbitrary executable fields.
 
 `get_build_info` returns build identity, result/timing data, adjacent build
 references, and parameter entries. Parameter values are redacted when their
-name or Jenkins class identifies a password, token, secret, or credential;
+name or Jenkins class identifies a password, token, secret, or credential, or
+when their name matches `MCP_REDACT_PARAMETER_PATTERNS`;
 non-scalar plugin parameter values are replaced with an explicit unsupported
 marker. Change sets, artifacts, causes, and unrelated plugin actions are outside
 this tool's contract.
@@ -96,7 +98,7 @@ the rest keep working and the server stays up.
 
 | Tool | Needs | If missing |
 | --- | --- | --- |
-| `list_jobs`, `get_job`, `get_job_config`, `get_build_info`, `get_build_console`, `list_running_builds`, `get_queue`, `list_nodes`, `get_node` | core | — |
+| `list_jobs`, `get_job`, `get_job_config`, `get_build_info`, `get_build_console`, `list_running_builds`, `get_queue`, `get_queue_item`, `list_nodes`, `get_node` | core | — |
 | `create_job_from_xml`, `copy_job`, `update_job_config`, `delete_job`, `enable_job`, `disable_job`, `trigger_build`, `cancel_queue_item`, `set_node_offline`, `jenkins_admin_request` | core | — |
 | **Any tool given a job path containing `/`** | `cloudbees-folder` | The path does not resolve. Only top-level jobs work. This affects every tool, so treat it as required. |
 | `create_pipeline_job` | `workflow-job`, `workflow-cps` | `createItem` rejects the `CpsFlowDefinition` class |
@@ -114,7 +116,9 @@ by this server.
 username such as `ssh://git@host/org/repo.git`, and SCP-style Git remotes such as
 `git@host:org/repo.git`. Authentication belongs in a Jenkins credential named by
 `credentials_id`; URL passwords, non-SSH userinfo, query strings, and fragments
-are rejected rather than persisted in `config.xml`.
+are rejected rather than persisted in `config.xml`. Local `file:` URLs, Git
+external-helper syntax, and unrecognized schemes are also rejected; supported
+schemes are HTTP(S), SSH, `git`, `git+ssh`, and canonical `user@host:path` SSH.
 
 `script_path` is a repository-relative SCM path. Use `Jenkinsfile` or a canonical
 forward-slash path such as `ci/Jenkinsfile`. Absolute paths, Windows drive paths,
@@ -147,7 +151,7 @@ crumb or create request reaches Jenkins.
 | Pipeline script needing script approval | `create_pipeline_job` succeeds, the build then blocks pending admin approval. Sandbox-safe scripts are unaffected |
 | Job names containing `/` | Treated as folder separators, which is the intended behaviour. Names containing `.` are fine; `.` and `..` as whole path segments are rejected as traversal |
 | Jenkins managed by Configuration as Code with jobs read-only | `create_*`, `update_job_config` and `delete_job` are refused by Jenkins |
-| Agents provisioned by a cloud plugin (Kubernetes, EC2) | `set_node_offline` on an ephemeral agent may 404 or have no lasting effect, since the agent disappears |
+| Agents provisioned by a cloud plugin (Kubernetes, EC2) | `set_node_offline` on an ephemeral agent may 404 or fail post-write verification when the agent disappears; the tool does not report the requested state unless a follow-up node read confirms it |
 
 ### Scale considerations for a large controller
 
@@ -158,7 +162,7 @@ crumb or create request reaches Jenkins.
 | Very large job definition, administrator body, or build parameters | The exact encoded body is refused above `MCP_MAX_REQUEST_BYTES`, default 10 MB, before a crumb or Jenkins request. Reduce it or raise the bound only for a measured legitimate request |
 | Very large console logs | Streamed only up to `MCP_MAX_LOG_BYTES`, default 1 MB, and paginated. The response reports `truncated` and the offset to resume from without buffering the full Jenkins response |
 | Malformed progressive-log metadata | A non-integer/regressive offset, invalid `X-More-Data`, or a response claiming more data without a cursor is rejected instead of causing a raw exception, silently stopping, or guessing the next raw-log position. Jenkins' raw-log cursor is intentionally not compared with rendered response length |
-| Busy queue | `trigger_build` returns as soon as the item is queued. The build number does not exist until it leaves the queue, so poll `get_build_info` before addressing a build by number |
+| Busy queue | `trigger_build` returns a validated `queue_id` and same-origin `queue_url`. Poll `get_queue_item(queue_id)` until `executable.number` appears, then pass that number to `get_build_info` |
 | Multiple MCP replicas | Each maintains its own crumb and session. No shared state, so replicas do not interfere |
 
 Safe reads retry 429 and transient gateway/network failures, respecting a

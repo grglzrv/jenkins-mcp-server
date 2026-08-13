@@ -83,6 +83,14 @@ class Settings(BaseSettings):
     allow_job_update: bool = Field(default=True, alias="MCP_ALLOW_JOB_UPDATE")
     allow_build_stop: bool = Field(default=True, alias="MCP_ALLOW_BUILD_STOP")
     allowed_jobs: str = Field(default="*", alias="MCP_ALLOWED_JOBS")
+    # Additional case-insensitive globs for parameter names whose values must
+    # never cross the MCP response boundary. The built-in password/token/
+    # credential detection remains active; this closes the gap for locally
+    # named secrets such as DEPLOY_AUTH or SIGNING_MATERIAL.
+    redact_parameter_patterns: str = Field(
+        default="",
+        alias="MCP_REDACT_PARAMETER_PATTERNS",
+    )
     # Cap on the encoded request target, which the body cap does not cover.
     # 8192 is a conservative interoperability boundary and remains configurable
     # because proxy and Jenkins request-line limits vary by deployment.
@@ -183,6 +191,14 @@ class Settings(BaseSettings):
     @property
     def job_patterns(self) -> list[str]:
         return [p.strip() for p in self.allowed_jobs.split(",") if p.strip()]
+
+    @property
+    def parameter_redaction_patterns(self) -> list[str]:
+        return [
+            pattern.strip()
+            for pattern in self.redact_parameter_patterns.split(",")
+            if pattern.strip()
+        ]
 
 
 @lru_cache

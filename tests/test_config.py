@@ -36,10 +36,12 @@ def test_uppercase_environment_variables_still_apply(
     monkeypatch.setenv("JENKINS_USERNAME", "user")
     monkeypatch.setenv("JENKINS_TOKEN", "token")
     monkeypatch.setenv("MCP_ALLOWED_JOBS", "AI/*")
+    monkeypatch.setenv("MCP_REDACT_PARAMETER_PATTERNS", "*_AUTH, SIGNING_*")
     monkeypatch.setenv("MCP_READ_ONLY", "true")
     monkeypatch.setenv("MCP_ALLOW_SCRIPT_CONSOLE", "true")
 
     settings = Settings()
     assert settings.job_patterns == ["AI/*"]
+    assert settings.parameter_redaction_patterns == ["*_AUTH", "SIGNING_*"]
     assert settings.read_only is True
     assert settings.allow_script_console is True

@@ -63,6 +63,9 @@ API, job-config, and crumb responses independently of the smaller console/admin
 text limit. Increase a boundary only for a measured legitimate request or
 response and after confirming every proxy and Jenkins accepts it; the
 [troubleshooting guide](../docs/TROUBLESHOOTING.md) explains the failure modes.
+When ordinary string parameters carry locally named secrets, set
+`mcp.redactParameterPatterns` to case-insensitive globs such as `*_AUTH` and
+`SIGNING_*`; the built-in password/token/credential detection remains active.
 
 ## Networking and scaling
 

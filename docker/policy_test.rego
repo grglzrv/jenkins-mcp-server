@@ -217,6 +217,18 @@ test_env_style_token_redacted if {
 	not contains(patched.result.content[0].text, "s3cr3t-token-value")
 }
 
+test_complete_private_key_block_redacted if {
+	patched := mcp with input as {"mcp": {"result": {"content": [{
+		"type": "text",
+		"text": "before\n-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\nafter",
+	}]}}}
+		with opa.runtime as _runtime("secrets-redaction", "")
+
+	contains(patched.result.content[0].text, "before\n[REDACTED]\nafter")
+	not contains(patched.result.content[0].text, "b3BlbnNzaC1rZXktdjEAAAAA")
+	not contains(patched.result.content[0].text, "PRIVATE KEY")
+}
+
 # A 40-char git SHA must survive redaction untouched.
 test_git_sha_not_redacted if {
 	not mcp with input as {"mcp": {"result": {"content": [{

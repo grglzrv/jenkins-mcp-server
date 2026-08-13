@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import fnmatch
+import math
 import random
 import re
 from collections.abc import Mapping
@@ -69,6 +71,20 @@ SENSITIVE_RESPONSE_HEADERS = frozenset(
         "x-jenkins-crumb",
         "x-csrf-token",
     }
+)
+SENSITIVE_RESPONSE_HEADER_MARKERS = (
+    "authorization",
+    "cookie",
+    "credential",
+    "crumb",
+    "csrf",
+    "password",
+    "passwd",
+    "privatekey",
+    "secret",
+    "session",
+    "token",
+    "apikey",
 )
 
 # Node APIs include executor.currentExecutable at depth two. Returning the raw
@@ -179,9 +195,14 @@ QUEUE_ITEM_FIELDS = (
     "inQueueSince",
 )
 QUEUE_TASK_FIELDS = ("name", "fullName", "url")
+QUEUE_EXECUTABLE_FIELDS = ("number", "url")
 QUEUE_TREE = (
     "items[id,cancelled,why,blocked,buildable,stuck,inQueueSince,"
-    "task[name,fullName,url]]"
+    "task[name,fullName,url],executable[number,url]]"
+)
+QUEUE_ITEM_TREE = (
+    "id,cancelled,why,blocked,buildable,stuck,inQueueSince,"
+    "task[name,fullName,url],executable[number,url]"
 )
 
 RUNNING_BUILD_FIELDS = ("number", "fullDisplayName", "url")
@@ -192,11 +213,6 @@ RUNNING_BUILD_TREE = (
 )
 
 
-def _selected_fields(payload: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
-    """Project an upstream object onto the documented response contract."""
-    return {name: payload[name] for name in fields if name in payload}
-
-
 def _selected_scalar_fields(
     payload: dict[str, Any], fields: tuple[str, ...]
 ) -> dict[str, Any]:
@@ -205,8 +221,15 @@ def _selected_scalar_fields(
         name: payload[name]
         for name in fields
         if name in payload
-        and (payload[name] is None or isinstance(payload[name], str | bool | int | float))
+        and _is_json_scalar(payload[name])
     }
+
+
+def _is_json_scalar(value: Any) -> bool:
+    """Return whether a value can be represented as strict JSON scalar data."""
+    if value is None or isinstance(value, str | bool | int):
+        return True
+    return isinstance(value, float) and math.isfinite(value)
 
 
 def _project_object_list(
@@ -236,7 +259,10 @@ def _project_optional_object(
     return _selected_scalar_fields(payload, fields)
 
 
-def _parameter_is_sensitive(parameter: dict[str, Any]) -> bool:
+def _parameter_is_sensitive(
+    parameter: dict[str, Any],
+    configured_patterns: tuple[str, ...] = (),
+) -> bool:
     class_name = parameter.get("_class")
     if isinstance(class_name, str):
         compact_class = re.sub(r"[^a-z0-9]", "", class_name.casefold())
@@ -245,9 +271,15 @@ def _parameter_is_sensitive(parameter: dict[str, Any]) -> bool:
     name = parameter.get("name")
     if not isinstance(name, str):
         return False
+    normalized_name = name.casefold()
+    if any(
+        fnmatch.fnmatchcase(normalized_name, pattern.casefold())
+        for pattern in configured_patterns
+    ):
+        return True
     component_list = [
         component
-        for component in re.split(r"[^a-z0-9]+", name.casefold())
+        for component in re.split(r"[^a-z0-9]+", normalized_name)
         if component
     ]
     components = set(component_list)
@@ -262,7 +294,10 @@ def _parameter_is_sensitive(parameter: dict[str, Any]) -> bool:
     )
 
 
-def _project_parameters(payload: Any) -> list[dict[str, Any]]:
+def _project_parameters(
+    payload: Any,
+    configured_patterns: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
     error = "Jenkins returned malformed build JSON"
     if not isinstance(payload, list):
         raise JenkinsError(error)
@@ -273,9 +308,9 @@ def _project_parameters(payload: Any) -> list[dict[str, Any]]:
         summary = _selected_scalar_fields(parameter, ("name", "_class"))
         if "value" in parameter:
             value = parameter["value"]
-            if _parameter_is_sensitive(parameter):
+            if _parameter_is_sensitive(parameter, configured_patterns):
                 summary["value"] = REDACTED_PARAMETER_VALUE
-            elif value is None or isinstance(value, str | bool | int | float):
+            elif _is_json_scalar(value):
                 summary["value"] = value
             else:
                 summary["value"] = UNSUPPORTED_PARAMETER_VALUE
@@ -304,7 +339,10 @@ def _project_job_info(payload: Any) -> dict[str, Any]:
     return result
 
 
-def _project_build_info(payload: Any) -> dict[str, Any]:
+def _project_build_info(
+    payload: Any,
+    configured_patterns: tuple[str, ...] = (),
+) -> dict[str, Any]:
     error = "Jenkins returned malformed build JSON"
     if not isinstance(payload, dict):
         raise JenkinsError(error)
@@ -322,7 +360,13 @@ def _project_build_info(payload: Any) -> dict[str, Any]:
             if not isinstance(action, dict):
                 raise JenkinsError(error)
             if "parameters" in action:
-                actions.append({"parameters": _project_parameters(action["parameters"])})
+                actions.append(
+                    {
+                        "parameters": _project_parameters(
+                            action["parameters"], configured_patterns
+                        )
+                    }
+                )
         if actions:
             result["actions"] = actions
     return result
@@ -330,7 +374,25 @@ def _project_build_info(payload: Any) -> dict[str, Any]:
 
 def _node_status(payload: dict[str, Any]) -> dict[str, Any]:
     """Return documented node state without executor/job details."""
-    return _selected_fields(payload, NODE_STATUS_FIELDS)
+    return _selected_scalar_fields(payload, NODE_STATUS_FIELDS)
+
+
+def _project_queue_item(payload: dict[str, Any]) -> dict[str, Any]:
+    """Project a queue item without actions, parameters, or plugin payloads."""
+    summary = _selected_scalar_fields(payload, QUEUE_ITEM_FIELDS)
+    task = payload.get("task")
+    if task is not None:
+        if not isinstance(task, dict):
+            raise JenkinsError("Jenkins returned malformed queue JSON")
+        summary["task"] = _selected_scalar_fields(task, QUEUE_TASK_FIELDS)
+    executable = payload.get("executable")
+    if executable is not None:
+        if not isinstance(executable, dict):
+            raise JenkinsError("Jenkins returned malformed queue JSON")
+        summary["executable"] = _selected_scalar_fields(
+            executable, QUEUE_EXECUTABLE_FIELDS
+        )
+    return summary
 
 
 def _node_path(node_name: str) -> str:
@@ -424,6 +486,14 @@ def _is_crumb_rejection(text: str) -> bool:
     """Match Jenkins CSRF rejection phrases, not any mention of a crumb."""
     detail = text[:2000].casefold()
     return any(marker in detail for marker in CRUMB_REJECTION_MARKERS)
+
+
+def _response_header_is_sensitive(name: str) -> bool:
+    normalized = name.casefold()
+    if normalized in SENSITIVE_RESPONSE_HEADERS:
+        return True
+    compact = re.sub(r"[^a-z0-9]", "", normalized)
+    return any(marker in compact for marker in SENSITIVE_RESPONSE_HEADER_MARKERS)
 
 
 class JenkinsClient:
@@ -669,6 +739,51 @@ class JenkinsClient:
         if first_segment in AUTHENTICATION_REDIRECT_ROUTES:
             return "to a Jenkins authentication endpoint"
         return None
+
+    def _queue_location(self, response: httpx.Response) -> tuple[str, int]:
+        """Validate and decode Jenkins' build-trigger queue location."""
+        location = response.headers.get("Location")
+        if not location:
+            raise JenkinsError(
+                "Jenkins accepted the build trigger without a queue Location header"
+            )
+        try:
+            target = response.request.url.join(location)
+        except (httpx.InvalidURL, ValueError) as exc:
+            raise JenkinsError(
+                "Jenkins returned an invalid build queue Location header"
+            ) from exc
+        request_url = response.request.url
+        if (
+            target.scheme,
+            target.host,
+            target.port,
+        ) != (
+            request_url.scheme,
+            request_url.host,
+            request_url.port,
+        ):
+            raise JenkinsError(
+                "Jenkins returned a build queue Location outside its configured origin"
+            )
+        if target.query or target.fragment:
+            raise JenkinsError(
+                "Jenkins returned a build queue Location with a query or fragment"
+            )
+        route = unquote(target.path)
+        context_path = self.http.base_url.path.rstrip("/")
+        if context_path:
+            if not route.startswith(f"{context_path}/"):
+                raise JenkinsError(
+                    "Jenkins returned a build queue Location outside its configured context path"
+                )
+            route = route[len(context_path) :]
+        match = re.fullmatch(r"/queue/item/([1-9][0-9]*)/?", route)
+        if not match:
+            raise JenkinsError(
+                "Jenkins returned a build trigger Location that is not a queue item"
+            )
+        return str(target), int(match.group(1))
 
     @staticmethod
     def _retry_delay(response: httpx.Response, attempt: int) -> float:
@@ -1230,7 +1345,17 @@ class JenkinsClient:
             data=parameters,
             expected=(201, 302),
         )
-        return {"queued": True, "queue_url": response.headers.get("Location")}
+        try:
+            queue_url, queue_id = self._queue_location(response)
+        except JenkinsError:
+            await self.audit.emit_async(
+                "build.trigger",
+                "failure",
+                status="invalid_queue_location",
+                path=f"/{_job_path(job_name)}/{endpoint}",
+            )
+            raise
+        return {"queued": True, "queue_url": queue_url, "queue_id": queue_id}
 
     async def stop_build(
         self,
@@ -1267,7 +1392,8 @@ class JenkinsClient:
                 f"{_job_path(job_name)}/{selector}",
                 depth=0,
                 tree=BUILD_INFO_TREE,
-            )
+            ),
+            tuple(self.settings.parameter_redaction_patterns),
         )
 
     async def console(
@@ -1334,7 +1460,7 @@ class JenkinsClient:
         visible: list[dict[str, Any]] = []
         for item in result["items"]:
             if not isinstance(item, dict):
-                continue
+                raise JenkinsError("Jenkins returned malformed queue JSON")
             job_name = _queue_job_name(item)
             try:
                 allowed = bool(job_name and self.policy.allows_job(job_name))
@@ -1342,12 +1468,31 @@ class JenkinsClient:
                 allowed = False
             if not allowed:
                 continue
-            summary = _selected_fields(item, QUEUE_ITEM_FIELDS)
-            task = item.get("task")
-            if isinstance(task, dict):
-                summary["task"] = _selected_fields(task, QUEUE_TASK_FIELDS)
-            visible.append(summary)
+            visible.append(_project_queue_item(item))
         return {"items": visible}
+
+    async def queue_item(self, item_id: int) -> dict[str, Any]:
+        if isinstance(item_id, bool) or not isinstance(item_id, int) or item_id < 1:
+            raise ValueError("item_id must be a positive integer")
+        item = await self.api(
+            f"queue/item/{item_id}",
+            depth=0,
+            tree=QUEUE_ITEM_TREE,
+        )
+        if not isinstance(item, dict):
+            raise JenkinsError("Jenkins returned malformed queue JSON")
+        projected = _project_queue_item(item)
+        job_name = _queue_job_name(item)
+        if not job_name:
+            await self._deny_policy(
+                "queue_item_job",
+                str(item_id),
+                "Queue item does not identify a Jenkins job",
+                queue_item=item_id,
+            )
+        assert job_name is not None
+        await self._check_job(job_name)
+        return projected
 
     async def cancel_queue(self, item_id: int) -> dict[str, Any]:
         if isinstance(item_id, bool) or item_id < 1:
@@ -1356,7 +1501,14 @@ class JenkinsClient:
             "queue.cancel",
             target=str(item_id),
         )
-        item = await self.api(f"queue/item/{item_id}", depth=1)
+        # Authorization needs only the task identity. A depth-one queue item can
+        # include parameter/action payloads (including secrets) that this path
+        # never returns and should not download merely to decide policy.
+        item = await self.api(
+            f"queue/item/{item_id}",
+            depth=0,
+            tree=QUEUE_ITEM_TREE,
+        )
         job_name = _queue_job_name(item) if isinstance(item, dict) else None
         if not job_name:
             await self._deny_policy(
@@ -1408,8 +1560,10 @@ class JenkinsClient:
                     continue
                 running.append(
                     {
-                        "node": computer.get("displayName"),
-                        **_selected_fields(current, RUNNING_BUILD_FIELDS),
+                        "node": _selected_scalar_fields(
+                            computer, ("displayName",)
+                        ).get("displayName"),
+                        **_selected_scalar_fields(current, RUNNING_BUILD_FIELDS),
                     }
                 )
         return running
@@ -1422,11 +1576,11 @@ class JenkinsClient:
         )
         if not isinstance(result, dict) or not isinstance(result.get("computer"), list):
             raise JenkinsError("Jenkins returned malformed node-list JSON")
-        summaries = [
-            _node_status(node)
-            for node in result["computer"]
-            if isinstance(node, dict)
-        ]
+        summaries: list[dict[str, Any]] = []
+        for node in result["computer"]:
+            if not isinstance(node, dict):
+                raise JenkinsError("Jenkins returned malformed node-list JSON")
+            summaries.append(_node_status(node))
         response: dict[str, Any] = {"computer": summaries}
         for name in ("busyExecutors", "totalExecutors"):
             value = result.get(name)
@@ -1459,7 +1613,11 @@ class JenkinsClient:
             await self._require_write("node", target=node_name)
         encoded_node = _node_path(node_name)
         current = await self.node_info(node_name)
-        if bool(current.get("temporarilyOffline")) != offline:
+        current_state = current.get("temporarilyOffline")
+        if not isinstance(current_state, bool):
+            raise JenkinsError("Jenkins node response omitted temporarilyOffline")
+        changed = current_state != offline
+        if changed:
             await self.request(
                 "POST",
                 f"/computer/{encoded_node}/toggleOffline",
@@ -1467,7 +1625,19 @@ class JenkinsClient:
                 params={"offlineMessage": message},
                 expected=(200, 302),
             )
-        return {"node": node_name, "offline": offline}
+            verified = await self.node_info(node_name)
+            if verified.get("temporarilyOffline") is not offline:
+                await self.audit.emit_async(
+                    "node.toggle",
+                    "failure",
+                    status="state_not_applied",
+                    node=node_name,
+                    requested_offline=offline,
+                )
+                raise JenkinsError(
+                    "Jenkins acknowledged the node toggle but did not reach the requested state"
+                )
+        return {"node": node_name, "offline": offline, "changed": changed}
 
     async def scan_multibranch(self, job_name: str) -> dict[str, Any]:
         await self._require_write("job", job_name)
@@ -1572,7 +1742,7 @@ class JenkinsClient:
             "headers": {
                 name: value
                 for name, value in response.headers.items()
-                if name.lower() not in SENSITIVE_RESPONSE_HEADERS
+                if not _response_header_is_sensitive(name)
             },
             "body": response.text,
             "truncated": bool(response.extensions.get("jenkins_mcp_truncated", False)),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from urllib.parse import urlsplit
 from xml.sax.saxutils import escape
 
@@ -31,6 +32,16 @@ def _repository_url(value: str) -> str:
     if "\\" in value:
         raise ValueError("repository_url must use canonical forward-slash URL separators")
 
+    # Git's SCP-like SSH syntax has no URI scheme. Keep support for the common
+    # user@host:path form, but reject arbitrary scheme-looking strings before
+    # they reach Jenkins' Git plugin (notably file: and ext:: helpers).
+    scp_like = re.fullmatch(
+        r"[^@/:\s]+@[^@/:\s]+:[^\s]+",
+        value,
+    )
+    if scp_like:
+        return escape(value)
+
     try:
         parsed = urlsplit(value)
         hostname = parsed.hostname
@@ -38,6 +49,12 @@ def _repository_url(value: str) -> str:
     except ValueError as exc:
         raise ValueError("repository_url is not a valid Git repository URL") from exc
 
+    allowed_schemes = {"http", "https", "ssh", "git", "git+ssh"}
+    if parsed.scheme.casefold() not in allowed_schemes:
+        raise ValueError(
+            "repository_url must use http, https, ssh, git, git+ssh, "
+            "or canonical user@host:path SSH syntax"
+        )
     if parsed.query or parsed.fragment:
         raise ValueError(
             "repository_url must not contain a query string or fragment; "
@@ -50,8 +67,10 @@ def _repository_url(value: str) -> str:
             "repository_url must not contain embedded credentials; "
             "use credentials_id for authentication"
         )
-    if parsed.scheme.lower() in {"http", "https", "ssh", "git", "git+ssh"} and not hostname:
+    if not hostname:
         raise ValueError("repository_url must include a host")
+    if parsed.path in {"", "/"}:
+        raise ValueError("repository_url must include a repository path")
 
     return escape(value)
 

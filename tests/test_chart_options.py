@@ -55,6 +55,7 @@ def test_destructive_flags_exist_with_safe_defaults() -> None:
     assert mcp["maxRequestTargetBytes"] == 8192
     assert mcp["maxRequestBytes"] == 10_000_000
     assert mcp["maxResponseBytes"] == 10_000_000
+    assert mcp["redactParameterPatterns"] == []
 
 
 def test_241_security_defaults_are_consistent_across_runtime_and_deployments() -> None:
@@ -134,6 +135,7 @@ def test_destructive_flags_are_passed_to_the_container() -> None:
     for env in DESTRUCTIVE_ENV:
         assert env in configmap, f"{env} not wired into the ConfigMap"
     assert "MCP_ALLOW_SCRIPT_CONSOLE" in configmap
+    assert "MCP_REDACT_PARAMETER_PATTERNS" in configmap
 
 
 def test_audit_health_and_rotation_are_wired_and_validated() -> None:
@@ -178,6 +180,9 @@ def test_destructive_flags_are_in_the_schema() -> None:
         assert key in mcp["properties"]
         assert key in mcp["required"]
         assert mcp["properties"][key]["description"]
+    assert "redactParameterPatterns" in mcp["properties"]
+    assert "redactParameterPatterns" in mcp["required"]
+    assert mcp["properties"]["redactParameterPatterns"]["description"]
 
 
 def test_chart_env_names_match_the_settings_aliases() -> None:

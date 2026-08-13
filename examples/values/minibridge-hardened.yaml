@@ -31,6 +31,8 @@ jenkins:
 mcp:
   readOnly: true
   allowedJobs: "AI/*"
+  # Local names used for ordinary string parameters that still carry secrets.
+  redactParameterPatterns: ["*_AUTH", "SIGNING_*"]
   maxRequestTargetBytes: 8192
   maxRequestBytes: 10000000
   maxResponseBytes: 10000000
