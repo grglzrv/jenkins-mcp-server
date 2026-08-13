@@ -40,6 +40,81 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.9.9] - 2026-08-13
+
+### Highlights
+
+- Job discovery, job details, and build details now expose only their documented
+  response contracts instead of forwarding arbitrary Jenkins/plugin objects.
+- Build parameter values identified as passwords, tokens, secrets, or
+  credentials are redacted before they cross the MCP boundary.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- `get_job` and `get_build_info` now use narrow Jenkins `tree` queries, reducing
+  controller serialization work and MCP response size.
+- Shared projection helpers keep scalar fields, nested build references, health
+  reports, and parameter handling consistent across the structured read tools.
+- Tool descriptions, the compatibility contract, security guidance,
+  troubleshooting, and the Jenkins-through-Minibridge smoke now describe and
+  verify the projected response boundary.
+
+### Bug Fixes
+
+- `list_jobs` preserved unexpected top-level response fields even though its
+  public contract contains only the filtered `jobs` collection.
+- Individual `list_jobs` entries were returned verbatim, allowing action/plugin
+  objects not requested by the documented contract to cross the boundary.
+- Folder listings that had only a child `name` were policy-checked against a
+  reconstructed path but returned no `fullName`; the response now includes the
+  same canonical path that was authorized.
+- `get_job` returned depth-two action/property objects and upstream/downstream
+  job references, which could disclose metadata outside the allowed job's
+  documented state and build-reference contract.
+- `get_build_info` returned unrelated action, cause, artifact, change-set, and
+  plugin payloads rather than its documented result/timing/parameter contract.
+- Password/token/credential parameter classes and secret-like parameter names
+  could return their values; those values are now replaced with `[redacted]`,
+  while non-scalar plugin values receive an explicit unsupported marker.
+- Malformed nested job/build response structures could produce raw iteration or
+  attribute errors instead of stable `JenkinsError` diagnostics.
+- Boolean, float, or string console offsets could reach Jenkins despite the
+  public non-negative integer contract.
+- Invalid `X-More-Data`, a missing cursor while more data remained, or a
+  regressive cursor on a completed page could silently stop or corrupt console
+  pagination.
+
+### Breaking Changes
+
+- None. Documented identity/state/health/build/timing fields and the existing
+  Jenkins `actions[].parameters[]` shape remain available. Undocumented raw
+  plugin, relation, cause, artifact, and change-set passthrough is intentionally
+  removed.
+
+### Known Issues
+
+- Jenkins string parameters can contain sensitive data under an innocuous name.
+  Use Jenkins password/credential parameter types and secret-like names so the
+  server can identify them; do not place secrets in ordinary string parameters.
+
+### Security
+
+- Structured job and build reads now fail closed on malformed nested objects and
+  project only explicitly documented fields.
+- Allowed-job detail responses no longer carry upstream/downstream job objects,
+  closing an indirect metadata path around `MCP_ALLOWED_JOBS`.
+- Sensitive build parameters are redacted by parameter name and Jenkins class;
+  arbitrary nested parameter values are never forwarded.
+
+### Upgrade Notes
+
+- No configuration changes are required. Reconnect MCP sessions after rollout
+  so clients refresh the strengthened tool descriptions and response contract.
+
 ## [2.9.8] - 2026-08-13
 
 ### Highlights

@@ -89,7 +89,8 @@ async def list_jobs(folder: str | None = None) -> Any:
 
     Returns name, full path, URL and build colour. Pass a folder's full name,
     for example "Platform", to list its immediate children. Jobs outside
-    MCP_ALLOWED_JOBS are omitted rather than reported as errors."""
+    MCP_ALLOWED_JOBS are omitted rather than reported as errors. Arbitrary
+    plugin action/property payloads are not returned."""
     return await get_client().list_jobs(folder)
 
 
@@ -97,7 +98,8 @@ async def list_jobs(folder: str | None = None) -> Any:
 async def get_job(job_name: str) -> Any:
     """Get one job's current state: description, buildable flag, health and
     the most recent build references. Use get_job_config for its XML
-    definition, or get_build_info for a specific build."""
+    definition, or get_build_info for a specific build. Plugin actions and
+    upstream/downstream job objects are not returned."""
     return await get_client().get_job(job_name)
 
 
@@ -261,7 +263,10 @@ async def get_build_info(
     """Get one build's result, timing, duration and parameters.
 
     build_number accepts a number or an alias such as lastBuild,
-    lastSuccessfulBuild or lastFailedBuild."""
+    lastSuccessfulBuild or lastFailedBuild. Secret-like parameter names and
+    password/token/credential parameter classes have redacted values. Complex
+    plugin parameter values and unrelated action/change-set payloads are not
+    returned."""
     return await get_client().build_info(job_name, build_number)
 
 
@@ -275,7 +280,8 @@ async def get_build_console(
 
     Output is truncated to MCP_MAX_LOG_BYTES; pass the returned next_start back
     as start to continue reading, which is how a running build is followed.
-    build_number accepts a number or an alias such as lastBuild."""
+    build_number accepts a number or an alias such as lastBuild. Invalid or
+    incomplete Jenkins pagination metadata is refused rather than guessed."""
     return await get_client().console(job_name, build_number, start)
 
 

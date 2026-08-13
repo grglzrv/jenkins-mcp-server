@@ -218,7 +218,13 @@ async def main(url: str) -> int:
                 {"job_name": "/mcp-xml-job"},
                 "leading, trailing, or repeated",
             )
-            await call_allowed(session, called, "get_job", {"job_name": "mcp-xml-job"})
+            job = await call_allowed(
+                session, called, "get_job", {"job_name": "mcp-xml-job"}
+            )
+            job_text = result_text(job)
+            assert "actions" not in job_text and "downstreamProjects" not in job_text, (
+                "get_job exposed plugin actions or relation payloads"
+            )
             await call_allowed(
                 session,
                 called,
@@ -260,6 +266,16 @@ async def main(url: str) -> int:
                 session, called, "trigger_build", {"job_name": "mcp-pipeline-job"}
             )
             await wait_for_build(session, called, "mcp-pipeline-job", 1)
+            build_info = await call_allowed(
+                session,
+                called,
+                "get_build_info",
+                {"job_name": "mcp-pipeline-job", "build_number": 1},
+            )
+            build_text = result_text(build_info)
+            assert "changeSet" not in build_text and "artifacts" not in build_text, (
+                "get_build_info exposed undocumented nested payloads"
+            )
             running = await call_allowed(session, called, "list_running_builds", {})
             assert "actions" not in result_text(running), (
                 "list_running_builds exposed plugin action payloads"
@@ -385,7 +401,10 @@ async def main(url: str) -> int:
                 {"method": "GET", "path": "/view/All/%6aob/outside/api/json"},
                 "MCP_ALLOWED_JOBS",
             )
-            await call_allowed(session, called, "list_jobs", {})
+            jobs = await call_allowed(session, called, "list_jobs", {})
+            assert "actions" not in result_text(jobs), (
+                "list_jobs exposed plugin action payloads"
+            )
 
     missing = ALLOWED - called
     assert not missing, f"allowed tools not executed: {sorted(missing)}"

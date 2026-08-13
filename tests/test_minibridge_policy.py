@@ -432,7 +432,26 @@ def test_queue_and_running_tool_descriptions_exclude_raw_plugin_payloads() -> No
     assert "plugin-specific" in running and "not returned" in running
 
 
+def test_job_and_build_descriptions_document_response_projection() -> None:
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    assert "plugin action" in tools["list_jobs"]
+    assert "upstream/downstream" in tools["get_job"]
+    build = tools["get_build_info"]
+    assert "redacted" in build and "complex plugin parameter" in build
+    assert "pagination metadata" in tools["get_build_console"]
+
+
 def test_all_tools_smoke_checks_read_response_projection() -> None:
     smoke = (ROOT / "integration" / "minibridge_all_tools.py").read_text()
+    assert '"get_job exposed plugin actions or relation payloads"' in smoke
+    assert '"get_build_info exposed undocumented nested payloads"' in smoke
+    assert '"list_jobs exposed plugin action payloads"' in smoke
     assert '"list_running_builds exposed plugin action payloads"' in smoke
     assert '"get_queue exposed action or build-parameter payloads"' in smoke
