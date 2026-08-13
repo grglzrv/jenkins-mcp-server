@@ -40,6 +40,46 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.9.4] - 2026-08-13
+
+### Highlights
+
+- Health responses no longer expose a server/runtime fingerprint.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- The unnecessary `Server` header is omitted from successful and error
+  responses on the direct health listener.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None. Only the `Server` header is removed; status codes, bodies and the other
+  headers are unchanged.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- `BaseHTTPRequestHandler` advertises its implementation and the exact Python
+  patch level by default. Omitting that optional header reduces passive
+  fingerprinting on the direct health port. This is defense in depth, not a
+  substitute for applying Python and base-image security updates. The MCP port
+  was checked separately and does not expose a versioned runtime banner.
+
+### Upgrade Notes
+
+- No action required.
+
 ## [2.9.3] - 2026-08-13
 
 ### Highlights

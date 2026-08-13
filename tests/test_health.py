@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import urlopen
@@ -333,4 +334,34 @@ def test_connection_limit_warning_is_rate_limited(caplog, monkeypatch) -> None:
         assert refused == requests
     finally:
         server._slots.release()
+        server.server_close()
+
+
+def test_health_responses_do_not_advertise_a_server_banner() -> None:
+    server = start_health_server(
+        settings(MCP_HEALTH_HOST="127.0.0.1", MCP_HEALTH_PORT=0),
+        None,
+        JenkinsContact(),
+    )
+    host, port = server.server_address
+    try:
+        for method, path, expected in [
+            ("GET", "/healthz", 200),
+            ("GET", "/readyz", 200),
+            ("GET", "/missing", 404),
+            # Unsupported methods use BaseHTTPRequestHandler.send_error(), not
+            # the JSON response helper. Cover that independent response path.
+            ("POST", "/readyz", 501),
+        ]:
+            connection = HTTPConnection(host, port, timeout=2)
+            connection.request(method, path, body=b"" if method == "POST" else None)
+            response = connection.getresponse()
+            body = response.read()
+            assert response.status == expected
+            assert response.getheader("Server") is None
+            if path == "/healthz":
+                assert body == b'{"status":"ok"}'
+            connection.close()
+    finally:
+        server.shutdown()
         server.server_close()

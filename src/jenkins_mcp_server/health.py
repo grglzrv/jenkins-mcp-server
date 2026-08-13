@@ -146,6 +146,12 @@ class HealthHandler(BaseHTTPRequestHandler):
             return
         self._json(404, {"error": "not_found"})
 
+    def send_header(self, keyword: str, value: str) -> None:
+        """Omit the unnecessary runtime fingerprint from every response path."""
+        if keyword.casefold() == "server":
+            return
+        super().send_header(keyword, value)
+
     def log_message(self, format: str, *args: Any) -> None:
         log.debug("health: " + format, *args)
 
