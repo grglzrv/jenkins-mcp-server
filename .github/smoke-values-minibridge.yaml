@@ -54,6 +54,7 @@ resources:
 
 mcp:
   allowedJobs: "*"
+  maxRequestTargetBytes: 8192
   maxRequestBytes: 10000000
   maxResponseBytes: 10000000
 

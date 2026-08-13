@@ -1490,3 +1490,99 @@ async def test_normal_bodies_are_unaffected() -> None:
     jc = client(handler, JENKINS_MAX_RETRIES=0)
     await jc.create_job("job", "<project><description>real</description></project>")
     await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_overlong_request_targets_are_refused() -> None:
+    """The body cap does not cover the URL.
+
+    A job name is a URL component, so a deeply nested name expands into the
+    request target: 2000 segments produced a 12 KB URL, past the 8 KB default
+    header buffer of nginx and most reverse proxies. The request is then
+    refused by the proxy rather than by Jenkins, and the failure is opaque.
+    """
+    sent: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(str(request.url))
+        return httpx.Response(200, json={})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(ValueError, match="MCP_MAX_REQUEST_TARGET_BYTES"):
+        await jc.get_job("/".join(["s"] * 2000))
+    assert not sent, "an overlong URL reached Jenkins"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_request_target_limit_includes_encoded_query_and_context_path() -> None:
+    sent: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(200, json={})
+
+    jc = client(
+        handler,
+        JENKINS_URL="https://jenkins.test/jenkins/",
+        MCP_MAX_REQUEST_TARGET_BYTES=256,
+    )
+    path = "/api/json"
+    params = {"tree": "jobs[name]" * 30}
+    preview = jc.http.build_request("GET", path, params=params)
+    assert len(path.encode()) < 256 < len(preview.url.raw_path)
+
+    with pytest.raises(ValueError, match="MCP_MAX_REQUEST_TARGET_BYTES"):
+        await jc.request("GET", path, action="api.get", params=params)
+    assert not sent
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_overlong_request_target_is_audited_with_query_redacted(tmp_path) -> None:
+    log = tmp_path / "audit.jsonl"
+    marker = "TARGET-QUERY-SECRET"
+    jc = JenkinsClient(
+        settings(
+            JENKINS_URL="https://jenkins.test/jenkins/",
+            MCP_MAX_REQUEST_TARGET_BYTES=256,
+        ),
+        policy(),
+        AuditLogger(log),
+        transport=httpx.MockTransport(
+            lambda request: pytest.fail(
+                f"overlong target reached Jenkins: {request.url}"
+            )
+        ),
+    )
+    path = f"/api/json?token={marker}&padding={'x' * 300}"
+    expected_bytes = len(jc.http.build_request("GET", path).url.raw_path)
+
+    with pytest.raises(ValueError, match=f"is {expected_bytes} bytes"):
+        await jc.admin_request("GET", path)
+    await jc.close()
+
+    text = log.read_text()
+    assert marker not in text
+    [record] = [
+        item
+        for item in _audit_records(log)
+        if item["status"] == "request_target_too_long"
+    ]
+    assert record["path"] == "/api/json?[redacted]"
+    assert record["target_bytes"] == expected_bytes
+    assert record["target_limit_bytes"] == 256
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "job_name",
+    ["AI/nightly", "/".join(["folder"] * 20) + "/job", "/".join(["s"] * 100)],
+)
+async def test_real_job_hierarchies_are_unaffected(job_name: str) -> None:
+    """Twenty nested folders is deeper than any real Jenkins tree."""
+    jc = client(
+        lambda request: httpx.Response(200, json={}), JENKINS_MAX_RETRIES=0
+    )
+    await jc.get_job(job_name)
+    await jc.close()

@@ -54,13 +54,15 @@ are not blocked; Tailscale examples opt in and allow only the Tailscale
 namespace. If you enable the policy elsewhere, configure client namespace
 selectors and the Jenkins egress path before deploying it.
 
-The examples state both `mcp.maxRequestBytes: 10000000` and
-`mcp.maxResponseBytes: 10000000`. The request boundary refuses an exactly
-encoded body before any Jenkins or crumb request; the response boundary caps
-complete Jenkins API, job-config, and crumb responses independently of the
-smaller console/admin text limit. Increase either only for a measured legitimate
-request or response; the [troubleshooting guide](../docs/TROUBLESHOOTING.md)
-explains the failure modes.
+The examples state `mcp.maxRequestTargetBytes: 8192`,
+`mcp.maxRequestBytes: 10000000`, and `mcp.maxResponseBytes: 10000000`. The
+target boundary measures the exact encoded path and query, including a Jenkins
+context path; the body boundary measures HTTPX's encoded request body. Both run
+before any Jenkins or crumb request. The response boundary caps complete Jenkins
+API, job-config, and crumb responses independently of the smaller console/admin
+text limit. Increase a boundary only for a measured legitimate request or
+response and after confirming every proxy and Jenkins accepts it; the
+[troubleshooting guide](../docs/TROUBLESHOOTING.md) explains the failure modes.
 
 ## Networking and scaling
 

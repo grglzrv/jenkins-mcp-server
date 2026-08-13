@@ -51,6 +51,8 @@ def test_destructive_flags_exist_with_safe_defaults() -> None:
     # Deleting a job is irreversible, so it must not be on by default.
     assert mcp["allowJobDelete"] is False
     assert mcp["allowDestructive"] is False
+    assert mcp["healthMaxConnections"] == 64
+    assert mcp["maxRequestTargetBytes"] == 8192
     assert mcp["maxRequestBytes"] == 10_000_000
     assert mcp["maxResponseBytes"] == 10_000_000
 
@@ -97,6 +99,7 @@ def test_every_values_example_states_security_and_network_intent() -> None:
         example = yaml.safe_load(path.read_text())
         assert example["mcp"]["allowDestructive"] is False, path.name
         assert example["mcp"]["allowScriptConsole"] is False, path.name
+        assert example["mcp"]["maxRequestTargetBytes"] == 8192, path.name
         assert example["mcp"]["maxRequestBytes"] == 10_000_000, path.name
         assert example["mcp"]["maxResponseBytes"] == 10_000_000, path.name
         assert example["audit"]["fileEnabled"] is False, path.name
@@ -115,6 +118,7 @@ def test_every_argocd_application_states_security_and_network_intent() -> None:
         values_object = application["spec"]["source"]["helm"]["valuesObject"]
         assert values_object["mcp"]["allowDestructive"] is False, path.name
         assert values_object["mcp"]["allowScriptConsole"] is False, path.name
+        assert values_object["mcp"]["maxRequestTargetBytes"] == 8192, path.name
         assert values_object["mcp"]["maxRequestBytes"] == 10_000_000, path.name
         assert values_object["mcp"]["maxResponseBytes"] == 10_000_000, path.name
         assert values_object["audit"]["fileEnabled"] is False, path.name
@@ -170,6 +174,10 @@ def test_destructive_flags_are_in_the_schema() -> None:
     assert "maxRequestBytes" in mcp["properties"]
     assert "maxRequestBytes" in mcp["required"]
     assert mcp["properties"]["maxRequestBytes"]["description"]
+    for key in ["healthMaxConnections", "maxRequestTargetBytes"]:
+        assert key in mcp["properties"]
+        assert key in mcp["required"]
+        assert mcp["properties"][key]["description"]
 
 
 def test_chart_env_names_match_the_settings_aliases() -> None:
@@ -1392,8 +1400,10 @@ def test_smoke_values_disable_what_the_cluster_lacks() -> None:
         smoke_values = yaml.safe_load(path.read_text())
         expected_request_limit = 4096 if path.name == "smoke-values.yaml" else 10_000_000
         assert smoke_values["mcp"]["maxRequestBytes"] == expected_request_limit, path.name
+        assert smoke_values["mcp"]["maxRequestTargetBytes"] == 8192, path.name
         assert smoke_values["mcp"]["maxResponseBytes"] == 10_000_000, path.name
     workflow = (ROOT / ".github/workflows/chart-smoke.yml").read_text()
+    assert 'os.environ["MCP_MAX_REQUEST_TARGET_BYTES"] == "8192"' in workflow
     assert 'os.environ["MCP_MAX_REQUEST_BYTES"] == "4096"' in workflow
     assert 'os.environ["MCP_MAX_RESPONSE_BYTES"] == "10000000"' in workflow
 
@@ -1432,11 +1442,13 @@ def test_numeric_env_values_are_not_rendered_in_scientific_notation() -> None:
     """
     cm = (CHART / "templates/configmap.yaml").read_text()
     for key in [
+        "maxRequestTargetBytes",
         "maxRequestBytes",
         "maxResponseBytes",
         "maxLogBytes",
         "mcp.port",
         "healthPort",
+        "healthMaxConnections",
         "maxConcurrency",
         "maxRetries",
     ]:
@@ -1456,6 +1468,10 @@ def test_settings_reject_scientific_notation_so_the_cast_matters() -> None:
     base = dict(JENKINS_URL="https://j.test", JENKINS_USERNAME="u", JENKINS_TOKEN="t")
     assert Settings(**base, MCP_MAX_LOG_BYTES="1000000").max_log_bytes == 1000000
     assert Settings(**base, MCP_MAX_REQUEST_BYTES="10000000").max_request_bytes == 10000000
+    target = Settings(**base, MCP_MAX_REQUEST_TARGET_BYTES="8192")
+    health = Settings(**base, MCP_HEALTH_MAX_CONNECTIONS="64")
+    assert target.max_request_target_bytes == 8192
+    assert health.health_max_connections == 64
     assert Settings(**base, MCP_MAX_RESPONSE_BYTES="10000000").max_response_bytes == 10000000
     import pydantic
     import pytest
@@ -1464,6 +1480,10 @@ def test_settings_reject_scientific_notation_so_the_cast_matters() -> None:
         Settings(**base, MCP_MAX_LOG_BYTES="1e+06")
     with pytest.raises(pydantic.ValidationError):
         Settings(**base, MCP_MAX_REQUEST_BYTES="1e+07")
+    with pytest.raises(pydantic.ValidationError):
+        Settings(**base, MCP_MAX_REQUEST_TARGET_BYTES="8e+03")
+    with pytest.raises(pydantic.ValidationError):
+        Settings(**base, MCP_HEALTH_MAX_CONNECTIONS="6.4e+01")
     with pytest.raises(pydantic.ValidationError):
         Settings(**base, MCP_MAX_RESPONSE_BYTES="1e+07")
 

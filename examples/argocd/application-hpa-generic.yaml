@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: ghcr.io/grglzrv/charts
     chart: jenkins-mcp-server
-    targetRevision: 2.9.2
+    targetRevision: 2.9.3
     helm:
       releaseName: jenkins-mcp
       valuesObject:
@@ -43,6 +43,7 @@ spec:
 
         mcp:
           allowedJobs: "AI/*,Platform/*"
+          maxRequestTargetBytes: 8192
           maxRequestBytes: 10000000
           maxResponseBytes: 10000000
           allowDestructive: false

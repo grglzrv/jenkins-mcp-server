@@ -63,7 +63,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.9.2 \
+  --version 2.9.3 \
   --namespace jenkins-mcp \
   --set-string jenkins.url=https://jenkins.example.com \
   --set jenkins.credentials.create.enabled=false \
@@ -350,7 +350,9 @@ jenkins:
 | `mcp.allowDestructive` | **`false`** — master switch; all irreversible actions are opt-in |
 | `mcp.allowJobDelete` | **`false`** — irreversible, opt-in |
 | `mcp.allowJobUpdate` / `allowBuildStop` | `true` |
+| `mcp.healthMaxConnections` | `64` — direct-server health connections admitted before handler-thread creation; incomplete requests time out after five seconds (unused by Minibridge) |
 | `mcp.maxRequestBytes` | `10000000` — exact encoded-body limit applied before any Jenkins or crumb request |
+| `mcp.maxRequestTargetBytes` | `8192` — exact encoded path-and-query limit, including the configured Jenkins context path, applied before any Jenkins or crumb request |
 | `mcp.maxResponseBytes` | `10000000` — hard streamed-response limit for complete Jenkins API, config, and crumb responses |
 | `mcp.maxLogBytes` | `1000000` — hard streamed-response limit for console and administrator calls |
 | `mcp.extraEnv` | `[]` — additional variables such as `HTTP_PROXY`; names are case-sensitive, while chart-owned server, Minibridge, OTEL, policy, guardrail, and auth names are rejected in any capitalisation |
@@ -523,7 +525,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.9.2
+NEW_VERSION=2.9.3
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

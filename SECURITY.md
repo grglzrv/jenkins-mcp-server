@@ -54,6 +54,14 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
   exact encoded body before any Jenkins or CSRF-crumb request, limiting the
   controller impact of an oversized generated configuration or parameter set.
   It does not cap the MCP request already buffered by the transport.
+- Keep `MCP_MAX_REQUEST_TARGET_BYTES` bounded. Its 8192-byte default measures
+  the exact encoded Jenkins context path, path, and query before any Jenkins or
+  CSRF-crumb request. Confirm every proxy and Jenkins accepts a larger value
+  before raising it.
+- Keep the direct health port private. `MCP_HEALTH_MAX_CONNECTIONS` reserves
+  capacity before handler-thread creation and incomplete requests time out after
+  five seconds, but each admitted direct-server connection still owns a thread.
+  Minibridge publishes its own health endpoint instead.
 - Rotate the Jenkins API token and never commit `.env` or certificates.
 - Never put tokens, passwords, or other credentials in a Jenkins URL query.
   The server replaces complete query payloads with `?[redacted]` in its audit,

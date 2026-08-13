@@ -10,35 +10,101 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.9.3] - 2026-08-13
+
+### Highlights
+
+- Direct health traffic and Jenkins request targets now have explicit,
+  configurable boundaries instead of inheriting unbounded or dependency-owned
+  behavior.
+
+### New Features
+
+- `mcp.maxRequestTargetBytes` (`MCP_MAX_REQUEST_TARGET_BYTES`, default 8192)
+  caps the exact encoded path and query this server sends to Jenkins, including
+  a configured Jenkins context path.
+- `mcp.healthMaxConnections` (`MCP_HEALTH_MAX_CONNECTIONS`, default 64) caps
+  concurrent connections to the direct server's `/healthz` and `/readyz`
+  listener. Minibridge continues to publish its own health endpoint.
+
+### Improvements
+
+- Request-target measurement uses HTTPX's prepared URL, so percent-encoding,
+  query parameters, and a Jenkins context path cannot escape the boundary. The
+  check runs before the CSRF crumb is fetched and records a redacted
+  `request_target_too_long` audit entry.
+- Health capacity is reserved before `ThreadingHTTPServer` creates a handler
+  thread. Partial request lines expire after five seconds, excess connections
+  are closed, and refusal warnings are rate-limited to prevent a second log
+  amplification path.
+
+### Bug Fixes
+
+- Unexpected health-handler exceptions once again reach the standard server
+  error path; only routine disconnect and timeout errors are suppressed.
+
+### Breaking Changes
+
+- A path or query whose exact encoded request target exceeds 8192 bytes is
+  refused before contacting Jenkins. Raise `mcp.maxRequestTargetBytes` before
+  upgrading only if a measured legitimate request needs more and every proxy
+  and Jenkins is configured to accept it.
+
+### Known Issues
+
+- The MCP transport has already parsed tool arguments before the request-target
+  boundary runs; this protects Jenkins egress and proxy interoperability, not
+  the memory used to receive an MCP call.
+- The direct health listener still uses one Python thread per admitted
+  connection. The connection cap and timeout bound that exposure; they do not
+  turn the health server into an asynchronous server.
+
+### Security
+
+- `MCP_MAX_REQUEST_BYTES` bounds the body, not an agent-controlled path or
+  query. Oversized targets are now rejected predictably before Jenkins or an
+  intermediary chooses a different limit.
+- The direct health listener previously accepted held-open partial requests
+  without a socket timeout or connection bound, allowing an exposed health port
+  to create unbounded handler threads. Admission and timeout are now bounded;
+  keep the health Service private unless external monitoring requires it.
+
+### Upgrade Notes
+
+- No action is required for the shipped defaults. Operators with unusually long
+  Jenkins request targets or more than 64 legitimate simultaneous direct health
+  connections should measure demand and set the corresponding typed Helm value
+  explicitly before upgrading.
 
 ## [2.9.2] - 2026-08-12
 

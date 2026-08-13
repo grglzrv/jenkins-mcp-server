@@ -1,5 +1,7 @@
 import json
 import logging
+import socket
+import threading
 import time
 from pathlib import Path
 from urllib.request import urlopen
@@ -9,7 +11,7 @@ import httpx
 from jenkins_mcp_server.audit import AuditLogger
 from jenkins_mcp_server.config import Settings
 from jenkins_mcp_server.diagnostics import JenkinsContact
-from jenkins_mcp_server.health import readiness, start_health_server
+from jenkins_mcp_server.health import HealthHandler, readiness, start_health_server
 
 
 def settings(**overrides: object) -> Settings:
@@ -246,3 +248,101 @@ def test_transport_failure_warning_is_rate_limited_and_recovery_is_logged(caplog
     assert "Jenkins contact recovered after ConnectError" in caplog.text
     assert "first" not in caplog.text
     assert "second" not in caplog.text
+
+
+def test_health_capacity_is_reserved_before_a_handler_thread_is_created() -> None:
+    server = start_health_server(
+        settings(
+            MCP_HEALTH_HOST="127.0.0.1",
+            MCP_HEALTH_PORT=0,
+            MCP_HEALTH_MAX_CONNECTIONS=2,
+        )
+    )
+    acquired_by: list[str] = []
+    slots = server._slots
+
+    class RecordingSlots:
+        def acquire(self, *args, **kwargs):
+            acquired_by.append(threading.current_thread().name)
+            return slots.acquire(*args, **kwargs)
+
+        def release(self):
+            return slots.release()
+
+    server._slots = RecordingSlots()  # type: ignore[assignment]
+    held: list[socket.socket] = []
+    try:
+        host, port = server.server_address
+        for _ in range(20):
+            sock = socket.create_connection((host, port), timeout=1)
+            sock.sendall(b"GET /readyz HTTP/1.1\r\nHost: test\r\n")
+            held.append(sock)
+        deadline = time.monotonic() + 2
+        while len(acquired_by) < 3 and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        assert acquired_by
+        assert set(acquired_by) == {"health-server"}
+        handler_threads = [
+            thread
+            for thread in threading.enumerate()
+            if "process_request_thread" in thread.name
+        ]
+        assert len(handler_threads) <= 2
+    finally:
+        for sock in held:
+            sock.close()
+        server.shutdown()
+        server.server_close()
+
+
+def test_health_handler_timeout_is_bounded() -> None:
+    assert HealthHandler.timeout == 5
+
+
+def test_unexpected_health_handler_errors_are_not_suppressed(capsys) -> None:
+    server = start_health_server(
+        settings(MCP_HEALTH_HOST="127.0.0.1", MCP_HEALTH_PORT=0)
+    )
+    try:
+        try:
+            raise RuntimeError("unexpected health bug")
+        except RuntimeError:
+            server.handle_error(None, ("127.0.0.1", 1))
+        assert "unexpected health bug" in capsys.readouterr().err
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_connection_limit_warning_is_rate_limited(caplog) -> None:
+    server = start_health_server(
+        settings(
+            MCP_HEALTH_HOST="127.0.0.1",
+            MCP_HEALTH_PORT=0,
+            MCP_HEALTH_MAX_CONNECTIONS=1,
+        )
+    )
+    held: list[socket.socket] = []
+    caplog.set_level(logging.WARNING)
+    try:
+        host, port = server.server_address
+        first = socket.create_connection((host, port), timeout=1)
+        first.sendall(b"GET /readyz HTTP/1.1\r\nHost: test\r\n")
+        held.append(first)
+        time.sleep(0.05)
+        for _ in range(20):
+            sock = socket.create_connection((host, port), timeout=1)
+            held.append(sock)
+        time.sleep(0.1)
+        messages = [
+            record
+            for record in caplog.records
+            if "connection limit reached" in record.getMessage()
+        ]
+        assert len(messages) == 1
+    finally:
+        for sock in held:
+            sock.close()
+        server.shutdown()
+        server.server_close()

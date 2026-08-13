@@ -540,6 +540,7 @@
         "path",
         "healthHost",
         "healthPort",
+        "healthMaxConnections",
         "readOnly",
         "allowJobWrite",
         "allowBuildWrite",
@@ -547,6 +548,7 @@
         "allowAdminRequest",
         "allowScriptConsole",
         "allowedJobs",
+        "maxRequestTargetBytes",
         "maxRequestBytes",
         "maxResponseBytes",
         "maxLogBytes",
@@ -583,6 +585,12 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 65535
+        },
+        "healthMaxConnections": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "description": "Maximum concurrent direct-server health connections. Slots are reserved before handler threads are created; incomplete requests time out after five seconds."
         },
         "readOnly": {
           "type": "boolean"
@@ -647,6 +655,12 @@
           "minimum": 1024,
           "maximum": 100000000,
           "description": "Maximum encoded request-body bytes sent to Jenkins. Enforced before any controller or CSRF-crumb request."
+        },
+        "maxRequestTargetBytes": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 65536,
+          "description": "Maximum encoded HTTP request-target bytes sent to Jenkins, including the configured context path and query string. Enforced before any controller or CSRF-crumb request."
         }
       }
     },

@@ -27,6 +27,7 @@ data:
   MCP_PATH: {{ .Values.mcp.path | quote }}
   MCP_HEALTH_HOST: {{ .Values.mcp.healthHost | quote }}
   MCP_HEALTH_PORT: {{ .Values.mcp.healthPort | int | quote }}
+  MCP_HEALTH_MAX_CONNECTIONS: {{ .Values.mcp.healthMaxConnections | int | quote }}
   {{- end }}
   MCP_READ_ONLY: {{ .Values.mcp.readOnly | quote }}
   MCP_ALLOW_JOB_WRITE: {{ .Values.mcp.allowJobWrite | quote }}
@@ -39,6 +40,7 @@ data:
   MCP_ALLOW_JOB_UPDATE: {{ .Values.mcp.allowJobUpdate | quote }}
   MCP_ALLOW_BUILD_STOP: {{ .Values.mcp.allowBuildStop | quote }}
   MCP_ALLOWED_JOBS: {{ .Values.mcp.allowedJobs | quote }}
+  MCP_MAX_REQUEST_TARGET_BYTES: {{ .Values.mcp.maxRequestTargetBytes | int | quote }}
   MCP_MAX_REQUEST_BYTES: {{ .Values.mcp.maxRequestBytes | int | quote }}
   MCP_MAX_RESPONSE_BYTES: {{ .Values.mcp.maxResponseBytes | int | quote }}
   MCP_MAX_LOG_BYTES: {{ .Values.mcp.maxLogBytes | int | quote }}

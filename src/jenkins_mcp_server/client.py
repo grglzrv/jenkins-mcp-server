@@ -499,6 +499,38 @@ class JenkinsClient:
             )
         return request.content, request.headers.get("Content-Type")
 
+    async def _enforce_target_size(
+        self,
+        action: str,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None,
+    ) -> None:
+        """Refuse an encoded request target longer than the configured cap."""
+        limit = self.settings.max_request_target_bytes
+        # Build with the same client, base URL and params used by the send. Its
+        # raw_path is the exact encoded path plus query sent on the wire. This
+        # includes a Jenkins context path and URL-encoding expansion, which
+        # measuring the caller's Unicode `path` string misses.
+        preview = self.http.build_request(method, path, params=params)
+        size = len(preview.url.raw_path)
+        if size <= limit:
+            return
+        await self.audit.emit_async(
+            action,
+            "failure",
+            status="request_target_too_long",
+            path=path,
+            target_bytes=size,
+            target_limit_bytes=limit,
+        )
+        raise ValueError(
+            f"Request target for {action} is {size} bytes, over the "
+            f"{limit} byte MCP_MAX_REQUEST_TARGET_BYTES limit. Reduce the "
+            "encoded path or query, or raise the limit only if every proxy "
+            "and Jenkins accepts the larger request line."
+        )
+
     async def _enforce_request_size(
         self,
         action: str,
@@ -542,6 +574,7 @@ class JenkinsClient:
         encoded_body, generated_content_type = self._encode_request_body(data, json)
         # Checked before the crumb is fetched, so an oversized call costs no
         # round trip and never reaches the controller.
+        await self._enforce_target_size(action, method_upper, path, params)
         await self._enforce_request_size(action, path, encoded_body)
         request_headers = dict(headers or {})
         if generated_content_type:
