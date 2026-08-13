@@ -55,7 +55,8 @@ Nothing exotic. This is the complete surface:
 | --- | --- |
 | `GET /api/json` | `list_jobs` |
 | `GET /crumbIssuer/api/json` | Initial CSRF crumb plus stale-crumb and transient-404 recovery |
-| `GET /job/…/api/json` | `get_job`, `get_build_info`, `get_queue` |
+| `GET /job/…/api/json` | `get_job`, `get_build_info` |
+| `GET /queue/api/json` | `get_queue` |
 | `GET /job/…/config.xml` | `get_job_config` |
 | `POST /job/…/config.xml` | `update_job_config` |
 | `POST /createItem` | `create_job_from_xml`, `create_pipeline_job`, `create_multibranch_pipeline`, `copy_job` |
@@ -70,6 +71,11 @@ Nothing exotic. This is the complete surface:
 `list_nodes` and `get_node` deliberately request and return only node status.
 Executor and `currentExecutable` fields are excluded; use
 `list_running_builds` for allowlist-filtered running-job visibility.
+
+`get_queue` and `list_running_builds` also use explicit Jenkins `tree` queries
+and response projections. Queue action/build-parameter payloads and arbitrary
+plugin fields are not part of these tools; `get_build_info` remains the tool for
+documented build parameters after Jenkins assigns a build number.
 
 `/term` and `/kill` are Pipeline-only. On a freestyle job only `stop` applies;
 the other two return an error from Jenkins, which surfaces as a tool error
@@ -144,6 +150,7 @@ crumb or create request reaches Jenkins.
 | Very large API or job-config response | Every complete response is streamed up to `MCP_MAX_RESPONSE_BYTES`, default 10 MB, then refused rather than returned partially. Narrow folder queries first; raise the bound only for a measured legitimate response |
 | Very large job definition, administrator body, or build parameters | The exact encoded body is refused above `MCP_MAX_REQUEST_BYTES`, default 10 MB, before a crumb or Jenkins request. Reduce it or raise the bound only for a measured legitimate request |
 | Very large console logs | Streamed only up to `MCP_MAX_LOG_BYTES`, default 1 MB, and paginated. The response reports `truncated` and the offset to resume from without buffering the full Jenkins response |
+| Malformed progressive-log offset | A non-integer, negative, or forward-pagination offset behind the delivered bytes is rejected as an invalid Jenkins response instead of causing a raw exception or pagination loop |
 | Busy queue | `trigger_build` returns as soon as the item is queued. The build number does not exist until it leaves the queue, so poll `get_build_info` before addressing a build by number |
 | Multiple MCP replicas | Each maintains its own crumb and session. No shared state, so replicas do not interfere |
 

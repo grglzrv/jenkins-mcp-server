@@ -84,10 +84,37 @@ NODE_STATUS_FIELDS = (
 )
 NODE_STATUS_TREE = ",".join(NODE_STATUS_FIELDS)
 
+QUEUE_ITEM_FIELDS = (
+    "id",
+    "cancelled",
+    "why",
+    "blocked",
+    "buildable",
+    "stuck",
+    "inQueueSince",
+)
+QUEUE_TASK_FIELDS = ("name", "fullName", "url")
+QUEUE_TREE = (
+    "items[id,cancelled,why,blocked,buildable,stuck,inQueueSince,"
+    "task[name,fullName,url]]"
+)
+
+RUNNING_BUILD_FIELDS = ("number", "fullDisplayName", "url")
+RUNNING_BUILD_TREE = (
+    "computer[displayName,"
+    "executors[currentExecutable[number,fullDisplayName,url]],"
+    "oneOffExecutors[currentExecutable[number,fullDisplayName,url]]]"
+)
+
+
+def _selected_fields(payload: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
+    """Project an upstream object onto the documented response contract."""
+    return {name: payload[name] for name in fields if name in payload}
+
 
 def _node_status(payload: dict[str, Any]) -> dict[str, Any]:
     """Return documented node state without executor/job details."""
-    return {name: payload[name] for name in NODE_STATUS_FIELDS if name in payload}
+    return _selected_fields(payload, NODE_STATUS_FIELDS)
 
 
 def _node_path(node_name: str) -> str:
@@ -862,7 +889,7 @@ class JenkinsClient:
         path = _job_path(folder) if folder else ""
         result = await self.api(path, tree="jobs[name,fullName,url,color,_class]")
         if not isinstance(result, dict) or not isinstance(result.get("jobs"), list):
-            return result
+            raise JenkinsError("Jenkins returned malformed job-list JSON")
         visible: list[Any] = []
         for entry in result["jobs"]:
             if not isinstance(entry, dict):
@@ -1044,8 +1071,14 @@ class JenkinsClient:
             next_start = start + len(raw)
             more_data = True
         else:
-            next_start = int(response.headers.get("X-Text-Size", start + len(raw)))
             more_data = response.headers.get("X-More-Data", "false").lower() == "true"
+            offset = response.headers.get("X-Text-Size")
+            try:
+                next_start = start + len(raw) if offset is None else int(offset)
+            except ValueError as exc:
+                raise JenkinsError("Jenkins returned an invalid X-Text-Size header") from exc
+            if next_start < 0 or (more_data and next_start < start + len(raw)):
+                raise JenkinsError("Jenkins returned an invalid X-Text-Size header")
         return {
             "text": raw.decode(response.encoding or "utf-8", errors="replace"),
             "next_start": next_start,
@@ -1054,17 +1087,26 @@ class JenkinsClient:
         }
 
     async def queue(self) -> Any:
-        result = await self.api("queue", depth=2)
+        result = await self.api("queue", depth=0, tree=QUEUE_TREE)
         if not isinstance(result, dict) or not isinstance(result.get("items"), list):
-            return result
-        visible: list[Any] = []
+            raise JenkinsError("Jenkins returned malformed queue JSON")
+        visible: list[dict[str, Any]] = []
         for item in result["items"]:
             if not isinstance(item, dict):
                 continue
             job_name = _queue_job_name(item)
-            if job_name and self.policy.allows_job(job_name):
-                visible.append(item)
-        return {**result, "items": visible}
+            try:
+                allowed = bool(job_name and self.policy.allows_job(job_name))
+            except PolicyError:
+                allowed = False
+            if not allowed:
+                continue
+            summary = _selected_fields(item, QUEUE_ITEM_FIELDS)
+            task = item.get("task")
+            if isinstance(task, dict):
+                summary["task"] = _selected_fields(task, QUEUE_TASK_FIELDS)
+            visible.append(summary)
+        return {"items": visible}
 
     async def cancel_queue(self, item_id: int) -> dict[str, Any]:
         if isinstance(item_id, bool) or item_id < 1:
@@ -1094,20 +1136,41 @@ class JenkinsClient:
         return {"cancelled": item_id}
 
     async def running_builds(self) -> list[dict[str, Any]]:
-        data = await self.api("computer", depth=2)
+        data = await self.api("computer", depth=0, tree=RUNNING_BUILD_TREE)
+        if not isinstance(data, dict) or not isinstance(data.get("computer"), list):
+            raise JenkinsError("Jenkins returned malformed running-build JSON")
         running: list[dict[str, Any]] = []
-        for computer in data.get("computer", []):
-            executors = [
-                *computer.get("executors", []),
-                *computer.get("oneOffExecutors", []),
+        for computer in data["computer"]:
+            if not isinstance(computer, dict):
+                raise JenkinsError("Jenkins returned malformed running-build JSON")
+            executor_groups = [
+                computer.get("executors", []),
+                computer.get("oneOffExecutors", []),
             ]
+            if not all(isinstance(group, list) for group in executor_groups):
+                raise JenkinsError("Jenkins returned malformed running-build JSON")
+            executors = [executor for group in executor_groups for executor in group]
             for executor in executors:
+                if not isinstance(executor, dict):
+                    raise JenkinsError("Jenkins returned malformed running-build JSON")
                 current = executor.get("currentExecutable")
-                if current:
-                    job_name = _build_job_name(current)
-                    if not job_name or not self.policy.allows_job(job_name):
-                        continue
-                    running.append({"node": computer.get("displayName"), **current})
+                if current is None:
+                    continue
+                if not isinstance(current, dict):
+                    raise JenkinsError("Jenkins returned malformed running-build JSON")
+                job_name = _build_job_name(current)
+                try:
+                    allowed = bool(job_name and self.policy.allows_job(job_name))
+                except PolicyError:
+                    allowed = False
+                if not allowed:
+                    continue
+                running.append(
+                    {
+                        "node": computer.get("displayName"),
+                        **_selected_fields(current, RUNNING_BUILD_FIELDS),
+                    }
+                )
         return running
 
     async def nodes(self) -> Any:

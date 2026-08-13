@@ -18,6 +18,9 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
   through `jenkins_admin_request`, including view and percent-encoded forms.
   Node tools return status only and exclude executor/current-build objects so
   they cannot disclose job names outside that boundary.
+- Queue and running-build tools request and return only their documented
+  scheduling/build identity fields. Plugin actions, build-parameter values, and
+  other arbitrary nested response objects are excluded even for allowed jobs.
 - Keep `MCP_ALLOW_ADMIN_REQUEST=false` unless a reviewed use case requires it.
 - Treat an unexpected mutation redirect as a failed action. Typed tools
   validate normal Jenkins `302` responses and reject

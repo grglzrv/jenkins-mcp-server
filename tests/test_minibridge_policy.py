@@ -415,3 +415,24 @@ def test_body_carrying_tools_advertise_the_request_limit() -> None:
         "jenkins_admin_request",
     ]:
         assert "mcp_max_request_bytes" in tools[name], name
+
+
+def test_queue_and_running_tool_descriptions_exclude_raw_plugin_payloads() -> None:
+    import asyncio
+
+    from jenkins_mcp_server.server import mcp
+
+    tools = {
+        t.name: " ".join((t.description or "").lower().split())
+        for t in asyncio.run(mcp.list_tools())
+    }
+    queue = tools["get_queue"]
+    assert "actions" in queue and "build-parameter values" in queue
+    running = tools["list_running_builds"]
+    assert "plugin-specific" in running and "not returned" in running
+
+
+def test_all_tools_smoke_checks_read_response_projection() -> None:
+    smoke = (ROOT / "integration" / "minibridge_all_tools.py").read_text()
+    assert '"list_running_builds exposed plugin action payloads"' in smoke
+    assert '"get_queue exposed action or build-parameter payloads"' in smoke

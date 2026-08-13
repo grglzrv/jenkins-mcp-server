@@ -40,6 +40,73 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.9.8] - 2026-08-13
+
+### Highlights
+
+- Queue and running-build reads now expose only documented scheduling/build
+  identity fields and fail closed when Jenkins returns malformed structures.
+- Console pagination rejects invalid upstream offsets instead of throwing raw
+  conversion errors or sending clients backwards through the log.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- `get_queue` and `list_running_builds` use narrow Jenkins `tree` queries,
+  reducing controller response work and MCP payload size.
+- Read-response validation now returns consistent `JenkinsError` diagnostics for
+  malformed job, queue, running-build, and progressive-log responses.
+
+### Bug Fixes
+
+- A malformed `list_jobs` collection was returned verbatim, bypassing the
+  allowlist projection that applies to a valid `jobs` list.
+- A malformed `get_queue` collection was returned verbatim, bypassing job
+  filtering and exposing whatever object Jenkins or a proxy supplied.
+- Queue items with invalid/traversing job names raised `PolicyError` and aborted
+  the complete queue read instead of being omitted as untrusted entries.
+- `get_queue` requested depth-two queue data and returned raw action/plugin
+  fields, which could include build-parameter values unrelated to its documented
+  scheduling contract.
+- `list_running_builds` requested depth-two computer data and returned raw
+  `currentExecutable` plugin fields rather than its documented job/build identity.
+- Malformed top-level, computer, executor, or executable structures produced
+  `AttributeError`/iteration failures, or silently appeared as an empty running
+  set, instead of a stable Jenkins response error.
+- A non-integer `X-Text-Size` header escaped as a raw `ValueError`; negative or
+  regressive offsets could make progressive-console callers loop or move
+  backwards while Jenkins claimed more data.
+- The compatibility endpoint inventory incorrectly listed `get_queue` under a
+  job endpoint instead of `/queue/api/json`.
+
+### Breaking Changes
+
+- None. The documented queue fields (`id`, state, wait reason and task identity)
+  and running-build fields (node, build number/name and URL) are preserved.
+  Undocumented raw plugin/action passthrough is intentionally removed.
+
+### Known Issues
+
+- `get_build_info` intentionally returns Jenkins build parameters as documented;
+  operators remain responsible for Jenkins parameter visibility and should not
+  place secrets in ordinary string parameters.
+
+### Security
+
+- Queue action/build-parameter payloads and arbitrary executable plugin fields
+  no longer cross the MCP boundary through queue or running-build reads.
+- Malformed job/queue response shapes fail closed instead of skipping the
+  allowlist projection and returning the raw upstream object.
+
+### Upgrade Notes
+
+- No configuration changes are required. Clients using documented queue and
+  running-build fields continue unchanged; reconnect MCP sessions after rollout
+  to refresh the strengthened tool descriptions.
+
 ## [2.9.7] - 2026-08-13
 
 ### Highlights
