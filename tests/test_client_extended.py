@@ -70,6 +70,23 @@ async def test_read_and_mutation_methods() -> None:
                         }
                     },
                 )
+            if path == "/queue/api/json":
+                return httpx.Response(
+                    200,
+                    json={
+                        "items": [
+                            {
+                                "id": 2,
+                                "why": "waiting for an executor",
+                                "task": {
+                                    "name": "demo",
+                                    "fullName": "demo",
+                                    "url": "https://jenkins.test/job/demo/",
+                                },
+                            }
+                        ]
+                    },
+                )
             if path == "/computer/api/json":
                 return httpx.Response(
                     200,
@@ -140,7 +157,7 @@ async def test_read_and_mutation_methods() -> None:
     assert (await client.copy_job("demo", "demo-copy"))["target"] == "demo-copy"
     assert (await client.build("demo", {"ENV": "test"}))["queued"] is True
     assert (await client.build_info("demo", 1))["name"] == "demo"
-    assert (await client.queue())["name"] == "demo"
+    assert (await client.queue())["items"][0]["task"]["name"] == "demo"
     assert (await client.cancel_queue(5))["cancelled"] == 5
     assert (await client.nodes())["computer"][0]["displayName"] == "built-in"
     assert (await client.node_info("agent 1"))["displayName"] == "agent 1"

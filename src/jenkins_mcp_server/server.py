@@ -283,7 +283,8 @@ async def get_build_console(
 async def list_running_builds() -> Any:
     """List builds currently executing across the controller, with their job
     and build number. Jobs outside MCP_ALLOWED_JOBS are omitted. Use
-    get_build_console to follow one."""
+    get_build_console to follow one. Plugin-specific executor/action payloads
+    are not returned."""
     return await get_client().running_builds()
 
 
@@ -292,7 +293,8 @@ async def get_queue() -> Any:
     """List builds waiting to start, with why each is blocked.
 
     A queue item is not a build yet and has no build number; it gains one
-    when an executor picks it up. Items outside MCP_ALLOWED_JOBS are omitted."""
+    when an executor picks it up. Items outside MCP_ALLOWED_JOBS are omitted.
+    Queue actions and build-parameter values are not returned."""
     return await get_client().queue()
 
 

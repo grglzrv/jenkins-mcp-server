@@ -260,14 +260,21 @@ async def main(url: str) -> int:
                 session, called, "trigger_build", {"job_name": "mcp-pipeline-job"}
             )
             await wait_for_build(session, called, "mcp-pipeline-job", 1)
-            await call_allowed(session, called, "list_running_builds", {})
+            running = await call_allowed(session, called, "list_running_builds", {})
+            assert "actions" not in result_text(running), (
+                "list_running_builds exposed plugin action payloads"
+            )
             await call_allowed(
                 session,
                 called,
                 "get_build_console",
                 {"job_name": "mcp-pipeline-job", "build_number": 1},
             )
-            await call_allowed(session, called, "get_queue", {})
+            queue = await call_allowed(session, called, "get_queue", {})
+            queue_text = result_text(queue)
+            assert "actions" not in queue_text and "parameters" not in queue_text, (
+                "get_queue exposed action or build-parameter payloads"
+            )
 
             print("multibranch tools")
             await expect_application_rejection(
