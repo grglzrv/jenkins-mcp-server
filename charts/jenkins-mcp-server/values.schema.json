@@ -647,6 +647,11 @@
           "minimum": 1024,
           "maximum": 100000000,
           "description": "Maximum encoded request-body bytes sent to Jenkins. Enforced before any controller or CSRF-crumb request."
+        },
+        "maxRequestTargetBytes": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 65536
         }
       }
     },

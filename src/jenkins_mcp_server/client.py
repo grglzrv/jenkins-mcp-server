@@ -499,6 +499,35 @@ class JenkinsClient:
             )
         return request.content, request.headers.get("Content-Type")
 
+    async def _enforce_target_size(self, action: str, path: str) -> None:
+        """Refuse a request line longer than the configured cap.
+
+        The body cap does not cover this. A job name is a URL component, so a
+        deeply nested name expands into the request target rather than the
+        body: 2000 segments produced a 12 KB URL, above the 8 KB default of
+        nginx and of many reverse proxies, so the request is rejected at the
+        proxy rather than by Jenkins and the failure is opaque. httpx refuses
+        somewhere above 16 KB, which is well past the point where a real
+        deployment has already broken.
+        """
+        limit = self.settings.max_request_target_bytes
+        size = len(path.encode("utf-8"))
+        if size <= limit:
+            return
+        await self.audit.emit_async(
+            action,
+            "failure",
+            status="request_target_too_long",
+            path=path,
+            target_bytes=size,
+            target_limit_bytes=limit,
+        )
+        raise ValueError(
+            f"Request target for {action} is {size} bytes, over the "
+            f"{limit} byte MCP_MAX_REQUEST_TARGET_BYTES limit. The name or "
+            "path is too deeply nested."
+        )
+
     async def _enforce_request_size(
         self,
         action: str,
@@ -542,6 +571,7 @@ class JenkinsClient:
         encoded_body, generated_content_type = self._encode_request_body(data, json)
         # Checked before the crumb is fetched, so an oversized call costs no
         # round trip and never reaches the controller.
+        await self._enforce_target_size(action, path)
         await self._enforce_request_size(action, path, encoded_body)
         request_headers = dict(headers or {})
         if generated_content_type:

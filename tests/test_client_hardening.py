@@ -1490,3 +1490,39 @@ async def test_normal_bodies_are_unaffected() -> None:
     jc = client(handler, JENKINS_MAX_RETRIES=0)
     await jc.create_job("job", "<project><description>real</description></project>")
     await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_overlong_request_targets_are_refused() -> None:
+    """The body cap does not cover the URL.
+
+    A job name is a URL component, so a deeply nested name expands into the
+    request target: 2000 segments produced a 12 KB URL, past the 8 KB default
+    header buffer of nginx and most reverse proxies. The request is then
+    refused by the proxy rather than by Jenkins, and the failure is opaque.
+    """
+    sent: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(str(request.url))
+        return httpx.Response(200, json={})
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(ValueError, match="MCP_MAX_REQUEST_TARGET_BYTES"):
+        await jc.get_job("/".join(["s"] * 2000))
+    assert not sent, "an overlong URL reached Jenkins"
+    await jc.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "job_name",
+    ["AI/nightly", "/".join(["folder"] * 20) + "/job", "/".join(["s"] * 100)],
+)
+async def test_real_job_hierarchies_are_unaffected(job_name: str) -> None:
+    """Twenty nested folders is deeper than any real Jenkins tree."""
+    jc = client(
+        lambda request: httpx.Response(200, json={}), JENKINS_MAX_RETRIES=0
+    )
+    await jc.get_job(job_name)
+    await jc.close()

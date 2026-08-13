@@ -10,35 +10,80 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.9.3] - 2026-08-12
+
+### Highlights
+
+- The request line is bounded, closing the gap the request-body cap does not
+  cover.
+
+### New Features
+
+- `mcp.maxRequestTargetBytes` (`MCP_MAX_REQUEST_TARGET_BYTES`, default 8192)
+  caps the length of the URL this server sends to Jenkins.
+
+### Improvements
+
+- The check runs alongside the body cap, before the CSRF crumb is fetched, and
+  records a `request_target_too_long` audit entry so a refusal is visible rather
+  than silent.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- A job or node name that expands past 8192 bytes as a URL is refused. Twenty
+  nested folders is roughly 260 bytes, so a real hierarchy is far below it.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- `MCP_MAX_REQUEST_BYTES` bounds the body. A job name is a URL component, so it
+  expands into the request target instead: 2000 path segments produced a 12 KB
+  URL. That is past the 8 KB default header buffer of nginx and most reverse
+  proxies, so the request is rejected at the proxy rather than by Jenkins and
+  the caller sees an opaque failure. httpx refuses somewhere above 16 KB, well
+  past the point a real deployment has already broken, so the effective limit
+  was set by a dependency rather than by policy.
+
+### Upgrade Notes
+
+- No action required.
 
 ## [2.9.2] - 2026-08-12
 

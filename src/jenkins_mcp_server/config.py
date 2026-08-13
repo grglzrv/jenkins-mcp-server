@@ -88,6 +88,14 @@ class Settings(BaseSettings):
     # pushed at a controller shared with every other Jenkins client. The 10 MB
     # default matches the complete-response boundary and avoids
     # imposing a smaller, unsurveyed limit on existing job definitions.
+    # Cap on the request line, which the body cap does not cover. A job name is
+    # a URL component, so a deeply nested name expands into the target rather
+    # than the body. 8192 matches the default header buffer of nginx and most
+    # reverse proxies: past it the request is refused by the proxy rather than
+    # by Jenkins, and the failure is opaque.
+    max_request_target_bytes: int = Field(
+        default=8192, ge=256, le=65536, alias="MCP_MAX_REQUEST_TARGET_BYTES"
+    )
     max_request_bytes: int = Field(
         default=10_000_000, ge=1024, le=100_000_000, alias="MCP_MAX_REQUEST_BYTES"
     )
