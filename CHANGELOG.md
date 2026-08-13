@@ -10,35 +10,84 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.9.3] - 2026-08-12
+
+### Highlights
+
+- The health endpoint can no longer be used to exhaust the process.
+
+### New Features
+
+- `mcp.healthMaxConnections` (`MCP_HEALTH_MAX_CONNECTIONS`, default 64) caps the
+  connections the health server will service concurrently.
+
+### Improvements
+
+- The request handler gains a five second socket timeout, so a half-sent request
+  releases its thread instead of holding it until the client disconnects.
+- A client disconnecting mid-response is logged at debug rather than printing a
+  full traceback per occurrence, which a monitoring probe produces routinely.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- The cap converts unbounded exhaustion into bounded contention: a client
+  holding many connections open still competes with the monitoring probe for
+  slots. The socket timeout is what keeps that recoverable, and a probe
+  succeeded on every attempt over twelve seconds against two hundred held
+  connections in testing.
+
+### Security
+
+- `ThreadingHTTPServer` spawns a thread per connection with no limit and no
+  socket timeout. A client opening connections and never completing a request
+  held a thread each: 120 connections produced 120 threads, and they were never
+  reclaimed. The health port answers before anything else is ready and is
+  reachable from wherever the NetworkPolicy admits, so it was the cheapest way
+  to exhaust the process, and doing so needed no Jenkins credential and no MCP
+  session.
+
+### Upgrade Notes
+
+- No action required. Raise `mcp.healthMaxConnections` if many monitoring
+  systems scrape the endpoint concurrently.
 
 ## [2.9.2] - 2026-08-12
 

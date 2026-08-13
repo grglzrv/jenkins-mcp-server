@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     mount_path: str = Field(default="/mcp", alias="MCP_PATH")
     health_host: str = Field(default="0.0.0.0", alias="MCP_HEALTH_HOST")
     health_port: int = Field(default=8081, ge=0, le=65535, alias="MCP_HEALTH_PORT")
+    # Concurrent connections the health server will service. Each costs a
+    # thread, and the port answers before anything else is ready, so an
+    # unbounded count makes the probe endpoint the cheapest way to exhaust the
+    # process.
+    health_max_connections: int = Field(
+        default=64, ge=1, le=1024, alias="MCP_HEALTH_MAX_CONNECTIONS"
+    )
 
     read_only: bool = Field(default=False, alias="MCP_READ_ONLY")
     allow_job_write: bool = Field(default=True, alias="MCP_ALLOW_JOB_WRITE")

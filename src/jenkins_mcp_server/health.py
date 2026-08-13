@@ -71,7 +71,46 @@ def readiness(
     return ready, payload
 
 
+class BoundedHealthServer(ThreadingHTTPServer):
+    """Health server that cannot be held open indefinitely.
+
+    ThreadingHTTPServer spawns a thread per connection with no limit and no
+    socket timeout, so a client that opens connections and never completes a
+    request holds a thread each. The health port is reachable from anywhere the
+    NetworkPolicy admits, and a probe endpoint is the one thing guaranteed to be
+    listening, so this must not be the cheapest way to exhaust the process.
+    """
+
+    daemon_threads = True
+    # Refuse rather than queue without bound when the backlog is full.
+    request_queue_size = 32
+
+    def __init__(self, *args: Any, max_connections: int = 64, **kwargs: Any) -> None:
+        self._slots = threading.Semaphore(max_connections)
+        super().__init__(*args, **kwargs)
+
+    def process_request_thread(self, request: Any, client_address: Any) -> None:
+        # Non-blocking: over the cap, close immediately instead of parking a
+        # thread. A monitoring probe retries; a client holding connections open
+        # gets nothing to hold.
+        if not self._slots.acquire(blocking=False):
+            log.warning("health: connection limit reached, refusing %s", client_address)
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        # A client that disconnects mid-response is routine for a probe, and
+        # the default handler prints a full traceback per occurrence.
+        log.debug("health: client %s disconnected", client_address)
+
+
 class HealthHandler(BaseHTTPRequestHandler):
+    # Without this a half-sent request line holds its thread forever.
+    timeout = 5
     settings: Settings
     audit: AuditLogger | None = None
     contact: JenkinsContact
@@ -114,7 +153,11 @@ def start_health_server(
         (HealthHandler,),
         {"settings": settings, "audit": audit, "contact": shared_contact},
     )
-    server = ThreadingHTTPServer((settings.health_host, settings.health_port), handler)
+    server = BoundedHealthServer(
+        (settings.health_host, settings.health_port),
+        handler,
+        max_connections=settings.health_max_connections,
+    )
     thread = threading.Thread(target=server.serve_forever, name="health-server", daemon=True)
     thread.start()
     log.info(

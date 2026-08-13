@@ -9,7 +9,7 @@ import httpx
 from jenkins_mcp_server.audit import AuditLogger
 from jenkins_mcp_server.config import Settings
 from jenkins_mcp_server.diagnostics import JenkinsContact
-from jenkins_mcp_server.health import readiness, start_health_server
+from jenkins_mcp_server.health import HealthHandler, readiness, start_health_server
 
 
 def settings(**overrides: object) -> Settings:
@@ -246,3 +246,43 @@ def test_transport_failure_warning_is_rate_limited_and_recovery_is_logged(caplog
     assert "Jenkins contact recovered after ConnectError" in caplog.text
     assert "first" not in caplog.text
     assert "second" not in caplog.text
+
+
+def test_health_server_bounds_concurrent_connections() -> None:
+    """ThreadingHTTPServer spawns a thread per connection with no limit.
+
+    The health port answers before anything else is ready and is reachable from
+    wherever the NetworkPolicy admits, so it must not be the cheapest way to
+    exhaust the process.
+    """
+    import socket
+    import threading as _threading
+
+    settings = _settings(MCP_HEALTH_PORT=18211, MCP_HEALTH_HOST="127.0.0.1",
+                         MCP_HEALTH_MAX_CONNECTIONS=8)
+    server = start_health_server(settings)
+    try:
+        time.sleep(0.2)
+        baseline = _threading.active_count()
+        held = []
+        for _ in range(60):
+            try:
+                sock = socket.create_connection(("127.0.0.1", 18211), timeout=2)
+                # A request line that is never terminated.
+                sock.sendall(b"GET /readyz HTTP/1.1\r\nHost: x\r\n")
+                held.append(sock)
+            except OSError:
+                break
+        time.sleep(0.5)
+        # Threads are bounded by the cap regardless of how many connect.
+        assert _threading.active_count() - baseline <= 10, "thread count unbounded"
+        for sock in held:
+            sock.close()
+    finally:
+        server.shutdown()
+
+
+def test_health_handler_has_a_socket_timeout() -> None:
+    """Without it a half-sent request holds its thread until the client leaves."""
+    assert HealthHandler.timeout is not None
+    assert HealthHandler.timeout <= 30

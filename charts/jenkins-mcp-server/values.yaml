@@ -342,6 +342,8 @@ mcp:
   path: /mcp
   healthHost: 0.0.0.0
   healthPort: 8081
+  # Concurrent connections the health server will service. Each costs a thread.
+  healthMaxConnections: 64
   readOnly: false
   allowJobWrite: true
   allowBuildWrite: true
