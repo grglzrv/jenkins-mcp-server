@@ -63,7 +63,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.10.0 \
+  --version 2.10.1 \
   --namespace jenkins-mcp \
   --set-string jenkins.url=https://jenkins.example.com \
   --set jenkins.credentials.create.enabled=false \
@@ -368,6 +368,11 @@ over a private stdio pipe while exposing MCP 2025-03-26 Streamable HTTP at
 `mcp.path` (default `/mcp`). This is the same transport split used by Acuvity's
 registry images. Clients never use the internal stdio hop.
 
+Each MCP session owns an internal WebSocket and private stdio child. Normal
+session expiry is quiet at the default log level; a backend-close error together
+with pod restarts, probe failures, or `MCP Server exited` is not normal cleanup
+and should be investigated with the [troubleshooting guide](../../docs/TROUBLESHOOTING.md).
+
 ```mermaid
 flowchart LR
     Client["MCP client"]
@@ -526,7 +531,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.10.0
+NEW_VERSION=2.10.1
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

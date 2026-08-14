@@ -1,0 +1,54 @@
+diff --git a/pkgs/backend/ws.go b/pkgs/backend/ws.go
+index 848c6e2..39d4621 100644
+--- a/pkgs/backend/ws.go
++++ b/pkgs/backend/ws.go
+@@ -46,0 +47,12 @@ type wsBackend struct {
++func isBenignWebSocketClose(err error) bool {
++	if err == nil || errors.Is(err, net.ErrClosed) {
++		return true
++	}
++
++	message := err.Error()
++	return strings.HasSuffix(message, "websocket: close 1000 (normal)") ||
++		strings.HasSuffix(message, "websocket: close 1001 (going away)") ||
++		strings.HasSuffix(message, "websocket: close 1005 (no status)") ||
++		strings.HasSuffix(message, "websocket: close 1006 (abnormal closure): unexpected EOF")
++}
++
+@@ -369,5 +381 @@ func (p *wsBackend) handleWS(w http.ResponseWriter, req *http.Request) {
+-			if err != nil &&
+-				!strings.HasSuffix(err.Error(), "websocket: close 1000 (normal)") &&
+-				!strings.HasSuffix(err.Error(), "websocket: close 1001 (going away)") &&
+-				!strings.HasSuffix(err.Error(), "websocket: close 1005 (no status)") &&
+-				!strings.HasSuffix(err.Error(), "websocket: close 1006 (abnormal closure): unexpected EOF") {
++			if !isBenignWebSocketClose(err) {
+diff --git a/pkgs/backend/ws_test.go b/pkgs/backend/ws_test.go
+index 49e83b6..f6c8478 100644
+--- a/pkgs/backend/ws_test.go
++++ b/pkgs/backend/ws_test.go
+@@ -4,0 +5 @@ import (
++	"errors"
+@@ -16,0 +18,23 @@ import (
++func TestBenignWebSocketClose(t *testing.T) {
++	tests := []struct {
++		name string
++		err  error
++		want bool
++	}{
++		{name: "nil", err: nil, want: true},
++		{name: "closed network connection", err: net.ErrClosed, want: true},
++		{name: "wrapped closed network connection", err: fmt.Errorf("unable to read message: %w", net.ErrClosed), want: true},
++		{name: "normal close", err: errors.New("unable to read message: websocket: close 1000 (normal)"), want: true},
++		{name: "going away", err: errors.New("unable to read message: websocket: close 1001 (going away)"), want: true},
++		{name: "unexpected transport failure", err: errors.New("connection reset by peer"), want: false},
++	}
++
++	for _, test := range tests {
++		t.Run(test.name, func(t *testing.T) {
++			if got := isBenignWebSocketClose(test.err); got != test.want {
++				t.Fatalf("isBenignWebSocketClose(%v) = %t, want %t", test.err, got, test.want)
++			}
++		})
++	}
++}
++

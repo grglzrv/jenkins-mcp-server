@@ -641,6 +641,44 @@ jobs:
           cat /tmp/probe.log
           [ "$code" -eq 0 ] || { echo "::error::minibridge policy not enforced :: $(tail -c 600 /tmp/probe.log | tr '\n' '~')"; exit 1; }
 
+      - name: Close an MCP session cleanly on every replica
+        run: |
+          set -euo pipefail
+          mapfile -t pods < <(
+            kubectl -n jenkins-mcp get pods \
+              -l app.kubernetes.io/name=jenkins-mcp-server \
+              -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'
+          )
+          [ "${#pods[@]}" -eq 2 ] || {
+            echo "::error::expected two Minibridge replicas, found ${#pods[@]}"
+            exit 1
+          }
+
+          for index in "${!pods[@]}"; do
+            pod="${pods[$index]}"
+            local_port=$((8100 + index))
+            kubectl -n jenkins-mcp port-forward "pod/$pod" \
+              "${local_port}:8000" > "/tmp/port-forward-${index}.log" 2>&1 &
+            forward_pid=$!
+            sleep 2
+            python integration/minibridge_probe.py \
+              "http://127.0.0.1:${local_port}/mcp"
+            kill "$forward_pid"
+            wait "$forward_pid" 2>/dev/null || true
+          done
+
+          # Minibridge retains an otherwise idle session for ten seconds. Its
+          # local close must not be reported as a backend transport failure.
+          sleep 12
+          logs=$(kubectl -n jenkins-mcp logs \
+            -l app.kubernetes.io/name=jenkins-mcp-server --all-containers)
+          if grep -F 'Backend websocket has closed' <<<"$logs" | \
+             grep -Fq 'use of closed network connection'; then
+            echo "::error::normal Minibridge session cleanup was logged as an error"
+            grep -F 'Backend websocket has closed' <<<"$logs"
+            exit 1
+          fi
+
       - name: Diagnostics on failure
         if: failure()
         run: |
