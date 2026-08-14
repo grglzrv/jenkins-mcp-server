@@ -1359,7 +1359,7 @@ def test_minibridge_backports_benign_websocket_close_classification() -> None:
     assert "MINIBRIDGE_COMMIT=eea393407f60b2972ee065bcbc6fc49c6df03709" in dockerfile
     assert "MINIBRIDGE_SOURCE_SHA256=" in dockerfile
     assert "patch -p1 < /tmp/minibridge.patch" in dockerfile
-    assert "go test -mod=readonly ./pkgs/backend" in dockerfile
+    assert "go test -mod=readonly -vet=off ./pkgs/backend" in dockerfile
     assert 'errors.Is(err, net.ErrClosed)' in patch
     assert "wrapped closed network connection" in patch
     assert "unexpected transport failure" in patch
