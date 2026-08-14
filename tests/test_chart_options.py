@@ -1346,8 +1346,28 @@ def test_release_asset_download_failures_are_retried() -> None:
     assert "Do not hide a deterministic installer" in installer
     assert "max-parallel: 1" not in smoke
     assert "Minibridge image build attempt $attempt failed" not in smoke
-    assert minibridge.count("--retry 4 --retry-delay 2 --retry-all-errors") == 2
+    assert minibridge.count("--retry 4 --retry-delay 2 --retry-all-errors") == 1
     assert "curl -fsSL --retry 4 --retry-delay 2 --retry-all-errors" in ci
+
+
+def test_minibridge_backports_benign_websocket_close_classification() -> None:
+    """Normal per-session cleanup must not be surfaced as a backend failure."""
+    dockerfile = (ROOT / "docker/Dockerfile.minibridge").read_text()
+    patch = (ROOT / "docker/patches/minibridge-benign-websocket-close.patch").read_text()
+    smoke = (ROOT / ".github/workflows/chart-smoke.yml").read_text()
+
+    assert "MINIBRIDGE_COMMIT=eea393407f60b2972ee065bcbc6fc49c6df03709" in dockerfile
+    assert "MINIBRIDGE_SOURCE_SHA256=" in dockerfile
+    assert "patch -p1 < /tmp/minibridge.patch" in dockerfile
+    assert "go test -mod=readonly -vet=off ./pkgs/backend" in dockerfile
+    assert 'errors.Is(err, net.ErrClosed)' in patch
+    assert "wrapped closed network connection" in patch
+    assert "unexpected transport failure" in patch
+
+    assert "Close an MCP session cleanly on every replica" in smoke
+    assert '"pod/$pod"' in smoke
+    assert "sleep 12" in smoke
+    assert "normal Minibridge session cleanup was logged as an error" in smoke
 
 
 def test_release_is_gated_on_the_smoke_test() -> None:

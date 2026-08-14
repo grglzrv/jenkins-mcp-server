@@ -239,7 +239,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.10.0 \
+  --version 2.10.1 \
   --namespace jenkins-mcp \
   --values examples/values/existing-secret.yaml \
   --set-string jenkins.url=https://jenkins.example.com
@@ -504,7 +504,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.10.0
+NEW_VERSION=2.10.1
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 
@@ -544,8 +544,9 @@ repository only. The `-minibridge` image additionally bundles
 [Minibridge](https://github.com/acuvity/minibridge) by
 [Acuvity](https://github.com/acuvity), under Apache 2.0, alongside its base
 image's own packages; `docker/Dockerfile.minibridge` pins the exact Minibridge
-release and verifies its checksum. The guardrail model this project's Rego
-policy follows also originates with Acuvity's
+source commit, verifies its checksum, and applies the repository's documented
+compatibility backports before building it. The guardrail model this project's
+Rego policy follows also originates with Acuvity's
 [MCP server registry](https://github.com/acuvity/mcp-servers-registry).
 
 This is an independent project, not affiliated with or endorsed by the Jenkins

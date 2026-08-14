@@ -40,6 +40,53 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.1] - 2026-08-14
+
+### Highlights
+
+- Normal Minibridge session cleanup no longer produces false backend WebSocket
+  errors on otherwise healthy replicas.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- The Minibridge image now builds the exact checksum-pinned 0.8.0 source commit
+  with a narrow reviewed backport, and runs the affected upstream backend unit
+  tests before producing the multi-architecture binary.
+- The k3s smoke opens and closes an MCP session directly on each of two replicas,
+  waits through Minibridge's idle-session deadline, and rejects the former false
+  error in either pod's logs.
+
+### Bug Fixes
+
+- Minibridge's WebSocket dependency can report `net.ErrClosed` when Minibridge
+  intentionally closes an idle internal session. The bundled backend treated
+  that local shutdown as an unexpected transport failure and emitted
+  `Backend websocket has closed` at error level. The backport now classifies
+  `net.ErrClosed`, including wrapped forms, as normal cleanup while preserving
+  error reporting for resets and other genuine transport failures.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- None. The backport changes close-error classification only; policy, TLS,
+  credentials, and network exposure are unchanged.
+
+### Upgrade Notes
+
+- No configuration change is required. Upgrade both direct and `-minibridge`
+  image/chart pins together as usual. The fix affects only the Minibridge image.
+
 ## [2.10.0] - 2026-08-13
 
 ### Highlights
