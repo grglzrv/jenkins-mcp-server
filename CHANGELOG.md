@@ -10,35 +10,80 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.10.2] - 2026-08-15
+
+### Highlights
+
+- `get_queue_item` and `cancel_queue_item` no longer take an allowlist verdict
+  from a queue task URL pointing at another origin.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- None.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Both tools act on an item the caller names, and derived the job name from
+  `task.url` without checking where that URL pointed. A task carrying
+  `https://evil.test/job/AI/job/x/` read as the permitted job `AI/x` while
+  naming a host this server never contacted, so the allowlist decision was made
+  from a path outside its control. `_queue_location` already refuses a
+  cross-origin `Location` for the same reason; these paths now apply the same
+  rule and fall back to `fullName`, which Jenkins reports directly.
+- The queue listing is deliberately unchanged. It only omits entries it cannot
+  authorize, so applying the rule there would hide legitimate items when
+  Jenkins' advertised root differs from the address this server connects
+  through, which is the documented ingress-versus-Service case.
+
+### Upgrade Notes
+
+- No action required.
 
 ## [2.10.1] - 2026-08-14
 

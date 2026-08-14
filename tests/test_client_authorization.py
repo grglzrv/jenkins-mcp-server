@@ -293,3 +293,65 @@ async def test_console_does_not_redecode_streamed_gzip_content() -> None:
     assert result["text"] == content.decode()
     assert result["truncated"] is False
     await client.close()
+
+
+# --- a caller-named queue item is authorized from our own origin ------------
+
+
+def _item_client(payload: dict[str, object]) -> JenkinsClient:
+    return make_client(lambda request: httpx.Response(200, json=payload))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "task_url"),
+    [
+        ("queue_item", "https://evil.test/job/AI/job/x/"),
+        ("queue_item", "https://jenkins.test:8443/job/AI/job/x/"),
+        ("queue_item", "http://jenkins.test/job/AI/job/x/"),
+        ("cancel_queue", "https://evil.test/job/AI/job/x/"),
+    ],
+)
+async def test_item_lookups_do_not_trust_a_foreign_task_url(
+    method: str, task_url: str
+) -> None:
+    """These act on an item the caller named, so the verdict must come from a
+    response this server asked for.
+
+    A task URL on another host reads as the permitted job AI/x while naming a
+    host we never contacted. The queue listing is different: it only omits what
+    it cannot authorize, so it keeps using Jenkins' advertised root.
+    """
+    client = _item_client({"id": 7, "task": {"name": "x", "url": task_url}})
+    with pytest.raises(PolicyError):
+        await getattr(client, method)(7)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "task_url",
+    ["https://jenkins.test/job/AI/job/nightly/", "/job/AI/job/nightly/"],
+)
+async def test_same_origin_and_relative_task_urls_still_resolve(
+    task_url: str,
+) -> None:
+    """Jenkins returns both forms; neither may break."""
+    client = _item_client({"id": 7, "task": {"name": "nightly", "url": task_url}})
+    assert (await client.queue_item(7))["id"] == 7
+
+
+@pytest.mark.asyncio
+async def test_full_name_is_preferred_over_a_foreign_url() -> None:
+    """fullName comes from Jenkins' model rather than from a URL, so a
+    differing advertised root does not block a legitimate lookup."""
+    client = _item_client(
+        {
+            "id": 7,
+            "task": {
+                "name": "nightly",
+                "fullName": "AI/nightly",
+                "url": "https://ci.example.com/jenkins/job/AI/job/nightly/",
+            },
+        }
+    )
+    assert (await client.queue_item(7))["id"] == 7

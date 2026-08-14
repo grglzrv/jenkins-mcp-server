@@ -451,23 +451,55 @@ def _new_job_parts(job_name: str) -> tuple[str, str]:
     return parent, leaf
 
 
-def _queue_job_name(item: dict[str, Any]) -> str | None:
+def _queue_job_name(
+    item: dict[str, Any], base: httpx.URL | None = None
+) -> str | None:
     task = item.get("task")
     if not isinstance(task, dict):
         return None
     full_name = task.get("fullName")
     if isinstance(full_name, str) and full_name:
         return full_name
-    from_url = _job_name_from_url(task.get("url"))
+    from_url = _job_name_from_url(task.get("url"), base)
     if from_url:
         return from_url
     name = task.get("name")
     return name if isinstance(name, str) and name else None
 
 
-def _job_name_from_url(url: Any) -> str | None:
+def _job_name_from_url(url: Any, base: httpx.URL | None = None) -> str | None:
+    """Derive a job name from a Jenkins URL.
+
+    When base is given, a URL naming another origin yields None rather than a
+    name. The derived name decides an allowlist verdict, so it has to come from
+    a response this server actually asked for: `https://evil.test/job/AI/job/x/`
+    otherwise reads as the permitted job `AI/x` while naming a host we never
+    contacted. _queue_location already refuses a cross-origin Location for the
+    same reason.
+
+    Returning None rather than raising is deliberate. Jenkins builds these URLs
+    from its own configured root, which legitimately differs from the address
+    this server connects through: an ingress hostname versus an in-cluster
+    Service name is the common case, and this chart's own Tailscale guide
+    describes exactly that split. A differing host is therefore not evidence of
+    an attack, only evidence that the path cannot be trusted to name a job. The
+    caller falls back to the fields Jenkins reports directly, fullName and name.
+    """
     if not isinstance(url, str):
         return None
+    if base is not None:
+        parsed = urlsplit(url)
+        if parsed.scheme or parsed.netloc:
+            try:
+                target = base.join(url)
+            except (httpx.InvalidURL, ValueError):
+                return None
+            if (target.scheme, target.host, target.port) != (
+                base.scheme,
+                base.host,
+                base.port,
+            ):
+                return None
     # Jenkins may advertise its public root URL while this client connects to
     # an internal Service URL. This helper never follows the supplied URL; it
     # extracts only the decoded /job/<name> path used for allowlist checks, so
@@ -1457,6 +1489,10 @@ class JenkinsClient:
         for item in result["items"]:
             if not isinstance(item, dict):
                 raise JenkinsError("Jenkins returned malformed queue JSON")
+            # A listing only omits what it cannot authorize, so a job name
+            # derived from Jenkins' advertised root is safe to use here: the
+            # worst case is hiding an entry. queue_item and cancel_queue act on
+            # a caller-named item and apply the stricter origin rule instead.
             job_name = _queue_job_name(item)
             try:
                 allowed = bool(job_name and self.policy.allows_job(job_name))
@@ -1478,7 +1514,7 @@ class JenkinsClient:
         if not isinstance(item, dict):
             raise JenkinsError("Jenkins returned malformed queue JSON")
         projected = _project_queue_item(item)
-        job_name = _queue_job_name(item)
+        job_name = _queue_job_name(item, self.http.base_url)
         if not job_name:
             await self._deny_policy(
                 "queue_item_job",
@@ -1505,7 +1541,11 @@ class JenkinsClient:
             depth=0,
             tree=QUEUE_ITEM_TREE,
         )
-        job_name = _queue_job_name(item) if isinstance(item, dict) else None
+        job_name = (
+            _queue_job_name(item, self.http.base_url)
+            if isinstance(item, dict)
+            else None
+        )
         if not job_name:
             await self._deny_policy(
                 "queue_item_job",
