@@ -295,55 +295,58 @@ async def test_console_does_not_redecode_streamed_gzip_content() -> None:
     await client.close()
 
 
-# --- a caller-named queue item is authorized from our own origin ------------
+# --- queue items require a folder-qualified task identity -------------------
 
 
-def _item_client(payload: dict[str, object]) -> JenkinsClient:
-    return make_client(lambda request: httpx.Response(200, json=payload))
+def _item_client(
+    payload: dict[str, object], *, patterns: list[str] | None = None
+) -> JenkinsClient:
+    return make_client(
+        lambda request: httpx.Response(200, json=payload),
+        patterns=patterns,
+    )
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("method", "task_url"),
-    [
-        ("queue_item", "https://evil.test/job/AI/job/x/"),
-        ("queue_item", "https://jenkins.test:8443/job/AI/job/x/"),
-        ("queue_item", "http://jenkins.test/job/AI/job/x/"),
-        ("cancel_queue", "https://evil.test/job/AI/job/x/"),
-    ],
-)
-async def test_item_lookups_do_not_trust_a_foreign_task_url(
-    method: str, task_url: str
+@pytest.mark.parametrize("method", ["queue_item", "cancel_queue"])
+async def test_item_lookups_do_not_authorize_an_ambiguous_short_name(
+    method: str,
 ) -> None:
-    """These act on an item the caller named, so the verdict must come from a
-    response this server asked for.
+    """A leaf name cannot prove whether the task belongs to a folder.
 
-    A task URL on another host reads as the permitted job AI/x while naming a
-    host we never contacted. The queue listing is different: it only omits what
-    it cannot authorize, so it keeps using Jenkins' advertised root.
+    Before this fix, an actual ``Production/nightly`` item missing fullName and
+    URL could be authorized as top-level ``nightly`` by an allowlist containing
+    exactly that name.
     """
-    client = _item_client({"id": 7, "task": {"name": "x", "url": task_url}})
+    client = _item_client(
+        {"id": 7, "task": {"name": "nightly"}},
+        patterns=["nightly"],
+    )
     with pytest.raises(PolicyError):
         await getattr(client, method)(7)
+    await client.close()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "task_url",
-    ["https://jenkins.test/job/AI/job/nightly/", "/job/AI/job/nightly/"],
+    [
+        "https://ci.example.com/jenkins/job/AI/job/nightly/",
+        "/job/AI/job/nightly/",
+    ],
 )
-async def test_same_origin_and_relative_task_urls_still_resolve(
+async def test_public_and_relative_task_urls_preserve_folder_identity(
     task_url: str,
 ) -> None:
-    """Jenkins returns both forms; neither may break."""
+    """The URL is never fetched; Jenkins may advertise a different public root."""
     client = _item_client({"id": 7, "task": {"name": "nightly", "url": task_url}})
     assert (await client.queue_item(7))["id"] == 7
+    await client.close()
 
 
 @pytest.mark.asyncio
 async def test_full_name_is_preferred_over_a_foreign_url() -> None:
-    """fullName comes from Jenkins' model rather than from a URL, so a
-    differing advertised root does not block a legitimate lookup."""
+    """Jenkins' explicit folder-qualified identity remains authoritative."""
     client = _item_client(
         {
             "id": 7,
@@ -355,3 +358,18 @@ async def test_full_name_is_preferred_over_a_foreign_url() -> None:
         }
     )
     assert (await client.queue_item(7))["id"] == 7
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_queue_listing_omits_an_ambiguous_short_name() -> None:
+    client = make_client(
+        lambda request: httpx.Response(
+            200,
+            json={"items": [{"id": 7, "task": {"name": "nightly"}}]},
+        ),
+        patterns=["nightly"],
+    )
+
+    assert await client.queue() == {"items": []}
+    await client.close()

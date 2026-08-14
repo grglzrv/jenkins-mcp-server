@@ -40,12 +40,12 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
-## [2.10.2] - 2026-08-15
+## [2.10.2] - 2026-08-14
 
 ### Highlights
 
-- `get_queue_item` and `cancel_queue_item` no longer take an allowlist verdict
-  from a queue task URL pointing at another origin.
+- Queue reads and cancellation no longer authorize an ambiguous leaf-only task
+  name as though it were a complete Jenkins job path.
 
 ### New Features
 
@@ -57,7 +57,10 @@ from the matching version entry after CI validates it.
 
 ### Bug Fixes
 
-- None.
+- Queue authorization fell back to `task.name` when Jenkins omitted both
+  `task.fullName` and a usable task URL. Because `name` contains only the leaf,
+  a nested job such as `Production/nightly` could be mistaken for the allowed
+  top-level job `nightly`. Ambiguous items now fail closed.
 
 ### Breaking Changes
 
@@ -69,17 +72,12 @@ from the matching version entry after CI validates it.
 
 ### Security
 
-- Both tools act on an item the caller names, and derived the job name from
-  `task.url` without checking where that URL pointed. A task carrying
-  `https://evil.test/job/AI/job/x/` read as the permitted job `AI/x` while
-  naming a host this server never contacted, so the allowlist decision was made
-  from a path outside its control. `_queue_location` already refuses a
-  cross-origin `Location` for the same reason; these paths now apply the same
-  rule and fall back to `fullName`, which Jenkins reports directly.
-- The queue listing is deliberately unchanged. It only omits entries it cannot
-  authorize, so applying the rule there would hide legitimate items when
-  Jenkins' advertised root differs from the address this server connects
-  through, which is the documented ingress-versus-Service case.
+- Queue listing, item reads, and cancellation now require a folder-qualified
+  identity from `task.fullName` or the repeated `/job/<segment>` URL path.
+  `task.name` alone is never sufficient for an allowlist decision.
+- Jenkins task URLs remain path-only identity metadata and are never fetched.
+  Their advertised public origin may legitimately differ from the internal
+  Service URL configured by this server.
 
 ### Upgrade Notes
 
