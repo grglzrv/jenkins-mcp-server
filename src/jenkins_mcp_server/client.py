@@ -452,17 +452,21 @@ def _new_job_parts(job_name: str) -> tuple[str, str]:
 
 
 def _queue_job_name(item: dict[str, Any]) -> str | None:
+    """Return a folder-qualified queue task identity or fail closed.
+
+    ``task.name`` is only a leaf label. Falling back to it can collapse
+    ``Production/nightly`` into the apparently top-level ``nightly`` and make
+    an allowlist decision for the wrong job. Jenkins normally supplies either
+    ``fullName`` or a URL whose repeated ``/job/<segment>`` path preserves the
+    complete folder hierarchy; without one of those, the item is ambiguous.
+    """
     task = item.get("task")
     if not isinstance(task, dict):
         return None
     full_name = task.get("fullName")
     if isinstance(full_name, str) and full_name:
         return full_name
-    from_url = _job_name_from_url(task.get("url"))
-    if from_url:
-        return from_url
-    name = task.get("name")
-    return name if isinstance(name, str) and name else None
+    return _job_name_from_url(task.get("url"))
 
 
 def _job_name_from_url(url: Any) -> str | None:
@@ -1457,6 +1461,8 @@ class JenkinsClient:
         for item in result["items"]:
             if not isinstance(item, dict):
                 raise JenkinsError("Jenkins returned malformed queue JSON")
+            # Never authorize from task.name alone: it omits folder ancestry
+            # and can identify a different job than the queued task.
             job_name = _queue_job_name(item)
             try:
                 allowed = bool(job_name and self.policy.allows_job(job_name))

@@ -293,3 +293,83 @@ async def test_console_does_not_redecode_streamed_gzip_content() -> None:
     assert result["text"] == content.decode()
     assert result["truncated"] is False
     await client.close()
+
+
+# --- queue items require a folder-qualified task identity -------------------
+
+
+def _item_client(
+    payload: dict[str, object], *, patterns: list[str] | None = None
+) -> JenkinsClient:
+    return make_client(
+        lambda request: httpx.Response(200, json=payload),
+        patterns=patterns,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["queue_item", "cancel_queue"])
+async def test_item_lookups_do_not_authorize_an_ambiguous_short_name(
+    method: str,
+) -> None:
+    """A leaf name cannot prove whether the task belongs to a folder.
+
+    Before this fix, an actual ``Production/nightly`` item missing fullName and
+    URL could be authorized as top-level ``nightly`` by an allowlist containing
+    exactly that name.
+    """
+    client = _item_client(
+        {"id": 7, "task": {"name": "nightly"}},
+        patterns=["nightly"],
+    )
+    with pytest.raises(PolicyError):
+        await getattr(client, method)(7)
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "task_url",
+    [
+        "https://ci.example.com/jenkins/job/AI/job/nightly/",
+        "/job/AI/job/nightly/",
+    ],
+)
+async def test_public_and_relative_task_urls_preserve_folder_identity(
+    task_url: str,
+) -> None:
+    """The URL is never fetched; Jenkins may advertise a different public root."""
+    client = _item_client({"id": 7, "task": {"name": "nightly", "url": task_url}})
+    assert (await client.queue_item(7))["id"] == 7
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_full_name_is_preferred_over_a_foreign_url() -> None:
+    """Jenkins' explicit folder-qualified identity remains authoritative."""
+    client = _item_client(
+        {
+            "id": 7,
+            "task": {
+                "name": "nightly",
+                "fullName": "AI/nightly",
+                "url": "https://ci.example.com/jenkins/job/AI/job/nightly/",
+            },
+        }
+    )
+    assert (await client.queue_item(7))["id"] == 7
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_queue_listing_omits_an_ambiguous_short_name() -> None:
+    client = make_client(
+        lambda request: httpx.Response(
+            200,
+            json={"items": [{"id": 7, "task": {"name": "nightly"}}]},
+        ),
+        patterns=["nightly"],
+    )
+
+    assert await client.queue() == {"items": []}
+    await client.close()

@@ -10,35 +10,78 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None yet.
+- None.
 
 ### New Features
 
-- None yet.
+- None.
 
 ### Improvements
 
-- None yet.
+- None.
 
 ### Bug Fixes
 
-- None yet.
+- None.
 
 ### Breaking Changes
 
-- None yet.
+- None.
 
 ### Known Issues
 
-- None yet.
+- None.
 
 ### Security
 
-- None yet.
+- None.
 
 ### Upgrade Notes
 
-- None yet.
+- No action required.
+
+## [2.10.2] - 2026-08-14
+
+### Highlights
+
+- Queue reads and cancellation no longer authorize an ambiguous leaf-only task
+  name as though it were a complete Jenkins job path.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- None.
+
+### Bug Fixes
+
+- Queue authorization fell back to `task.name` when Jenkins omitted both
+  `task.fullName` and a usable task URL. Because `name` contains only the leaf,
+  a nested job such as `Production/nightly` could be mistaken for the allowed
+  top-level job `nightly`. Ambiguous items now fail closed.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Queue listing, item reads, and cancellation now require a folder-qualified
+  identity from `task.fullName` or the repeated `/job/<segment>` URL path.
+  `task.name` alone is never sufficient for an allowlist decision.
+- Jenkins task URLs remain path-only identity metadata and are never fetched.
+  Their advertised public origin may legitimately differ from the internal
+  Service URL configured by this server.
+
+### Upgrade Notes
+
+- No action required.
 
 ## [2.10.1] - 2026-08-14
 
