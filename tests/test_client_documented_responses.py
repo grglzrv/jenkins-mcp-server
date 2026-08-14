@@ -11,13 +11,18 @@ from jenkins_mcp_server.config import Settings
 from jenkins_mcp_server.security import Policy
 
 
-def make_client(handler: Callable[[httpx.Request], httpx.Response]) -> JenkinsClient:
-    settings = Settings(
-        JENKINS_URL="https://jenkins.test",
-        JENKINS_USERNAME="user",
-        JENKINS_TOKEN="token",
-        JENKINS_MAX_RETRIES=0,
-    )
+def make_client(
+    handler: Callable[[httpx.Request], httpx.Response],
+    **settings_overrides: object,
+) -> JenkinsClient:
+    values: dict[str, object] = {
+        "JENKINS_URL": "https://jenkins.test",
+        "JENKINS_USERNAME": "user",
+        "JENKINS_TOKEN": "token",
+        "JENKINS_MAX_RETRIES": 0,
+    }
+    values.update(settings_overrides)
+    settings = Settings(**values)  # type: ignore[arg-type]
     policy = Policy(
         read_only=False,
         allow_job_write=True,
@@ -267,6 +272,65 @@ async def test_build_info_projects_state_and_redacts_sensitive_parameters() -> N
     assert "compact-token-secret" not in rendered
     assert "nested-secret" not in rendered
     assert "internal-user" not in rendered
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_build_info_redacts_operator_defined_parameter_names() -> None:
+    client = make_client(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "number": 8,
+                "actions": [
+                    {
+                        "parameters": [
+                            {
+                                "name": "DEPLOY_AUTH",
+                                "value": "local-secret",
+                                "_class": "hudson.model.StringParameterValue",
+                            },
+                            {
+                                "name": "REGION",
+                                "value": "eu-west-1",
+                                "_class": "hudson.model.StringParameterValue",
+                            },
+                        ]
+                    }
+                ],
+            },
+        ),
+        MCP_REDACT_PARAMETER_PATTERNS="*_auth,signing_*",
+    )
+
+    result = await client.build_info("AI/build", 8)
+
+    parameters = result["actions"][0]["parameters"]
+    assert parameters[0]["value"] == "[redacted]"
+    assert parameters[1]["value"] == "eu-west-1"
+    assert "local-secret" not in str(result)
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_build_info_omits_non_finite_parameter_numbers() -> None:
+    client = make_client(
+        lambda request: httpx.Response(
+            200,
+            content=(
+                b'{"number":9,"actions":[{"parameters":['
+                b'{"name":"LOAD","value":NaN,'
+                b'"_class":"hudson.model.DoubleParameterValue"}]}]}'
+            ),
+            headers={"Content-Type": "application/json"},
+        )
+    )
+
+    result = await client.build_info("AI/build", 9)
+
+    assert result["actions"][0]["parameters"][0]["value"] == (
+        "[unsupported non-scalar value]"
+    )
     await client.close()
 
 

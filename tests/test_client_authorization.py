@@ -85,6 +85,12 @@ async def test_queue_and_running_builds_are_filtered_by_job_allowlist() -> None:
                     "items": [
                         {"id": 1, "task": {"fullName": "AI/build"}},
                         {"id": 2, "task": {"fullName": "Production/secret"}},
+                        {
+                            "id": 3,
+                            "task": {
+                                "url": "https://ci.example.com/jenkins/job/AI/job/proxy-build/"
+                            },
+                        },
                     ]
                 },
             )
@@ -98,12 +104,12 @@ async def test_queue_and_running_builds_are_filtered_by_job_allowlist() -> None:
                             "executors": [
                                 {
                                     "currentExecutable": {
-                                        "url": "https://jenkins.test/job/AI/job/build/1/"
+                                        "url": "https://ci.example.com/jenkins/job/AI/job/build/1/"
                                     }
                                 },
                                 {
                                     "currentExecutable": {
-                                        "url": "https://jenkins.test/job/Production/job/secret/2/"
+                                        "url": "https://ci.example.com/jenkins/job/Production/job/secret/2/"
                                     }
                                 },
                             ],
@@ -115,10 +121,13 @@ async def test_queue_and_running_builds_are_filtered_by_job_allowlist() -> None:
         raise AssertionError(f"unexpected request: {request.url}")
 
     client = make_client(handler)
-    assert [item["id"] for item in (await client.queue())["items"]] == [1]
+    # Jenkins' advertised public root may differ from the internal connection
+    # URL. Only its decoded job path is used for authorization; it is never
+    # fetched by this client.
+    assert [item["id"] for item in (await client.queue())["items"]] == [1, 3]
     running = await client.running_builds()
     assert [build["url"] for build in running] == [
-        "https://jenkins.test/job/AI/job/build/1/"
+        "https://ci.example.com/jenkins/job/AI/job/build/1/"
     ]
     await client.close()
 

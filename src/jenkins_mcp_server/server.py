@@ -231,10 +231,12 @@ async def trigger_build(
 ) -> Any:
     """Queue a build.
 
-    Returns queue_url, not a build number: the build has not started yet. Poll
-    get_queue, or use get_build_info once it has. For a parameterised job pass
-    parameters, using an empty object to accept every default; omitting it
-    entirely makes Jenkins reject the trigger. Their encoded form must fit
+    Returns a validated queue_id and a canonical queue_url built from configured
+    JENKINS_URL, not a build number: the build has not started yet. Poll
+    get_queue_item until its executable has a number, then use get_build_info.
+    For a parameterised job pass parameters, using an empty object to accept
+    every default; omitting it entirely makes Jenkins reject the trigger. Their
+    encoded form must fit
     MCP_MAX_REQUEST_BYTES."""
     return await get_client().build(job_name, parameters)
 
@@ -302,6 +304,17 @@ async def get_queue() -> Any:
     when an executor picks it up. Items outside MCP_ALLOWED_JOBS are omitted.
     Queue actions and build-parameter values are not returned."""
     return await get_client().queue()
+
+
+@mcp.tool()
+async def get_queue_item(item_id: int) -> Any:
+    """Follow one queued build from trigger to executor assignment.
+
+    Pass queue_id from trigger_build. While waiting, the response explains why
+    the item is blocked; once Jenkins starts it, executable contains the build
+    number and URL needed by get_build_info. The owning job must match
+    MCP_ALLOWED_JOBS. Jenkins retains completed queue records only briefly."""
+    return await get_client().queue_item(item_id)
 
 
 @mcp.tool()

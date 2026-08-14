@@ -499,7 +499,7 @@ async def test_empty_parameters_still_use_buildWithParameters() -> None:
                 200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
             )
         calls.append(request.url.path)
-        return httpx.Response(201, headers={"Location": "q"})
+        return httpx.Response(201, headers={"Location": "/queue/item/1/"})
 
     jc = client(handler)
     await jc.build("AI/x", {})
@@ -563,6 +563,8 @@ async def test_admin_request_withholds_session_and_csrf_headers() -> None:
             headers={
                 "Set-Cookie": "JSESSIONID=secret; Path=/",
                 "X-Jenkins-Crumb": "crumb-value",
+                "X-Plugin-Api-Token": "custom-token-value",
+                "X-Authentication-Session": "custom-session-value",
                 "X-Jenkins": "2.555.1",
             },
         )
@@ -572,6 +574,8 @@ async def test_admin_request_withholds_session_and_csrf_headers() -> None:
     names = {name.lower() for name in result["headers"]}
     assert "set-cookie" not in names
     assert "x-jenkins-crumb" not in names
+    assert "x-plugin-api-token" not in names
+    assert "x-authentication-session" not in names
     # Harmless headers still pass through, so the tool stays useful.
     assert "x-jenkins" in names
     await jc.close()
@@ -747,7 +751,7 @@ async def test_write_retries_only_before_sending(
         attempts += 1
         if attempts == 1:
             raise error_type("not sent", request=request)
-        return httpx.Response(201, headers={"Location": "/queue/1"})
+        return httpx.Response(201, headers={"Location": "/queue/item/1/"})
 
     async def no_sleep(_: float) -> None:
         return None
@@ -769,7 +773,7 @@ async def test_concurrent_writes_share_one_crumb_request() -> None:
             crumb_requests.append(request.url.path)
             await asyncio.sleep(0.02)
             return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
-        return httpx.Response(201, headers={"Location": "/queue/1"})
+        return httpx.Response(201, headers={"Location": "/queue/item/1/"})
 
     jc = client(handler, JENKINS_MAX_RETRIES=0)
     await asyncio.gather(*(jc.build(f"job{i}") for i in range(8)))
@@ -854,7 +858,7 @@ async def test_audit_write_failure_does_not_fail_a_completed_action(tmp_path, ca
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("crumbIssuer/api/json"):
             return httpx.Response(200, json={"crumbRequestField": "C", "crumb": "c"})
-        return httpx.Response(201, headers={"Location": "/queue/1"})
+        return httpx.Response(201, headers={"Location": "/queue/item/1/"})
 
     jc = JenkinsClient(
         settings(),
@@ -901,7 +905,7 @@ async def test_a_transient_crumb_404_does_not_disable_csrf_forever() -> None:
             )
         if "Jenkins-Crumb" not in request.headers:
             return httpx.Response(403, text="No valid crumb was included")
-        return httpx.Response(201, headers={"Location": "/queue/1"})
+        return httpx.Response(201, headers={"Location": "/queue/item/1/"})
 
     jc = client(handler, JENKINS_MAX_RETRIES=0)
     with pytest.raises(JenkinsError):
@@ -931,7 +935,7 @@ async def test_concurrent_writes_share_one_transient_crumb_recovery() -> None:
                     both_waiting.set()
                 await asyncio.wait_for(both_waiting.wait(), timeout=1)
             return httpx.Response(403, text="No valid crumb was included")
-        return httpx.Response(201, headers={"Location": "/queue/1"})
+        return httpx.Response(201, headers={"Location": "/queue/item/1/"})
 
     jc = client(handler, JENKINS_MAX_RETRIES=0)
     with pytest.raises(JenkinsError):
@@ -992,7 +996,7 @@ async def test_csrf_disabled_controllers_are_still_probed_only_once() -> None:
         if request.url.path == "/crumbIssuer/api/json":
             probes["count"] += 1
             return httpx.Response(404)
-        return httpx.Response(201, headers={"Location": "/queue/1"})
+        return httpx.Response(201, headers={"Location": "/queue/item/1/"})
 
     jc = client(handler, JENKINS_MAX_RETRIES=0)
     for _ in range(5):
@@ -1063,7 +1067,7 @@ async def test_crumb_preflight_does_not_deadlock_against_the_bound() -> None:
         if request.url.path == "/crumbIssuer/api/json":
             await asyncio.sleep(0.01)
             return httpx.Response(200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"})
-        return httpx.Response(201, headers={"Location": "/queue/1"})
+        return httpx.Response(201, headers={"Location": "/queue/item/1/"})
 
     jc = client(handler, JENKINS_MAX_RETRIES=0, JENKINS_MAX_CONCURRENCY=1)
     results = await asyncio.wait_for(
@@ -1101,14 +1105,20 @@ async def test_valid_node_names_still_work() -> None:
     """Validation must not reject the names Jenkins actually uses."""
     seen: list[str] = []
 
+    offline = True
+
     def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal offline
         # raw_path keeps the encoding; url.path decodes it.
         seen.append(request.url.raw_path.decode())
         if request.url.path.endswith("crumbIssuer/api/json"):
             return httpx.Response(
                 200, json={"crumbRequestField": "C", "crumb": "c"}
             )
-        return httpx.Response(200, json={"temporarilyOffline": True})
+        if request.url.path.endswith("/toggleOffline"):
+            offline = not offline
+            return httpx.Response(200)
+        return httpx.Response(200, json={"temporarilyOffline": offline})
 
     jc = client(handler, JENKINS_MAX_RETRIES=0)
     # Spaces are legal in Jenkins node names and must survive encoding.
@@ -1116,12 +1126,111 @@ async def test_valid_node_names_still_work() -> None:
     node_reads = [
         path for path in seen if path.startswith("/computer/build%20agent%201/api/json?")
     ]
-    assert len(node_reads) == 1
+    assert len(node_reads) == 2
     assert "depth=0" in node_reads[0]
     assert "currentExecutable" not in node_reads[0]
     assert any(
         path.startswith("/computer/build%20agent%201/toggleOffline?") for path in seen
     )
+    await jc.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "location",
+    [
+        None,
+        "https://jenkins.test/job/demo/",
+        "https://jenkins.test/queue/item/7/?token=secret",
+        "https://jenkins.test/queue/item/0/",
+        "ftp://jenkins.test/queue/item/7/",
+    ],
+)
+async def test_build_rejects_missing_or_untrusted_queue_location(
+    location: str | None,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(404)
+        headers = {"Location": location} if location is not None else {}
+        return httpx.Response(201, headers=headers)
+
+    jc = client(handler, JENKINS_MAX_RETRIES=0)
+    with pytest.raises(JenkinsError, match="queue Location|queue item|queue Location"):
+        await jc.build("demo")
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_build_returns_validated_queue_id_with_context_path() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/jenkins/crumbIssuer/api/json":
+            return httpx.Response(404)
+        return httpx.Response(
+            201,
+            headers={
+                "Location": "https://jenkins.test/jenkins/queue/item/42/",
+            },
+        )
+
+    jc = client(
+        handler,
+        JENKINS_URL="https://jenkins.test/jenkins",
+        JENKINS_MAX_RETRIES=0,
+    )
+
+    result = await jc.build("demo")
+
+    assert result == {
+        "queued": True,
+        "queue_url": "https://jenkins.test/jenkins/queue/item/42/",
+        "queue_id": 42,
+    }
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_build_canonicalizes_public_queue_location_to_configured_url() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(404)
+        return httpx.Response(
+            201,
+            headers={
+                "Location": "https://ci.example.com/jenkins/queue/item/43/",
+            },
+        )
+
+    jc = client(
+        handler,
+        JENKINS_URL="http://jenkins.jenkins.svc:8080",
+        JENKINS_MAX_RETRIES=0,
+    )
+
+    result = await jc.build("demo")
+
+    assert result == {
+        "queued": True,
+        "queue_url": "http://jenkins.jenkins.svc:8080/queue/item/43/",
+        "queue_id": 43,
+    }
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_toggle_node_refuses_false_success_when_state_did_not_change() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(404)
+        if request.url.path.endswith("/api/json"):
+            return httpx.Response(200, json={"temporarilyOffline": False})
+        return httpx.Response(200)
+
+    jc = client_with_policy(handler, allow_destructive=True)
+
+    with pytest.raises(JenkinsError, match="did not reach the requested state"):
+        await jc.toggle_node("agent", True)
+
     await jc.close()
 
 
@@ -1513,7 +1622,9 @@ async def test_oversized_request_bodies_are_refused() -> None:
 async def test_form_parameters_count_towards_the_request_cap() -> None:
     """Build parameters are a mapping, not a string, and were not measured."""
     jc = client(
-        lambda request: httpx.Response(201, headers={"Location": "/queue/1"}),
+        lambda request: httpx.Response(
+            201, headers={"Location": "/queue/item/1/"}
+        ),
         JENKINS_MAX_RETRIES=0,
         MCP_MAX_REQUEST_BYTES=4096,
     )
@@ -1529,7 +1640,7 @@ async def test_form_limit_measures_the_encoded_wire_body() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
-        return httpx.Response(201, headers={"Location": "/queue/1"})
+        return httpx.Response(201, headers={"Location": "/queue/item/1/"})
 
     jc = client(handler, JENKINS_MAX_RETRIES=0, MCP_MAX_REQUEST_BYTES=4096)
     # The input is about 2 KB, but URL encoding makes the body 6004 bytes.
@@ -1548,7 +1659,7 @@ async def test_preencoded_form_body_is_not_encoded_twice() -> None:
             return httpx.Response(404)
         assert request.content == b"A=x+y%26z"
         assert request.headers["Content-Type"] == "application/x-www-form-urlencoded"
-        return httpx.Response(201, headers={"Location": "/queue/1"})
+        return httpx.Response(201, headers={"Location": "/queue/item/1/"})
 
     jc = client(handler, JENKINS_MAX_RETRIES=0, MCP_MAX_REQUEST_BYTES=4096)
     assert (await jc.build("job", {"A": "x y&z"}))["queued"] is True

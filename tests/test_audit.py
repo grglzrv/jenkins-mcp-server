@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
+import os
 
 import httpx
 import pytest
@@ -135,6 +137,40 @@ def test_audit_json_remains_valid_after_recursive_redaction(tmp_path) -> None:
     record = json.loads(log.read_text())
     assert record["context"]["path"] == "/api/json?[redacted]"
     assert record["context"]["status"] == 200
+
+
+def test_audit_replaces_non_finite_numbers_with_valid_json(tmp_path) -> None:
+    log = tmp_path / "audit.jsonl"
+    AuditLogger(log).emit(
+        "api.get",
+        "failure",
+        values=[math.nan, math.inf, -math.inf],
+    )
+
+    text = log.read_text()
+    assert "NaN" not in text and "Infinity" not in text
+    assert json.loads(text)["values"] == [
+        "[non-finite number omitted]",
+        "[non-finite number omitted]",
+        "[non-finite number omitted]",
+    ]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX audit-file permissions")
+def test_existing_audit_and_lock_files_are_repaired_to_owner_only(tmp_path) -> None:
+    log = tmp_path / "audit.jsonl"
+    lock = tmp_path / "audit.jsonl.lock"
+    log.write_text("existing\n")
+    lock.write_text("")
+    log.chmod(0o644)
+    lock.chmod(0o666)
+
+    AuditLogger(log, max_bytes=1024 * 1024, backup_count=1).emit(
+        "api.get", "success"
+    )
+
+    assert log.stat().st_mode & 0o777 == 0o600
+    assert lock.stat().st_mode & 0o777 == 0o600
 
 
 def test_process_audit_json_remains_complete_under_root_filter(

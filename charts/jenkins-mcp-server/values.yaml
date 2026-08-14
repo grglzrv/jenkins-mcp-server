@@ -368,6 +368,10 @@ mcp:
   allowBuildStop: true
   # Applied to job discovery, queue/running-build visibility, and mutations.
   allowedJobs: "AI/*,Platform/*"
+  # Additional case-insensitive globs for build parameter names whose values
+  # get_build_info must redact. Built-in password/token/credential detection
+  # remains active. Use this for local conventions such as *_AUTH or SIGNING_*.
+  redactParameterPatterns: []
   # Encoded path + query boundary, including any Jenkins context path.
   # Proxy and Jenkins request-line limits vary; raise only after measuring the
   # complete target accepted throughout the deployment path.

@@ -26,7 +26,9 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
   objects cannot cross the allowlist through an allowed job's response.
 - Build details project documented result/timing fields and parameter metadata.
   Values are redacted for secret-like names and password, token, credential, or
-  secret parameter classes; non-scalar plugin values are not returned.
+  secret parameter classes; non-scalar plugin values are not returned. Add
+  local naming conventions such as `*_AUTH` through
+  `MCP_REDACT_PARAMETER_PATTERNS` (`mcp.redactParameterPatterns` in Helm).
 - Keep `MCP_ALLOW_ADMIN_REQUEST=false` unless a reviewed use case requires it.
 - Treat an unexpected mutation redirect as a failed action. Typed tools
   validate normal Jenkins `302` responses and reject
@@ -77,7 +79,9 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
 - Give `create_multibranch_pipeline` a credential reference through
   `credentials_id`; never embed a username, token, or password in
   `repository_url`. Repository query strings and fragments are rejected because
-  Jenkins persists the remote in job configuration. Keep `script_path`
+  Jenkins persists the remote in job configuration. Local `file:`, Git external
+  helper, and unrecognized schemes are rejected; use HTTP(S), SSH, or Git
+  transports. Keep `script_path`
   canonical and repository-relative; absolute, backslash, empty, `.` and `..`
   segments are rejected before Jenkins is contacted.
 - Keep the direct health port private. `MCP_HEALTH_MAX_CONNECTIONS` reserves
@@ -120,6 +124,10 @@ support inline secret values for these fields.
 The plain image does not include Minibridge. The separately published
 `<version>-minibridge` image bundles Minibridge and the Python server into one
 container; the chart selects it only when `minibridge.enabled=true`.
+
+The optional `secrets-redaction` guardrail removes recognized Jenkins/cloud
+tokens, session material, and complete PEM private-key blocks. It is defence in
+depth, not a substitute for keeping secret values out of tool responses.
 
 With `minibridge.mode=http`, the exposed `/mcp` endpoint is MCP 2025-03-26
 Streamable HTTP. Minibridge runs Jenkins MCP Server over a private stdio pipe

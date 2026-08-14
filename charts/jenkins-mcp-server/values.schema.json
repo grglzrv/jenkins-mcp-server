@@ -548,6 +548,7 @@
         "allowAdminRequest",
         "allowScriptConsole",
         "allowedJobs",
+        "redactParameterPatterns",
         "maxRequestTargetBytes",
         "maxRequestBytes",
         "maxResponseBytes",
@@ -609,6 +610,17 @@
         },
         "allowedJobs": {
           "type": "string"
+        },
+        "redactParameterPatterns": {
+          "type": "array",
+          "uniqueItems": true,
+          "description": "Additional case-insensitive glob patterns for build parameter names whose values get_build_info redacts. Built-in password, token, secret, credential, and private-key detection remains active.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 100
         },
         "maxResponseBytes": {
           "type": "integer",

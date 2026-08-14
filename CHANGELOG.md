@@ -40,6 +40,117 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.0] - 2026-08-13
+
+### Highlights
+
+- Build triggers now return a verified queue ID, and the new `get_queue_item`
+  tool follows that item until Jenkins assigns the real build number.
+- Operators can extend build-parameter redaction with local name globs, while
+  Minibridge now removes complete PEM private-key blocks rather than only their
+  algorithm label.
+- High-level multibranch creation, node transitions, queue responses, audit
+  files, and administrator response headers fail closed at previously
+  unverified production boundaries.
+
+### New Features
+
+- Added the read-only `get_queue_item(item_id)` tool. It returns projected queue
+  state and, after executor assignment, `executable.number` and URL, while
+  enforcing `MCP_ALLOWED_JOBS` against the owning job.
+- Added `MCP_REDACT_PARAMETER_PATTERNS` and Helm
+  `mcp.redactParameterPatterns` for case-insensitive local parameter-name globs
+  such as `*_AUTH` or `SIGNING_*`. Built-in secret detection remains active.
+- `trigger_build` now includes a numeric `queue_id` alongside a canonical
+  `queue_url` rebuilt from configured `JENKINS_URL`, giving clients a complete
+  trigger-to-build workflow without trusting an advertised foreign origin.
+
+### Improvements
+
+- Queue-item authorization and cancellation use a narrow Jenkins `tree` query,
+  avoiding download of action/parameter/plugin payloads that are not needed.
+- Queue, build-parameter, node, and running-build responses now share strict
+  JSON-scalar projection, including rejection of non-finite numbers that cannot
+  be emitted as standards-compliant JSON.
+- `set_node_offline` reports whether it changed state and verifies the requested
+  state with a follow-up read before returning success.
+- The all-tools Jenkins-through-Minibridge smoke now exercises queue-ID
+  tracking, the 24-tool surface, and unsafe repository-scheme rejection.
+- Runtime settings, Helm schema/wiring, the hardened values example, raw
+  Kubernetes configuration, security guidance, compatibility reference, and
+  troubleshooting are synchronized with the new behavior.
+
+### Bug Fixes
+
+- `create_multibranch_pipeline` accepted `file:`, Git external-helper, and
+  arbitrary unknown repository schemes, allowing its safe helper to persist or
+  invoke remotes outside its documented network Git contract. It now accepts
+  only HTTP(S), SSH, `git`, `git+ssh`, and canonical SCP-style SSH remotes.
+- Minibridge's PEM pattern captured only `RSA`/`OPENSSH` from a private-key
+  header, so response rewriting replaced the algorithm while leaving the key
+  body visible. The complete PEM block is now the redaction unit.
+- A successful build-trigger HTTP status with no Location, a query/fragment,
+  unsupported scheme, invalid queue ID, or non-queue route returned `queued:
+  true` with no trustworthy item to follow. The queue route is now validated and
+  any advertised public origin/prefix is replaced with configured
+  `JENKINS_URL`, preserving internal-Service/public-root deployments safely.
+- Queue/task/executable, node, and running-build selected fields could still
+  carry arbitrary nested plugin values despite their documented scalar
+  contracts; projections now omit those values and malformed containers fail.
+- `set_node_offline` used Jenkins' toggle endpoint and immediately echoed the
+  requested state, so a concurrent change, disappearing cloud agent, or plugin
+  no-op could be reported as success. A post-write state mismatch now fails.
+- Existing audit and rotation-lock files retained permissive pre-existing mode
+  bits because `O_CREAT` applies `0600` only to new files. POSIX descriptors are
+  now repaired to owner read/write on every open.
+- Audit metadata containing NaN or infinity produced non-standard JSONL. Those
+  values now receive an explicit omission marker.
+- `jenkins_admin_request` withheld a fixed list of session/CSRF headers but
+  forwarded plugin-defined token, credential, secret, or session headers. It
+  now applies sensitive-name detection to arbitrary response-header names.
+- Queue cancellation fetched depth-one queue objects—including actions and
+  parameter values—only to resolve the owning job. It now requests the same
+  minimal projected identity used by `get_queue_item`.
+
+### Breaking Changes
+
+- None. Existing tool names and documented fields remain available. Unsafe or
+  untrackable repository/queue responses, non-standard numeric values, and
+  undocumented sensitive header/plugin passthrough are intentionally refused
+  or removed.
+
+### Known Issues
+
+- Jenkins parameter values are visible to the MCP transport before application
+  projection runs. Keep real secrets in Jenkins password/credential types and
+  use `mcp.redactParameterPatterns` as defence in depth for local string-name
+  conventions.
+- The plain `git://` transport remains supported for compatibility but is not
+  encrypted; prefer HTTPS or SSH for production repositories.
+
+### Security
+
+- Closed local-file/external-helper repository schemes in the high-level
+  multibranch helper, complete-PEM redaction in Minibridge, custom sensitive
+  administrator headers, and permissive pre-existing audit-file modes.
+- Queue/node/running-build responses and queue authorization no longer process
+  or return undocumented nested plugin payloads.
+- Operator-defined parameter redaction closes the documented gap where an
+  ordinary string parameter stores a secret under a locally innocuous name.
+
+### Upgrade Notes
+
+- No mandatory configuration change. Reconnect MCP clients after rollout to
+  discover `get_queue_item` and the enriched `trigger_build` result.
+- Add local secret-name globs under `mcp.redactParameterPatterns` where ordinary
+  Jenkins string parameters carry sensitive values.
+- Existing POSIX audit and rotation-lock files are normalized to mode `0600` on
+  open. Forward the JSON log stream or run file readers under the server UID
+  instead of relying on group/world-readable audit files.
+- A reverse proxy may advertise a different public origin or prefix in a build
+  trigger Location; the server now extracts only its canonical
+  `/queue/item/<id>/` suffix and rebuilds the returned URL from `JENKINS_URL`.
+
 ## [2.9.9] - 2026-08-13
 
 ### Highlights

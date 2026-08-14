@@ -23,11 +23,21 @@ def policy(**overrides: object) -> Policy:
 
 
 def client(pol: Policy) -> JenkinsClient:
+    node_offline = True
+
     def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal node_offline
         if request.url.path == "/crumbIssuer/api/json":
             return httpx.Response(
                 200, json={"crumbRequestField": "Jenkins-Crumb", "crumb": "c"}
             )
+        if request.url.path == "/computer/agent/api/json":
+            return httpx.Response(
+                200, json={"temporarilyOffline": node_offline}
+            )
+        if request.url.path == "/computer/agent/toggleOffline":
+            node_offline = not node_offline
+            return httpx.Response(200)
         return httpx.Response(200, json={})
 
     settings = Settings(
@@ -149,7 +159,7 @@ async def test_client_cancel_queue_blocked_when_disabled() -> None:
 async def test_bringing_node_online_does_not_require_destructive_switch() -> None:
     jc = client(policy(allow_destructive=False, allow_node_write=True))
     result = await jc.toggle_node("agent", False)
-    assert result == {"node": "agent", "offline": False}
+    assert result == {"node": "agent", "offline": False, "changed": True}
     await jc.close()
 
 

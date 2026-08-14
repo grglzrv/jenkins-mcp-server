@@ -113,6 +113,94 @@ async def test_queue_omits_invalid_names_and_projects_documented_fields() -> Non
 
 
 @pytest.mark.asyncio
+async def test_queue_item_projects_executable_and_enforces_job_allowlist() -> None:
+    responses = {
+        "/queue/item/7/api/json": {
+            "id": 7,
+            "why": None,
+            "task": {
+                "name": "build",
+                "fullName": "AI/build",
+                "url": "https://jenkins.test/job/AI/job/build/",
+                "pluginSecret": "must not escape",
+            },
+            "executable": {
+                "number": 42,
+                "url": "https://jenkins.test/job/AI/job/build/42/",
+                "actions": [{"secret": "must not escape"}],
+            },
+            "actions": [{"parameters": [{"value": "must not escape"}]}],
+        },
+        "/queue/item/8/api/json": {
+            "id": 8,
+            "task": {"fullName": "Production/secret"},
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=responses[request.url.path])
+
+    client = make_client(handler)
+    result = await client.queue_item(7)
+
+    assert result == {
+        "id": 7,
+        "why": None,
+        "task": {
+            "name": "build",
+            "fullName": "AI/build",
+            "url": "https://jenkins.test/job/AI/job/build/",
+        },
+        "executable": {
+            "number": 42,
+            "url": "https://jenkins.test/job/AI/job/build/42/",
+        },
+    }
+    assert "secret" not in str(result).casefold()
+    with pytest.raises(PermissionError, match="MCP_ALLOWED_JOBS"):
+        await client.queue_item(8)
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"id": 7, "task": "not-an-object"},
+        {"id": 7, "task": {"fullName": "AI/build"}, "executable": []},
+    ],
+)
+async def test_queue_item_fails_closed_on_malformed_nested_data(payload: object) -> None:
+    client = make_client(lambda request: httpx.Response(200, json=payload))
+
+    with pytest.raises(JenkinsError, match="malformed queue JSON"):
+        await client.queue_item(7)
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_public_projections_omit_non_finite_plugin_numbers() -> None:
+    client = make_client(
+        lambda request: httpx.Response(
+            200,
+            content=(
+                b'{"items":[{"id":NaN,"why":"waiting",'
+                b'"task":{"fullName":"AI/build"}}]}'
+            ),
+            headers={"Content-Type": "application/json"},
+        )
+    )
+
+    result = await client.queue()
+
+    assert result == {
+        "items": [{"why": "waiting", "task": {"fullName": "AI/build"}}]
+    }
+    await client.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "payload",
     [

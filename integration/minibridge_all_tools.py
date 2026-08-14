@@ -12,6 +12,7 @@ the contract:
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 
 from mcp import ClientSession
@@ -42,6 +43,7 @@ ALLOWED = {
     "get_build_console",
     "list_running_builds",
     "get_queue",
+    "get_queue_item",
     "list_nodes",
     "get_node",
     "jenkins_admin_request",
@@ -262,8 +264,23 @@ async def main(url: str) -> int:
                 "create_pipeline_job",
                 {"job_name": "mcp-pipeline-job", "jenkinsfile": jenkinsfile},
             )
-            await call_allowed(
+            triggered = await call_allowed(
                 session, called, "trigger_build", {"job_name": "mcp-pipeline-job"}
+            )
+            trigger_payload = getattr(triggered, "structured_content", None)
+            if not isinstance(trigger_payload, dict):
+                trigger_payload = json.loads(result_text(triggered))
+            assert isinstance(trigger_payload.get("queue_id"), int), (
+                "trigger_build did not return a usable queue_id"
+            )
+            queued_item = await call_allowed(
+                session,
+                called,
+                "get_queue_item",
+                {"item_id": trigger_payload["queue_id"]},
+            )
+            assert "parameters" not in result_text(queued_item), (
+                "get_queue_item exposed build parameters"
             )
             await wait_for_build(session, called, "mcp-pipeline-job", 1)
             build_info = await call_allowed(
@@ -310,6 +327,15 @@ async def main(url: str) -> int:
                     "repository_url": "https://example.invalid/repo.git?token=secret",
                 },
                 "repository_url must not contain a query string or fragment",
+            )
+            await expect_application_rejection(
+                session,
+                "create_multibranch_pipeline",
+                {
+                    "job_name": "mcp-invalid-multibranch",
+                    "repository_url": "file:///var/lib/jenkins/secrets/repository",
+                },
+                "repository_url must use",
             )
             await expect_application_rejection(
                 session,

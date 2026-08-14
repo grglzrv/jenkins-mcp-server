@@ -57,6 +57,8 @@ data:
 
   # Server-side policy. Enforced in-process, independent of minibridge.
   MCP_ALLOWED_JOBS: "AI/*,Platform/*"
+  # Optional local secret-name conventions redacted from build parameters.
+  MCP_REDACT_PARAMETER_PATTERNS: "*_AUTH,SIGNING_*"
   # Bound encoded requests and complete Jenkins API/config responses separately
   # from console text.
   MCP_MAX_REQUEST_BYTES: "10000000"
@@ -126,7 +128,7 @@ spec:
         - name: server
           # The -minibridge variant bundles minibridge and the Rego policy. The
           # plain image does not contain them, so this tag is required.
-          image: ghcr.io/grglzrv/jenkins-mcp-server:2.9.9-minibridge
+          image: ghcr.io/grglzrv/jenkins-mcp-server:2.10.0-minibridge
           imagePullPolicy: IfNotPresent
           lifecycle:
             preStop:

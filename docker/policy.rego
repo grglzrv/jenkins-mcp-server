@@ -55,7 +55,9 @@ _redaction_patterns := [
 	`(?i)aws[_-]?secret[_-]?access[_-]?key\s*[:=]\s*['"]?([A-Za-z0-9+/=]{40})['"]?`,
 	`(ey[0-9A-Za-z_-]{17,}\.ey[0-9A-Za-z\\/\\_-]{17,}\.[0-9A-Za-z\\/\\_-]{10,}={0,2})`,
 	`(xox[abrp]-\d{10,13}-\d{10,13}[A-Za-z0-9-]*)`,
-	`-----BEGIN ([A-Z ]+)PRIVATE KEY-----`,
+	# Capture the complete PEM block. Capturing only the key algorithm replaces
+	# "RSA" while leaving the private-key body visible in the MCP response.
+	`(?s)(-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----)`,
 ]
 
 # Jenkins-specific sensitive surfaces: the script console is remote code
@@ -112,6 +114,7 @@ _cross_tool_exclude := [
 	"get_build_console",
 	"list_running_builds",
 	"get_queue",
+	"get_queue_item",
 	"cancel_queue_item",
 	"list_nodes",
 	"get_node",
@@ -166,7 +169,7 @@ _tool_groups := {
 	"@read": {
 		"list_jobs", "get_job", "get_job_config", "get_build_info",
 		"get_build_console", "list_running_builds", "get_queue",
-		"list_nodes", "get_node",
+		"get_queue_item", "list_nodes", "get_node",
 	},
 	"@write": {
 		"create_job_from_xml", "copy_job", "enable_job", "disable_job",

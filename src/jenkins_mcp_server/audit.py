@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import threading
@@ -117,8 +118,10 @@ def _bounded_fields(
         return "[audit nesting omitted]"
     if isinstance(value, str):
         return _bound(redact_query(value))
-    if value is None or isinstance(value, bool | int | float):
+    if value is None or isinstance(value, bool | int):
         return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else "[non-finite number omitted]"
     if isinstance(value, bytes | bytearray | memoryview):
         raw = bytes(value)
         return (
@@ -324,6 +327,8 @@ class AuditLogger:
             0o600,
         )
         try:
+            if os.name == "posix":
+                os.fchmod(descriptor, 0o600)
             original_size = os.fstat(descriptor).st_size
             # Opening an existing file succeeds on a full filesystem. A real
             # byte plus fsync catches ENOSPC and delayed storage failures; a
@@ -344,6 +349,8 @@ class AuditLogger:
             0o600,
         )
         try:
+            if os.name == "posix":
+                os.fchmod(descriptor, 0o600)
             view = memoryview(payload)
             while view:
                 written = os.write(descriptor, view)
@@ -369,6 +376,8 @@ class AuditLogger:
                         0o600,
                     )
                     try:
+                        if os.name == "posix":
+                            os.fchmod(lock_descriptor, 0o600)
                         if fcntl is not None:
                             fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
                         if line is None:

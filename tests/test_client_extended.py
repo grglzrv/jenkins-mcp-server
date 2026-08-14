@@ -53,8 +53,10 @@ def make_client(
 @pytest.mark.asyncio
 async def test_read_and_mutation_methods() -> None:
     requests: list[tuple[str, str]] = []
+    node_offline = False
 
     def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal node_offline
         path = request.url.path
         requests.append((request.method, path))
         if path == "/crumbIssuer/api/json":
@@ -107,7 +109,7 @@ async def test_read_and_mutation_methods() -> None:
                     200,
                     json={
                         "displayName": "agent 1",
-                        "temporarilyOffline": False,
+                        "temporarilyOffline": node_offline,
                     },
                 )
             return httpx.Response(
@@ -134,6 +136,8 @@ async def test_read_and_mutation_methods() -> None:
             "/queue/cancelItem",
             "/computer/agent 1/toggleOffline",
         }:
+            if path == "/computer/agent 1/toggleOffline":
+                node_offline = not node_offline
             return httpx.Response(
                 200,
                 headers={"Location": "https://jenkins.test/queue/item/2/"},
@@ -156,6 +160,7 @@ async def test_read_and_mutation_methods() -> None:
     assert (await client.enable_job("demo", False))["enabled"] is False
     assert (await client.copy_job("demo", "demo-copy"))["target"] == "demo-copy"
     assert (await client.build("demo", {"ENV": "test"}))["queued"] is True
+    assert (await client.queue_item(5))["task"]["fullName"] == "demo"
     assert (await client.build_info("demo", 1))["name"] == "demo"
     assert (await client.queue())["items"][0]["task"]["name"] == "demo"
     assert (await client.cancel_queue(5))["cancelled"] == 5
@@ -164,6 +169,7 @@ async def test_read_and_mutation_methods() -> None:
     assert (await client.running_builds())[0]["node"] == "built-in"
     toggled = await client.toggle_node("agent 1", True, "maintenance")
     assert toggled["offline"] is True
+    assert toggled["changed"] is True
     assert (await client.scan_multibranch("demo"))["scan_triggered"] == "demo"
     admin = await client.admin_request("POST", "/manage/reload", "{}")
     assert admin["status"] == 302
@@ -206,7 +212,7 @@ async def test_toggle_node_is_idempotent() -> None:
 
     client = make_client(handler)
     result = await client.toggle_node("agent", True)
-    assert result == {"node": "agent", "offline": True}
+    assert result == {"node": "agent", "offline": True, "changed": False}
     assert "/computer/agent/toggleOffline" not in calls
     await client.close()
 
