@@ -1140,10 +1140,10 @@ async def test_valid_node_names_still_work() -> None:
     "location",
     [
         None,
-        "https://evil.example/queue/item/7/",
         "https://jenkins.test/job/demo/",
         "https://jenkins.test/queue/item/7/?token=secret",
         "https://jenkins.test/queue/item/0/",
+        "ftp://jenkins.test/queue/item/7/",
     ],
 )
 async def test_build_rejects_missing_or_untrusted_queue_location(
@@ -1185,6 +1185,34 @@ async def test_build_returns_validated_queue_id_with_context_path() -> None:
         "queued": True,
         "queue_url": "https://jenkins.test/jenkins/queue/item/42/",
         "queue_id": 42,
+    }
+    await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_build_canonicalizes_public_queue_location_to_configured_url() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(404)
+        return httpx.Response(
+            201,
+            headers={
+                "Location": "https://ci.example.com/jenkins/queue/item/43/",
+            },
+        )
+
+    jc = client(
+        handler,
+        JENKINS_URL="http://jenkins.jenkins.svc:8080",
+        JENKINS_MAX_RETRIES=0,
+    )
+
+    result = await jc.build("demo")
+
+    assert result == {
+        "queued": True,
+        "queue_url": "http://jenkins.jenkins.svc:8080/queue/item/43/",
+        "queue_id": 43,
     }
     await jc.close()
 

@@ -231,11 +231,12 @@ async def trigger_build(
 ) -> Any:
     """Queue a build.
 
-    Returns a validated queue_id and same-origin queue_url, not a build number:
-    the build has not started yet. Poll get_queue_item until its executable has
-    a number, then use get_build_info. For a parameterised job pass parameters,
-    using an empty object to accept every default; omitting it entirely makes
-    Jenkins reject the trigger. Their encoded form must fit
+    Returns a validated queue_id and a canonical queue_url built from configured
+    JENKINS_URL, not a build number: the build has not started yet. Poll
+    get_queue_item until its executable has a number, then use get_build_info.
+    For a parameterised job pass parameters, using an empty object to accept
+    every default; omitting it entirely makes Jenkins reject the trigger. Their
+    encoded form must fit
     MCP_MAX_REQUEST_BYTES."""
     return await get_client().build(job_name, parameters)
 

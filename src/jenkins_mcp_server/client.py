@@ -468,6 +468,11 @@ def _queue_job_name(item: dict[str, Any]) -> str | None:
 def _job_name_from_url(url: Any) -> str | None:
     if not isinstance(url, str):
         return None
+    # Jenkins may advertise its public root URL while this client connects to
+    # an internal Service URL. This helper never follows the supplied URL; it
+    # extracts only the decoded /job/<name> path used for allowlist checks, so
+    # enforcing the configured origin here would silently hide legitimate
+    # queue/running-build entries in reverse-proxy deployments.
     # Decode exactly once, matching the URI decoding applied before Jenkins'
     # route dispatch. Splitting first and decoding each component afterwards
     # misses encoded separators and can make the policy inspect a different
@@ -741,7 +746,7 @@ class JenkinsClient:
         return None
 
     def _queue_location(self, response: httpx.Response) -> tuple[str, int]:
-        """Validate and decode Jenkins' build-trigger queue location."""
+        """Decode a queue ID and return its configured-origin canonical URL."""
         location = response.headers.get("Location")
         if not location:
             raise JenkinsError(
@@ -753,37 +758,28 @@ class JenkinsClient:
             raise JenkinsError(
                 "Jenkins returned an invalid build queue Location header"
             ) from exc
-        request_url = response.request.url
-        if (
-            target.scheme,
-            target.host,
-            target.port,
-        ) != (
-            request_url.scheme,
-            request_url.host,
-            request_url.port,
-        ):
+        if target.scheme not in {"http", "https"}:
             raise JenkinsError(
-                "Jenkins returned a build queue Location outside its configured origin"
+                "Jenkins returned a build queue Location with an unsupported scheme"
             )
         if target.query or target.fragment:
             raise JenkinsError(
                 "Jenkins returned a build queue Location with a query or fragment"
             )
         route = unquote(target.path)
-        context_path = self.http.base_url.path.rstrip("/")
-        if context_path:
-            if not route.startswith(f"{context_path}/"):
-                raise JenkinsError(
-                    "Jenkins returned a build queue Location outside its configured context path"
-                )
-            route = route[len(context_path) :]
-        match = re.fullmatch(r"/queue/item/([1-9][0-9]*)/?", route)
+        # Jenkins often advertises a public root URL while this client reaches
+        # it through an internal Service URL, and the two may have different
+        # origins or path prefixes. Trust only the canonical trailing route and
+        # numeric ID, then rebuild the URL from configured JENKINS_URL. This
+        # supports that topology without returning or following a foreign URL.
+        match = re.search(r"(?:^|/)queue/item/([1-9][0-9]*)/?$", route)
         if not match:
             raise JenkinsError(
                 "Jenkins returned a build trigger Location that is not a queue item"
             )
-        return str(target), int(match.group(1))
+        queue_id = int(match.group(1))
+        canonical = self.http.base_url.join(f"queue/item/{queue_id}/")
+        return str(canonical), queue_id
 
     @staticmethod
     def _retry_delay(response: httpx.Response, attempt: int) -> float:

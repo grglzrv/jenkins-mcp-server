@@ -61,8 +61,9 @@ from the matching version entry after CI validates it.
 - Added `MCP_REDACT_PARAMETER_PATTERNS` and Helm
   `mcp.redactParameterPatterns` for case-insensitive local parameter-name globs
   such as `*_AUTH` or `SIGNING_*`. Built-in secret detection remains active.
-- `trigger_build` now includes a numeric `queue_id` alongside its same-origin
-  `queue_url`, giving clients a complete trigger-to-build workflow.
+- `trigger_build` now includes a numeric `queue_id` alongside a canonical
+  `queue_url` rebuilt from configured `JENKINS_URL`, giving clients a complete
+  trigger-to-build workflow without trusting an advertised foreign origin.
 
 ### Improvements
 
@@ -88,9 +89,11 @@ from the matching version entry after CI validates it.
 - Minibridge's PEM pattern captured only `RSA`/`OPENSSH` from a private-key
   header, so response rewriting replaced the algorithm while leaving the key
   body visible. The complete PEM block is now the redaction unit.
-- A successful build-trigger HTTP status with no Location, a cross-origin URL,
-  a query/fragment, the wrong context path, or a non-queue route returned
-  `queued: true` with no trustworthy item to follow. Such responses now fail.
+- A successful build-trigger HTTP status with no Location, a query/fragment,
+  unsupported scheme, invalid queue ID, or non-queue route returned `queued:
+  true` with no trustworthy item to follow. The queue route is now validated and
+  any advertised public origin/prefix is replaced with configured
+  `JENKINS_URL`, preserving internal-Service/public-root deployments safely.
 - Queue/task/executable, node, and running-build selected fields could still
   carry arbitrary nested plugin values despite their documented scalar
   contracts; projections now omit those values and malformed containers fail.
@@ -144,9 +147,9 @@ from the matching version entry after CI validates it.
 - Existing POSIX audit and rotation-lock files are normalized to mode `0600` on
   open. Forward the JSON log stream or run file readers under the server UID
   instead of relying on group/world-readable audit files.
-- If a reverse proxy rewrites build-trigger Location headers, preserve the
-  configured Jenkins origin/context path and canonical `/queue/item/<id>/`
-  route before upgrading.
+- A reverse proxy may advertise a different public origin or prefix in a build
+  trigger Location; the server now extracts only its canonical
+  `/queue/item/<id>/` suffix and rebuilds the returned URL from `JENKINS_URL`.
 
 ## [2.9.9] - 2026-08-13
 
