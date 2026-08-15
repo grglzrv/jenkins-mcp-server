@@ -18,7 +18,6 @@ def make_client(
     *,
     patterns: list[str] | None = None,
     max_log_bytes: int = 1_000_000,
-    public_origins: str = "",
 ) -> JenkinsClient:
     settings = Settings(
         JENKINS_URL="https://jenkins.test",
@@ -26,7 +25,6 @@ def make_client(
         JENKINS_TOKEN="t",
         JENKINS_MAX_RETRIES=0,
         MCP_MAX_LOG_BYTES=max_log_bytes,
-        MCP_JENKINS_PUBLIC_ORIGINS=public_origins,
     )
     policy = Policy(
         read_only=False,
@@ -304,12 +302,19 @@ def _item_client(
     payload: dict[str, object],
     *,
     patterns: list[str] | None = None,
-    public_origins: str = "",
 ) -> JenkinsClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(404)
+        if request.url.path == "/queue/cancelItem":
+            return httpx.Response(200)
+        if request.url.path.startswith("/queue/item/"):
+            return httpx.Response(200, json=payload)
+        raise AssertionError(f"unexpected request: {request.method} {request.url}")
+
     return make_client(
-        lambda request: httpx.Response(200, json=payload),
+        handler,
         patterns=patterns,
-        public_origins=public_origins,
     )
 
 
@@ -344,17 +349,8 @@ async def test_item_lookups_do_not_authorize_an_ambiguous_short_name(
 async def test_public_and_relative_task_urls_preserve_folder_identity(
     task_url: str,
 ) -> None:
-    """A declared public root still identifies the job.
-
-    Jenkins advertises its own configured root, which behind a proxy differs
-    from this client's address. That root is operator-knowable, so it is
-    declared rather than inferred: an undeclared origin cannot authorize an
-    action on a caller-named item.
-    """
-    client = _item_client(
-        {"id": 7, "task": {"name": "nightly", "url": task_url}},
-        public_origins="https://ci.example.com",
-    )
+    """The URL is never fetched; Jenkins may advertise a different public root."""
+    client = _item_client({"id": 7, "task": {"name": "nightly", "url": task_url}})
     assert (await client.queue_item(7))["id"] == 7
     await client.close()
 
@@ -392,42 +388,24 @@ async def test_queue_listing_omits_an_ambiguous_short_name() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("method", ["queue_item", "cancel_queue"])
-async def test_undeclared_origin_cannot_authorize_a_named_item(method: str) -> None:
-    """The URL is not fetched, but the action it authorizes is real.
-
-    cancel_queue_item sends POST /queue/cancelItem to the configured Jenkins,
-    so a task URL on an origin the operator never declared must not supply the
-    job identity that permits it.
-    """
+async def test_job_named_job_keeps_its_exact_folder_identity(method: str) -> None:
+    """Route markers and a job literally named ``job`` must not be conflated."""
     client = _item_client(
-        {"id": 7, "task": {"name": "n", "url": "https://evil.test/job/AI/job/n/"}},
-        public_origins="https://ci.example.com",
+        {"id": 7, "task": {"url": "/job/job/job/nightly/"}},
+        patterns=["job/nightly"],
     )
-    with pytest.raises(PolicyError):
-        await getattr(client, method)(7)
+    key = "id" if method == "queue_item" else "cancelled"
+    assert (await getattr(client, method)(7))[key] == 7
     await client.close()
 
 
 @pytest.mark.asyncio
-async def test_listings_still_accept_an_undeclared_public_root() -> None:
-    """A listing only omits what it cannot authorize, so requiring a declared
-    origin there would hide legitimate entries instead of protecting anything."""
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "items": [
-                    {
-                        "id": 3,
-                        "task": {
-                            "url": "https://ci.example.com/jenkins/job/AI/job/x/"
-                        },
-                    }
-                ]
-            },
-        )
-
-    client = make_client(handler)
-    assert [item["id"] for item in (await client.queue())["items"]] == [3]
+@pytest.mark.parametrize("method", ["queue_item", "cancel_queue"])
+async def test_malformed_interleaved_job_route_cannot_supply_identity(method: str) -> None:
+    client = _item_client(
+        {"id": 7, "task": {"url": "/job/AI/api/json/job/nightly/"}},
+        patterns=["AI/nightly"],
+    )
+    with pytest.raises(PolicyError):
+        await getattr(client, method)(7)
     await client.close()

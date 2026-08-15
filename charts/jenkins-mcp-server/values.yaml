@@ -367,11 +367,6 @@ mcp:
   # Aborts running builds and cancels queued items. Does not affect triggering.
   allowBuildStop: true
   # Applied to job discovery, queue/running-build visibility, and mutations.
-  # Extra origins Jenkins may use in the task URLs it reports, beyond
-  # jenkins.url. Set this when Jenkins advertises a public root that differs
-  # from the address this server connects through, for example an ingress
-  # hostname while this connects to the in-cluster Service. Comma separated.
-  jenkinsPublicOrigins: ""
   allowedJobs: "AI/*,Platform/*"
   # Additional case-insensitive globs for build parameter names whose values
   # get_build_info must redact. Built-in password/token/credential detection

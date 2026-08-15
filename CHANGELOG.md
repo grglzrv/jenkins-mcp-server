@@ -44,30 +44,28 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- A queue task URL from an origin the operator has not declared can no longer
-  authorize an action on a caller-named item.
+- Job identities derived from Jenkins URLs now preserve a folder or job that is
+  itself literally named `job`.
 
 ### New Features
 
-- `mcp.jenkinsPublicOrigins` (`MCP_JENKINS_PUBLIC_ORIGINS`) declares the origins
-  Jenkins may use in the URLs it reports, beyond `jenkins.url`. Comma separated,
-  empty by default.
+- None.
 
 ### Improvements
 
-- None.
+- URL-derived identities must use Jenkins' canonical repeated
+  `/job/<name>/job/<name>` route. Non-canonical interleaving fails closed.
 
 ### Bug Fixes
 
-- None.
+- The URL parser previously treated every path segment named `job` as a route
+  marker. A legitimate nested job `job/nightly`, whose route is
+  `/job/job/job/nightly/`, was therefore misread as `job/job/nightly` and could
+  be hidden or refused by `MCP_ALLOWED_JOBS` when `fullName` was unavailable.
 
 ### Breaking Changes
 
-- A deployment where Jenkins advertises a public root that differs from the
-  address this server connects through must declare it in
-  `mcp.jenkinsPublicOrigins` for `get_queue_item` and `cancel_queue_item` to
-  resolve those items. Queue listings and running builds are unaffected, so a
-  missed setting narrows those two tools rather than hiding work.
+- None.
 
 ### Known Issues
 
@@ -75,22 +73,12 @@ from the matching version entry after CI validates it.
 
 ### Security
 
-- `get_queue_item` and `cancel_queue_item` derived the job identity from
-  `task.url` and accepted any origin. The URL is never fetched, but the action
-  it authorizes is: `cancel_queue_item` sends `POST /queue/cancelItem` to the
-  configured Jenkins, so a task reporting
-  `https://evil.test/job/AI/job/anything/` supplied the allowlist verdict that
-  permitted cancelling an item outside `MCP_ALLOWED_JOBS`.
-- The advertised root behind a reverse proxy is operator-knowable, so it is
-  declared rather than inferred; an attacker-chosen origin is not. Listings keep
-  accepting any origin deliberately: they only omit what they cannot authorize,
-  so a stricter rule there would hide legitimate entries and protect nothing.
+- Malformed paths such as `/job/AI/api/json/job/nightly` can no longer be
+  collapsed into the apparently valid allowlist identity `AI/nightly`.
 
 ### Upgrade Notes
 
-- Set `mcp.jenkinsPublicOrigins` if Jenkins reports URLs on a different host
-  from the one in `jenkins.url`, for example an ingress hostname while this
-  server connects to the in-cluster Service.
+- No action required.
 
 ## [2.10.2] - 2026-08-14
 

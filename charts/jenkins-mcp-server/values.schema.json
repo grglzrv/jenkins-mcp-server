@@ -673,9 +673,6 @@
           "minimum": 256,
           "maximum": 65536,
           "description": "Maximum encoded HTTP request-target bytes sent to Jenkins, including the configured context path and query string. Enforced before any controller or CSRF-crumb request."
-        },
-        "jenkinsPublicOrigins": {
-          "type": "string"
         }
       }
     },
