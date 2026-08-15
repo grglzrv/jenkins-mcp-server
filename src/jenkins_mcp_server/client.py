@@ -470,20 +470,36 @@ def _queue_job_name(item: dict[str, Any]) -> str | None:
 
 
 def _job_name_from_url(url: Any) -> str | None:
+    """Extract a job name from canonical repeated ``/job/<name>`` pairs.
+
+    Scanning for every segment named ``job`` is ambiguous when a Jenkins job is
+    itself literally named ``job``: ``/job/job/job/x/`` identifies ``job/x``,
+    not ``job/job/x``. Requiring alternating marker/name pairs also prevents a
+    malformed path such as ``/job/AI/api/json/job/x`` from supplying the
+    allowlist identity ``AI/x``.
+    """
     if not isinstance(url, str):
         return None
-    # Jenkins may advertise its public root URL while this client connects to
-    # an internal Service URL. This helper never follows the supplied URL; it
-    # extracts only the decoded /job/<name> path used for allowlist checks, so
-    # enforcing the configured origin here would silently hide legitimate
-    # queue/running-build entries in reverse-proxy deployments.
     # Decode exactly once, matching the URI decoding applied before Jenkins'
     # route dispatch. Splitting first and decoding each component afterwards
     # misses encoded separators and can make the policy inspect a different
     # resource from the one Jenkins receives.
     segments = [part for part in unquote(urlsplit(url).path).split("/") if part]
-    names = [segments[index + 1] for index, part in enumerate(segments[:-1]) if part == "job"]
-    return "/".join(names) or None
+    for start, segment in enumerate(segments):
+        if segment != "job":
+            continue
+        names: list[str] = []
+        index = start
+        while index + 1 < len(segments) and segments[index] == "job":
+            names.append(segments[index + 1])
+            index += 2
+        # Build URLs and administrator paths may have a suffix after the job
+        # route. A later marker after a non-marker suffix is not a canonical
+        # continuation and must not be collapsed into the job identity.
+        if names and "job" not in segments[index:]:
+            return "/".join(names)
+        return None
+    return None
 
 
 def _build_job_name(executable: dict[str, Any]) -> str | None:

@@ -23,7 +23,8 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
   other arbitrary nested response objects are excluded even for allowed jobs.
   Queue authorization requires a folder-qualified `fullName` or `/job/...` URL
   path; the leaf-only `task.name` cannot collapse a nested job into an allowed
-  top-level identity.
+  top-level identity. URL-derived identities must consist of canonical repeated
+  `/job/<name>` pairs; malformed interleaving is refused.
 - Job-list and job-detail tools likewise project documented identity, state,
   health, and build-reference fields; plugin actions and upstream/downstream job
   objects cannot cross the allowlist through an allowed job's response.

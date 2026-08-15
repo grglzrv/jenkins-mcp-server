@@ -40,6 +40,46 @@ from the matching version entry after CI validates it.
 
 - No action required.
 
+## [2.10.3] - 2026-08-15
+
+### Highlights
+
+- Job identities derived from Jenkins URLs now preserve a folder or job that is
+  itself literally named `job`.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- URL-derived identities must use Jenkins' canonical repeated
+  `/job/<name>/job/<name>` route. Non-canonical interleaving fails closed.
+
+### Bug Fixes
+
+- The URL parser previously treated every path segment named `job` as a route
+  marker. A legitimate nested job `job/nightly`, whose route is
+  `/job/job/job/nightly/`, was therefore misread as `job/job/nightly` and could
+  be hidden or refused by `MCP_ALLOWED_JOBS` when `fullName` was unavailable.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Malformed paths such as `/job/AI/api/json/job/nightly` can no longer be
+  collapsed into the apparently valid allowlist identity `AI/nightly`.
+
+### Upgrade Notes
+
+- No action required.
+
 ## [2.10.2] - 2026-08-14
 
 ### Highlights

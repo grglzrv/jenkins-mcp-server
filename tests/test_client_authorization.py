@@ -299,10 +299,21 @@ async def test_console_does_not_redecode_streamed_gzip_content() -> None:
 
 
 def _item_client(
-    payload: dict[str, object], *, patterns: list[str] | None = None
+    payload: dict[str, object],
+    *,
+    patterns: list[str] | None = None,
 ) -> JenkinsClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/crumbIssuer/api/json":
+            return httpx.Response(404)
+        if request.url.path == "/queue/cancelItem":
+            return httpx.Response(200)
+        if request.url.path.startswith("/queue/item/"):
+            return httpx.Response(200, json=payload)
+        raise AssertionError(f"unexpected request: {request.method} {request.url}")
+
     return make_client(
-        lambda request: httpx.Response(200, json=payload),
+        handler,
         patterns=patterns,
     )
 
@@ -372,4 +383,29 @@ async def test_queue_listing_omits_an_ambiguous_short_name() -> None:
     )
 
     assert await client.queue() == {"items": []}
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["queue_item", "cancel_queue"])
+async def test_job_named_job_keeps_its_exact_folder_identity(method: str) -> None:
+    """Route markers and a job literally named ``job`` must not be conflated."""
+    client = _item_client(
+        {"id": 7, "task": {"url": "/job/job/job/nightly/"}},
+        patterns=["job/nightly"],
+    )
+    key = "id" if method == "queue_item" else "cancelled"
+    assert (await getattr(client, method)(7))[key] == 7
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["queue_item", "cancel_queue"])
+async def test_malformed_interleaved_job_route_cannot_supply_identity(method: str) -> None:
+    client = _item_client(
+        {"id": 7, "task": {"url": "/job/AI/api/json/job/nightly/"}},
+        patterns=["AI/nightly"],
+    )
+    with pytest.raises(PolicyError):
+        await getattr(client, method)(7)
     await client.close()
