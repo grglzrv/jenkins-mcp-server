@@ -451,7 +451,9 @@ def _new_job_parts(job_name: str) -> tuple[str, str]:
     return parent, leaf
 
 
-def _queue_job_name(item: dict[str, Any]) -> str | None:
+def _queue_job_name(
+    item: dict[str, Any], trusted_origins: tuple[str, ...] | None = None
+) -> str | None:
     """Return a folder-qualified queue task identity or fail closed.
 
     ``task.name`` is only a leaf label. Falling back to it can collapse
@@ -466,17 +468,39 @@ def _queue_job_name(item: dict[str, Any]) -> str | None:
     full_name = task.get("fullName")
     if isinstance(full_name, str) and full_name:
         return full_name
-    return _job_name_from_url(task.get("url"))
+    return _job_name_from_url(task.get("url"), trusted_origins)
 
 
-def _job_name_from_url(url: Any) -> str | None:
+def _job_name_from_url(
+    url: Any, trusted_origins: tuple[str, ...] | None = None
+) -> str | None:
+    """Extract the job path from a Jenkins URL.
+
+    ``trusted_origins`` is supplied only where the derived name authorizes an
+    action on a caller-named item. There a URL from an origin the operator has
+    not declared yields no name: the allowlist verdict would otherwise be read
+    out of a path this server never asked for, and the action it authorizes is
+    real. ``cancel_queue_item`` sends ``POST /queue/cancelItem`` to the
+    configured Jenkins, so the URL never being fetched does not make the
+    decision safe.
+
+    Jenkins advertises its own configured root, which behind a reverse proxy or
+    ingress differs from the address this client connects through. That root is
+    operator-knowable, so it is declared in ``MCP_JENKINS_PUBLIC_ORIGINS``
+    rather than inferred; an attacker-chosen origin is not.
+
+    Listings pass nothing, deliberately. They only omit what they cannot
+    authorize, so enforcing an origin there would hide legitimate entries and
+    protect nothing.
+    """
     if not isinstance(url, str):
         return None
-    # Jenkins may advertise its public root URL while this client connects to
-    # an internal Service URL. This helper never follows the supplied URL; it
-    # extracts only the decoded /job/<name> path used for allowlist checks, so
-    # enforcing the configured origin here would silently hide legitimate
-    # queue/running-build entries in reverse-proxy deployments.
+    if trusted_origins is not None:
+        parsed_target = urlsplit(url)
+        if parsed_target.scheme or parsed_target.netloc:
+            origin = f"{parsed_target.scheme}://{parsed_target.netloc}".lower()
+            if origin not in trusted_origins:
+                return None
     # Decode exactly once, matching the URI decoding applied before Jenkins'
     # route dispatch. Splitting first and decoding each component afterwards
     # misses encoded separators and can make the policy inspect a different
@@ -1463,6 +1487,11 @@ class JenkinsClient:
                 raise JenkinsError("Jenkins returned malformed queue JSON")
             # Never authorize from task.name alone: it omits folder ancestry
             # and can identify a different job than the queued task.
+            #
+            # No origin check here. A listing only omits what it cannot
+            # authorize, and Jenkins advertises its own configured root, which
+            # differs from this client's address behind a reverse proxy or
+            # ingress. Enforcing it would hide legitimate entries.
             job_name = _queue_job_name(item)
             try:
                 allowed = bool(job_name and self.policy.allows_job(job_name))
@@ -1484,7 +1513,7 @@ class JenkinsClient:
         if not isinstance(item, dict):
             raise JenkinsError("Jenkins returned malformed queue JSON")
         projected = _project_queue_item(item)
-        job_name = _queue_job_name(item)
+        job_name = _queue_job_name(item, self.settings.trusted_origins)
         if not job_name:
             await self._deny_policy(
                 "queue_item_job",
@@ -1511,7 +1540,11 @@ class JenkinsClient:
             depth=0,
             tree=QUEUE_ITEM_TREE,
         )
-        job_name = _queue_job_name(item) if isinstance(item, dict) else None
+        job_name = (
+            _queue_job_name(item, self.settings.trusted_origins)
+            if isinstance(item, dict)
+            else None
+        )
         if not job_name:
             await self._deny_policy(
                 "queue_item_job",

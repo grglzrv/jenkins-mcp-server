@@ -39,6 +39,7 @@ data:
   MCP_ALLOW_JOB_DELETE: {{ .Values.mcp.allowJobDelete | quote }}
   MCP_ALLOW_JOB_UPDATE: {{ .Values.mcp.allowJobUpdate | quote }}
   MCP_ALLOW_BUILD_STOP: {{ .Values.mcp.allowBuildStop | quote }}
+  MCP_JENKINS_PUBLIC_ORIGINS: {{ .Values.mcp.jenkinsPublicOrigins | quote }}
   MCP_ALLOWED_JOBS: {{ .Values.mcp.allowedJobs | quote }}
   MCP_REDACT_PARAMETER_PATTERNS: {{ join "," .Values.mcp.redactParameterPatterns | quote }}
   MCP_MAX_REQUEST_TARGET_BYTES: {{ .Values.mcp.maxRequestTargetBytes | int | quote }}

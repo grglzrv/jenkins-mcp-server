@@ -82,6 +82,17 @@ class Settings(BaseSettings):
     allow_job_delete: bool = Field(default=False, alias="MCP_ALLOW_JOB_DELETE")
     allow_job_update: bool = Field(default=True, alias="MCP_ALLOW_JOB_UPDATE")
     allow_build_stop: bool = Field(default=True, alias="MCP_ALLOW_BUILD_STOP")
+    # Origins Jenkins may use in the task and build URLs it reports, beyond
+    # jenkins_url itself. Jenkins advertises its own configured root, which
+    # behind a reverse proxy or ingress differs from the address this client
+    # connects through, so those deployments must name it here to have queue
+    # item lookups and cancellation trust it. Empty means only jenkins_url is
+    # trusted for that decision; listings are unaffected either way.
+    #   MCP_JENKINS_PUBLIC_ORIGINS=https://ci.example.com
+    jenkins_public_origins: str = Field(
+        default="", alias="MCP_JENKINS_PUBLIC_ORIGINS"
+    )
+
     allowed_jobs: str = Field(default="*", alias="MCP_ALLOWED_JOBS")
     # Additional case-insensitive globs for parameter names whose values must
     # never cross the MCP response boundary. The built-in password/token/
@@ -187,6 +198,20 @@ class Settings(BaseSettings):
         if self.jenkins_ca_bundle:
             return str(self.jenkins_ca_bundle)
         return self.jenkins_verify_tls
+
+    @property
+    def trusted_origins(self) -> tuple[str, ...]:
+        """Origins whose task URLs may identify a job, as scheme://host[:port]."""
+        origins: list[str] = []
+        for raw in (self.jenkins_url, *self.jenkins_public_origins.split(",")):
+            candidate = raw.strip()
+            if not candidate:
+                continue
+            parsed = urlsplit(candidate)
+            if not parsed.scheme or not parsed.netloc:
+                continue
+            origins.append(f"{parsed.scheme}://{parsed.netloc}".lower())
+        return tuple(dict.fromkeys(origins))
 
     @property
     def job_patterns(self) -> list[str]:
