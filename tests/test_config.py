@@ -48,10 +48,10 @@ def test_uppercase_environment_variables_still_apply(
     assert settings.allow_script_console is True
 
 
-
 def test_init_keyword_aliases_are_case_sensitive(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Mixed-case init aliases must not bypass the documented uppercase names."""
     for name in ("JENKINS_URL", "JENKINS_USERNAME", "JENKINS_TOKEN"):
         monkeypatch.delenv(name, raising=False)
 
