@@ -2,8 +2,10 @@ SHELL := /bin/bash
 VERSION ?= $(shell cat VERSION)
 CHART := charts/jenkins-mcp-server
 IMAGE ?= ghcr.io/grglzrv/jenkins-mcp-server
+LOCK_PIP_VERSION ?= 26.1.2
+PIP_TOOLS_VERSION ?= 7.6.1
 
-.PHONY: install lint typecheck test coverage build verify-version version helm-lint helm-template helm-validate helm-package docker-build integration validate-manifests clean
+.PHONY: install lint typecheck test coverage build verify-version version lock verify-lock helm-lint helm-template helm-validate helm-package docker-build integration validate-manifests clean
 
 install:
 	python -m pip install -e '.[dev]'
@@ -33,6 +35,12 @@ version:
 	python scripts/changelog.py prepare "$(VERSION)"
 	python scripts/set_version.py "$(VERSION)"
 	$(MAKE) verify-version
+
+lock:
+	LOCK_PIP_VERSION="$(LOCK_PIP_VERSION)" PIP_TOOLS_VERSION="$(PIP_TOOLS_VERSION)" bash scripts/lock_dependencies.sh write
+
+verify-lock:
+	LOCK_PIP_VERSION="$(LOCK_PIP_VERSION)" PIP_TOOLS_VERSION="$(PIP_TOOLS_VERSION)" bash scripts/lock_dependencies.sh verify
 
 helm-lint:
 	helm lint --strict $(CHART) --set jenkins.url=https://jenkins.example.com --set jenkins.credentials.create.jenkinsUserId=local --set jenkins.credentials.create.jenkinsApiToken=local-placeholder

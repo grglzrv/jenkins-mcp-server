@@ -61,3 +61,21 @@ def test_init_keyword_aliases_are_case_sensitive(
             Jenkins_USERNAME="user",
             Jenkins_TOKEN="token",
         )
+
+
+
+def test_uppercase_init_aliases_still_apply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("JENKINS_URL", "JENKINS_USERNAME", "JENKINS_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = Settings(
+        JENKINS_URL="https://jenkins.test",
+        JENKINS_USERNAME="user",
+        JENKINS_TOKEN="token",
+    )
+
+    assert settings.jenkins_url == "https://jenkins.test"
+    assert settings.jenkins_username == "user"
+    assert settings.jenkins_token == "token"

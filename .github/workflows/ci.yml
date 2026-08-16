@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -66,15 +66,33 @@ jobs:
           fi
           python scripts/check_release_bump.py "$base"
 
+  dependency-locks:
+    name: Dependency locks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Verify release dependency locks
+        run: make verify-lock
+
   policy:
     name: Guardrail policy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - name: Install OPA
+        env:
+          OPA_VERSION: v1.17.0
+          OPA_SHA256: e83da46804832578e9d9e1733dffbe4d3b5f8cc9c26eb124da9ceea4abfe189f
         run: |
-          curl -sSL -o /usr/local/bin/opa https://github.com/open-policy-agent/opa/releases/latest/download/opa_linux_amd64_static
-          chmod +x /usr/local/bin/opa
+          curl -fsSL --retry 4 --retry-delay 2 --retry-all-errors \
+            -o /usr/local/bin/opa \
+            "https://github.com/open-policy-agent/opa/releases/download/${OPA_VERSION}/opa_linux_amd64_static"
+          echo "${OPA_SHA256}  /usr/local/bin/opa" | sha256sum -c -
+          chmod 0555 /usr/local/bin/opa
           opa version
       - name: Check policy syntax
         run: opa check docker/policy.rego
@@ -109,8 +127,6 @@ jobs:
             --set jenkins.credentials.create.jenkinsUserId=ci \
             --set jenkins.credentials.create.jenkinsApiToken=ci-placeholder
       - name: Defaults require jenkins.url
-        # The chart makes no assumption about the target Jenkins, so an install
-        # with no values must fail with a clear message rather than render.
         run: |
           if helm template jenkins-mcp charts/jenkins-mcp-server --namespace jenkins-mcp > /tmp/nourl.yaml 2>&1; then
             echo "expected the render to fail without jenkins.url"; exit 1
@@ -239,8 +255,6 @@ jobs:
         run: helm package charts/jenkins-mcp-server --destination dist
 
   chart-smoke:
-    # Installs the chart into a real k3s cluster. Kept in a reusable workflow so
-    # the release gate runs exactly the same steps.
     needs: helm
     uses: ./.github/workflows/chart-smoke.yml
 
@@ -249,6 +263,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - name: Build local architecture
         uses: docker/build-push-action@v7
@@ -265,10 +280,7 @@ jobs:
         run: |
           docker image inspect jenkins-mcp-server:test
           docker run --rm --entrypoint /usr/bin/sleep jenkins-mcp-server:test 0
-
       - name: Build the minibridge variant
-        # Catches a broken Dockerfile.minibridge on the PR rather than at
-        # release time, when the tag is already expected to exist.
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -280,3 +292,22 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Verify Minibridge lifecycle executable
         run: docker run --rm --entrypoint /usr/bin/sleep jenkins-mcp-server:minibridge-test 0
+      - name: Validate release architectures
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Validate Minibridge release architectures
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile.minibridge
+          push: false
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

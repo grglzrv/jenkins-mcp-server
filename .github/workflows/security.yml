@@ -31,12 +31,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e . pip-audit
-      - run: pip-audit
+      - run: python -m pip install "pip-audit==2.10.1"
+      - run: pip-audit -r requirements/runtime.txt
+
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/dependency-review-action@v5
-
