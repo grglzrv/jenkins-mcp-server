@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jenkins-mcp-server"
-version = "2.10.3"
+version = "2.10.4"
 description = "Production-ready Jenkins MCP server with Streamable HTTP and stdio transports"
 readme = "README.md"
 license = {text = "MIT"}

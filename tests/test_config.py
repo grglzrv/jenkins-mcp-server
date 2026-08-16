@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from jenkins_mcp_server.config import Settings
 
@@ -45,3 +46,18 @@ def test_uppercase_environment_variables_still_apply(
     assert settings.parameter_redaction_patterns == ["*_AUTH", "SIGNING_*"]
     assert settings.read_only is True
     assert settings.allow_script_console is True
+
+
+
+def test_init_keyword_aliases_are_case_sensitive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("JENKINS_URL", "JENKINS_USERNAME", "JENKINS_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+
+    with pytest.raises(ValidationError):
+        Settings(
+            Jenkins_URL="https://jenkins.test",
+            Jenkins_USERNAME="user",
+            Jenkins_TOKEN="token",
+        )
