@@ -34,6 +34,57 @@ jobs:
           grep -F 'ruff>=0.16.3' pyproject.toml
           grep -F 'hatchling>=1.32.0' pyproject.toml
 
+          cat > /tmp/pr59-unreleased.md <<'EOF'
+          ## [Unreleased]
+
+          ### Highlights
+
+          - The Python runtime and build toolchain are refreshed to current compatible
+            releases while preserving the existing Jenkins MCP configuration and tool
+            contracts.
+
+          ### New Features
+
+          - None.
+
+          ### Improvements
+
+          - Upgrade `pydantic-settings` to 2.15.0, `uvicorn` to 0.52.3, `ruff` to 0.16.3,
+            and Hatchling to 1.32.0.
+          - Uvicorn 0.52.3 includes an updated HTTP/1.1 parser path intended to improve
+            request parsing performance.
+          - `pydantic-settings` 2.15.0 now applies `case_sensitive` consistently to init
+            kwargs and config-file sources as well as environment settings.
+
+          ### Bug Fixes
+
+          - None in Jenkins MCP Server source code.
+
+          ### Breaking Changes
+
+          - None.
+
+          ### Known Issues
+
+          - None known.
+
+          ### Security
+
+          - The server's explicit `case_sensitive=True` settings policy remains enforced,
+            so mixed/lowercase duplicates cannot override documented uppercase settings;
+            regression coverage now includes programmatic initialization under the new
+            `pydantic-settings` behavior.
+          - `pydantic-settings` 2.15.0 also prevents nested secret-directory sources from
+            following symlinks outside their configured secrets directory. Jenkins MCP
+            Server does not currently use that source directly, but ships the hardened
+            dependency version.
+
+          ### Upgrade Notes
+
+          - No configuration or migration action is required. Upgrade the application and
+            Helm chart together as usual.
+          EOF
+
           python - <<'PY'
           from pathlib import Path
 
@@ -41,55 +92,7 @@ jobs:
           text = changelog.read_text(encoding="utf-8")
           start = text.index("## [Unreleased]\n")
           end = text.index("\n## [2.10.3]", start)
-          unreleased = """## [Unreleased]
-
-### Highlights
-
-- The Python runtime and build toolchain are refreshed to current compatible
-  releases while preserving the existing Jenkins MCP configuration and tool
-  contracts.
-
-### New Features
-
-- None.
-
-### Improvements
-
-- Upgrade `pydantic-settings` to 2.15.0, `uvicorn` to 0.52.3, `ruff` to 0.16.3,
-  and Hatchling to 1.32.0.
-- Uvicorn 0.52.3 includes an updated HTTP/1.1 parser path intended to improve
-  request parsing performance.
-- `pydantic-settings` 2.15.0 now applies `case_sensitive` consistently to init
-  kwargs and config-file sources as well as environment settings.
-
-### Bug Fixes
-
-- None in Jenkins MCP Server source code.
-
-### Breaking Changes
-
-- None.
-
-### Known Issues
-
-- None known.
-
-### Security
-
-- The server's explicit `case_sensitive=True` settings policy remains enforced,
-  so mixed/lowercase duplicates cannot override documented uppercase settings;
-  regression coverage now includes programmatic initialization under the new
-  `pydantic-settings` behavior.
-- `pydantic-settings` 2.15.0 also prevents nested secret-directory sources from
-  following symlinks outside their configured secrets directory. Jenkins MCP
-  Server does not currently use that source directly, but ships the hardened
-  dependency version.
-
-### Upgrade Notes
-
-- No configuration or migration action is required. Upgrade the application and
-  Helm chart together as usual.
-"""
+          unreleased = Path("/tmp/pr59-unreleased.md").read_text(encoding="utf-8")
           changelog.write_text(text[:start] + unreleased + text[end:], encoding="utf-8")
 
           test_path = Path("tests/test_config.py")
@@ -99,22 +102,19 @@ jobs:
                   "import pytest\n\nfrom jenkins_mcp_server.config import Settings\n",
                   "import pytest\nfrom pydantic import ValidationError\n\nfrom jenkins_mcp_server.config import Settings\n",
               )
-              tests += """
-
-
-def test_init_keyword_aliases_are_case_sensitive(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    for name in ("JENKINS_URL", "JENKINS_USERNAME", "JENKINS_TOKEN"):
-        monkeypatch.delenv(name, raising=False)
-
-    with pytest.raises(ValidationError):
-        Settings(
-            Jenkins_URL="https://jenkins.test",
-            Jenkins_USERNAME="user",
-            Jenkins_TOKEN="token",
-        )
-"""
+              tests += (
+                  "\n\n\ndef test_init_keyword_aliases_are_case_sensitive(\n"
+                  "    monkeypatch: pytest.MonkeyPatch,\n"
+                  ") -> None:\n"
+                  "    for name in (\"JENKINS_URL\", \"JENKINS_USERNAME\", \"JENKINS_TOKEN\"):\n"
+                  "        monkeypatch.delenv(name, raising=False)\n\n"
+                  "    with pytest.raises(ValidationError):\n"
+                  "        Settings(\n"
+                  "            Jenkins_URL=\"https://jenkins.test\",\n"
+                  "            Jenkins_USERNAME=\"user\",\n"
+                  "            Jenkins_TOKEN=\"token\",\n"
+                  "        )\n"
+              )
               test_path.write_text(tests, encoding="utf-8")
           PY
 
