@@ -10,7 +10,43 @@ from the matching version entry after CI validates it.
 
 ### Highlights
 
-- None.
+- None yet.
+
+### New Features
+
+- None yet.
+
+### Improvements
+
+- None yet.
+
+### Bug Fixes
+
+- None yet.
+
+### Breaking Changes
+
+- None yet.
+
+### Known Issues
+
+- None yet.
+
+### Security
+
+- None yet.
+
+### Upgrade Notes
+
+- None yet.
+
+## [2.10.4] - 2026-08-16
+
+### Highlights
+
+- The Python runtime and build toolchain are refreshed to current compatible
+  releases while preserving the existing Jenkins MCP configuration and tool
+  contracts.
 
 ### New Features
 
@@ -18,11 +54,16 @@ from the matching version entry after CI validates it.
 
 ### Improvements
 
-- None.
+- Upgrade `pydantic-settings` to 2.15.0, `uvicorn` to 0.52.3, `ruff` to 0.16.3,
+  and Hatchling to 1.32.0.
+- Uvicorn 0.52.3 includes an updated HTTP/1.1 parser path intended to improve
+  request parsing performance.
+- `pydantic-settings` 2.15.0 now applies `case_sensitive` consistently to init
+  kwargs and config-file sources as well as environment settings.
 
 ### Bug Fixes
 
-- None.
+- None in Jenkins MCP Server source code.
 
 ### Breaking Changes
 
@@ -30,15 +71,23 @@ from the matching version entry after CI validates it.
 
 ### Known Issues
 
-- None.
+- None known.
 
 ### Security
 
-- None.
+- The server's explicit `case_sensitive=True` settings policy remains enforced,
+  so mixed/lowercase duplicates cannot override documented uppercase settings;
+  regression coverage now includes programmatic initialization under the new
+  `pydantic-settings` behavior.
+- `pydantic-settings` 2.15.0 also prevents nested secret-directory sources from
+  following symlinks outside their configured secrets directory. Jenkins MCP
+  Server does not currently use that source directly, but ships the hardened
+  dependency version.
 
 ### Upgrade Notes
 
-- No action required.
+- No configuration or migration action is required. Upgrade the application and
+  Helm chart together as usual.
 
 ## [2.10.3] - 2026-08-15
 
