@@ -1,25 +1,26 @@
 [build-system]
-requires = ["hatchling>=1.32.0"]
+requires = ["hatchling==1.32.0"]
 build-backend = "hatchling.build"
 
 [project]
 name = "jenkins-mcp-server"
-version = "2.10.4"
+version = "2.10.5"
 description = "Production-ready Jenkins MCP server with Streamable HTTP and stdio transports"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [{name = "Georgi Lazarov"}]
 maintainers = [{name = "Georgi Lazarov"}]
 keywords = ["jenkins", "mcp", "model-context-protocol", "hermes-agent", "automation"]
 classifiers = [
   "Development Status :: 4 - Beta",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Software Development :: Build Tools",
 ]
 dependencies = [

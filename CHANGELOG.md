@@ -40,6 +40,66 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.5] - 2026-08-16
+
+### Highlights
+
+- Release containers now install a hash-checked, reviewed Python dependency set
+  while the published Python package keeps its compatible dependency ranges.
+
+### New Features
+
+- Add hash-locked runtime and build dependency manifests for the default and
+  Minibridge container images.
+- Validate the project on Python 3.14 in CI.
+
+### Improvements
+
+- Pin Hatchling 1.32.0 as the build backend and use modern SPDX package license
+  metadata.
+- Isolate the lock generator in a temporary environment with pip 26.1.2 and
+  pip-tools 7.6.1 so verification does not mutate the caller's environment.
+- Build application wheels without isolated build dependency resolution after
+  installing the hash-checked build dependency set.
+- Download only binary runtime and build wheels from hash-checked manifests
+  before assembling release images.
+- Audit the exact locked runtime dependency set used by release containers and
+  reject stale locks in both pull-request CI and release validation.
+- Validate both release architectures for the default and Minibridge images in
+  pull-request CI before publication.
+
+### Bug Fixes
+
+- Add positive regression coverage proving documented uppercase settings aliases
+  still work with `pydantic-settings` 2.15.0.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- The release-container dependency set is resolved for the Python 3.12 Linux
+  environment used by published containers; Python package consumers continue to
+  use the compatible ranges declared in `pyproject.toml`.
+- Debian packages installed during the image build are still resolved from the
+  pinned base image's configured package repositories, so this change does not
+  claim byte-for-byte image reproducibility.
+
+### Security
+
+- Stop resolving floating Python runtime and build dependency versions while
+  rebuilding an unchanged release container.
+- Pin the CI OPA policy binary to v1.17.0 and verify its published SHA-256 digest
+  instead of downloading the mutable `releases/latest` asset.
+- Pin the Python and Go container base tags to their current multi-architecture
+  manifest digests while retaining tags for Dependabot visibility.
+
+### Upgrade Notes
+
+- No Jenkins, MCP, Minibridge, Kubernetes, Helm, credential, ingress, or policy
+  configuration change is required.
+
 ## [2.10.4] - 2026-08-16
 
 ### Highlights

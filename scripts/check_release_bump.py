@@ -33,6 +33,7 @@ RELEASE_PREFIXES = (
     "deploy/",
     "examples/argocd/",
     "examples/values/",
+    "requirements/",
 )
 EXACT_EXEMPT_PATHS = {
     "docker/policy_test.rego",
