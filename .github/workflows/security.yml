@@ -31,8 +31,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip-audit==2.10.1"
-      - run: pip-audit -r requirements/runtime.txt
+      - name: Install pip-audit
+        run: python -m pip install "pip-audit==2.10.1"
+      - name: Audit locked runtime dependencies
+        run: pip-audit -r requirements/runtime.txt
+      - name: Audit locked build dependencies
+        run: pip-audit -r requirements/build.txt
 
   dependency-review:
     if: github.event_name == 'pull_request'

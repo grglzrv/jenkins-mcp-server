@@ -55,6 +55,8 @@ def _repository(tmp_path: Path) -> tuple[Path, str]:
         "deploy/kubernetes/base/deployment.yaml",
         "examples/argocd/application-oci.yaml",
         "examples/values/minibridge.yaml",
+        "requirements/runtime.txt",
+        "requirements/build.txt",
     ],
 )
 def test_release_path_policy_covers_deployable_inputs(path: str) -> None:

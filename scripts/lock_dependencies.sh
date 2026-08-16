@@ -32,7 +32,9 @@ compile() {
   CUSTOM_COMPILE_COMMAND="make lock" "$pip_compile" \
     --quiet \
     --generate-hashes \
+    --reuse-hashes \
     --strip-extras \
+    --no-upgrade \
     --output-file="$output" \
     "$input"
 }
@@ -44,6 +46,8 @@ if [[ "$mode" == "write" ]]; then
   exit 0
 fi
 
+cp requirements/runtime.txt "$workdir/runtime.txt"
+cp requirements/build.txt "$workdir/build.txt"
 compile pyproject.toml "$workdir/runtime.txt"
 compile requirements/build.in "$workdir/build.txt"
 diff -u requirements/runtime.txt "$workdir/runtime.txt"
