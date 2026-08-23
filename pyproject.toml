@@ -28,7 +28,7 @@ dependencies = [
   "httpx>=0.28.1,<1",
   "pydantic>=2.13.4,<3",
   "pydantic-settings>=2.15.0,<3",
-  "uvicorn>=0.52.3,<1",
+  "uvicorn>=0.52.4,<1",
 ]
 
 [project.urls]
@@ -42,8 +42,8 @@ dev = [
   "pytest>=9.1.1",
   "pytest-asyncio>=1.4.0",
   "pytest-cov>=7.1.0",
-  "ruff>=0.16.3",
-  "mypy>=2.3.0",
+  "ruff>=0.16.4",
+  "mypy>=2.3.1",
   "build>=1.5.0",
   "twine>=7.0.0",
   "PyYAML>=6.0.3",
