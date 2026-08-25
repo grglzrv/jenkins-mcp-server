@@ -1,0 +1,92 @@
+name: PR 61 one-shot repair
+
+on:
+  push:
+    branches:
+      - dependabot/pip/python-dependencies-9a03efc121
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dependabot/pip/python-dependencies-9a03efc121
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Prepare curated release notes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('CHANGELOG.md')
+          text = path.read_text(encoding='utf-8')
+          start = text.index('## [Unreleased]')
+          end = text.index('\n## [', start + len('## [Unreleased]'))
+          body = '''## [Unreleased]
+
+### Highlights
+
+- Refresh the compatible Python runtime and development dependency set while preserving Jenkins, MCP, Helm, Kubernetes, and Minibridge behavior.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Upgrade Uvicorn to 0.52.4, Ruff to 0.16.4, and mypy to 2.3.1.
+- Refresh MCP HTTP transitive dependencies to httpx2/httpcore2 2.12.0 and idna 3.19 using the repository's reproducible lock workflow.
+
+### Bug Fixes
+
+- Regenerate the runtime lock as one resolver-consistent set so Pydantic 2.13.4 retains its required pydantic-core 2.46.4 instead of the incompatible independently bumped 2.48.0 pin.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Keep dependency-review, CodeQL, hash-checked container installs, and pip-audit validation enabled for the refreshed dependency set.
+
+### Upgrade Notes
+
+- No Jenkins, MCP, Minibridge, Kubernetes, Helm, credential, ingress, or policy configuration change is required.
+'''
+          path.write_text(text[:start] + body.rstrip() + '\n' + text[end:], encoding='utf-8')
+          PY
+
+      - name: Regenerate dependency locks and release pins
+        shell: bash
+        run: |
+          make lock
+          make version VERSION=2.10.6
+          make verify-lock
+          make verify-version
+          python scripts/validate_manifests.py
+          git diff --check
+
+      - name: Commit repaired PR branch
+        shell: bash
+        run: |
+          git rm .github/workflows/pr61-repair.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m "build(deps): repair dependency refresh and prepare 2.10.6"
+          git push origin HEAD:dependabot/pip/python-dependencies-9a03efc121
