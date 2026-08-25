@@ -40,6 +40,41 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.6] - 2026-08-25
+
+### Highlights
+
+- Refresh the compatible Python runtime and development dependency set while preserving Jenkins, MCP, Helm, Kubernetes, and Minibridge behavior.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Upgrade Uvicorn to 0.52.4, Ruff to 0.16.4, and mypy to 2.3.1.
+- Refresh MCP HTTP transitive dependencies to httpx2/httpcore2 2.12.0 and idna 3.19 using the repository's reproducible lock workflow.
+
+### Bug Fixes
+
+- Regenerate the runtime lock as one resolver-consistent set so Pydantic 2.13.4 retains its required pydantic-core 2.46.4 instead of the incompatible independently bumped 2.48.0 pin.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Keep dependency-review, CodeQL, hash-checked container installs, and pip-audit validation enabled for the refreshed dependency set.
+
+### Upgrade Notes
+
+- No Jenkins, MCP, Minibridge, Kubernetes, Helm, credential, ingress, or policy configuration change is required.
+
 ## [2.10.5] - 2026-08-16
 
 ### Highlights
