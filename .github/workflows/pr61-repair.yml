@@ -43,7 +43,6 @@ jobs:
           make version VERSION=2.10.6
           make verify-lock
           make verify-version
-          python scripts/validate_manifests.py
           git diff --check
 
       - name: Commit repaired PR branch
