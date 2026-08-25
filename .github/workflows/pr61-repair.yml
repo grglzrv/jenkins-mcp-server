@@ -26,47 +26,13 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
+          import base64
           from pathlib import Path
-
           path = Path('CHANGELOG.md')
           text = path.read_text(encoding='utf-8')
           start = text.index('## [Unreleased]')
           end = text.index('\n## [', start + len('## [Unreleased]'))
-          body = '''## [Unreleased]
-
-### Highlights
-
-- Refresh the compatible Python runtime and development dependency set while preserving Jenkins, MCP, Helm, Kubernetes, and Minibridge behavior.
-
-### New Features
-
-- None.
-
-### Improvements
-
-- Upgrade Uvicorn to 0.52.4, Ruff to 0.16.4, and mypy to 2.3.1.
-- Refresh MCP HTTP transitive dependencies to httpx2/httpcore2 2.12.0 and idna 3.19 using the repository's reproducible lock workflow.
-
-### Bug Fixes
-
-- Regenerate the runtime lock as one resolver-consistent set so Pydantic 2.13.4 retains its required pydantic-core 2.46.4 instead of the incompatible independently bumped 2.48.0 pin.
-
-### Breaking Changes
-
-- None.
-
-### Known Issues
-
-- None.
-
-### Security
-
-- Keep dependency-review, CodeQL, hash-checked container installs, and pip-audit validation enabled for the refreshed dependency set.
-
-### Upgrade Notes
-
-- No Jenkins, MCP, Minibridge, Kubernetes, Helm, credential, ingress, or policy configuration change is required.
-'''
+          body = base64.b64decode('IyMgW1VucmVsZWFzZWRdCgojIyMgSGlnaGxpZ2h0cwoKLSBSZWZyZXNoIHRoZSBjb21wYXRpYmxlIFB5dGhvbiBydW50aW1lIGFuZCBkZXZlbG9wbWVudCBkZXBlbmRlbmN5IHNldCB3aGlsZSBwcmVzZXJ2aW5nIEplbmtpbnMsIE1DUCwgSGVsbSwgS3ViZXJuZXRlcywgYW5kIE1pbmlicmlkZ2UgYmVoYXZpb3IuCgojIyMgTmV3IEZlYXR1cmVzCgotIE5vbmUuCgojIyMgSW1wcm92ZW1lbnRzCgotIFVwZ3JhZGUgVXZpY29ybiB0byAwLjUyLjQsIFJ1ZmYgdG8gMC4xNi40LCBhbmQgbXlweSB0byAyLjMuMS4KLSBSZWZyZXNoIE1DUCBIVFRQIHRyYW5zaXRpdmUgZGVwZW5kZW5jaWVzIHRvIGh0dHB4Mi9odHRwY29yZTIgMi4xMi4wIGFuZCBpZG5hIDMuMTkgdXNpbmcgdGhlIHJlcG9zaXRvcnkncyByZXByb2R1Y2libGUgbG9jayB3b3JrZmxvdy4KCiMjIyBCdWcgRml4ZXMKCi0gUmVnZW5lcmF0ZSB0aGUgcnVudGltZSBsb2NrIGFzIG9uZSByZXNvbHZlci1jb25zaXN0ZW50IHNldCBzbyBQeWRhbnRpYyAyLjEzLjQgcmV0YWlucyBpdHMgcmVxdWlyZWQgcHlkYW50aWMtY29yZSAyLjQ2LjQgaW5zdGVhZCBvZiB0aGUgaW5jb21wYXRpYmxlIGluZGVwZW5kZW50bHkgYnVtcGVkIDIuNDguMCBwaW4uCgojIyMgQnJlYWtpbmcgQ2hhbmdlcwoKLSBOb25lLgoKIyMjIEtub3duIElzc3VlcwoKLSBOb25lLgoKIyMjIFNlY3VyaXR5CgotIEtlZXAgZGVwZW5kZW5jeS1yZXZpZXcsIENvZGVRTCwgaGFzaC1jaGVja2VkIGNvbnRhaW5lciBpbnN0YWxscywgYW5kIHBpcC1hdWRpdCB2YWxpZGF0aW9uIGVuYWJsZWQgZm9yIHRoZSByZWZyZXNoZWQgZGVwZW5kZW5jeSBzZXQuCgojIyMgVXBncmFkZSBOb3RlcwoKLSBObyBKZW5raW5zLCBNQ1AsIE1pbmlicmlkZ2UsIEt1YmVybmV0ZXMsIEhlbG0sIGNyZWRlbnRpYWwsIGluZ3Jlc3MsIG9yIHBvbGljeSBjb25maWd1cmF0aW9uIGNoYW5nZSBpcyByZXF1aXJlZC4K').decode()
           path.write_text(text[:start] + body.rstrip() + '\n' + text[end:], encoding='utf-8')
           PY
 
