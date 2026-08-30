@@ -40,6 +40,43 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.7] - 2026-08-30
+
+### Highlights
+
+- Raise the supported MCP Python SDK baseline from 2.0.0 to 2.1.1 and refresh Ruff to 0.16.5 while preserving the Jenkins, MCP transport, tool, Helm, Kubernetes, and Minibridge contracts.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Regenerate the hash-locked runtime dependency set with MCP 2.1.1 and mcp-types 2.1.1 using the repository's deterministic resolver contract.
+- Align Jenkins TLS integration, Jenkins compatibility, and real-cluster chart smoke jobs with the new MCP 2.1.1 minimum so host-side client probes exercise the same supported SDK range as package metadata.
+- Upgrade Ruff to 0.16.5 for the development lint toolchain.
+
+### Bug Fixes
+
+- Restore Docker builds, k3s/Helm smoke tests, Jenkins TLS integration, and dependency-lock verification after the dependency floor changed without the release lock being regenerated.
+- Synchronize every managed application, chart, image, manifest, example, Compose, and release-documentation pin at 2.10.7 so release-impacting dependency changes cannot ship under the previous version.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Preserve dependency review, CodeQL, pip-audit, and hash-checked container installation coverage for the refreshed MCP runtime dependency set.
+
+### Upgrade Notes
+
+- No Jenkins, MCP transport, Minibridge, Kubernetes, Helm, credential, ingress, or policy configuration change is required; rebuild or redeploy 2.10.7 to consume the refreshed SDK and lock set.
+
 ## [2.10.6] - 2026-08-25
 
 ### Highlights
