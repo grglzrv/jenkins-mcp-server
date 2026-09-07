@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from typing import Any
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server import MCPServer
 
 from . import __version__
 from .audit import AuditLogger
