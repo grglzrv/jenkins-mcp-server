@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import runpy
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from mcp.shared.exceptions import MCPError
 
 PROBE = runpy.run_path(Path(__file__).parents[1] / "integration" / "minibridge_probe.py")
 call = PROBE["call"]
+reached_jenkins = PROBE["reached_jenkins"]
+refused = PROBE["refused"]
+allowed = PROBE["allowed"]
 
 
 class RaisingSession:
@@ -18,6 +22,13 @@ class RaisingSession:
 
     async def call_tool(self, name: str, arguments: dict) -> None:
         raise self.error
+
+
+def tool_error(message: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        is_error=True,
+        content=[SimpleNamespace(text=message)],
+    )
 
 
 @pytest.mark.parametrize(
@@ -38,6 +49,27 @@ async def test_raised_jenkins_mcp_errors_mean_policy_allowed(message: str) -> No
 
     assert was_refused is False
     assert detail == message[:120]
+
+
+def test_sanitized_jenkins_tool_error_means_policy_allowed() -> None:
+    result = tool_error(
+        "Error executing tool list_jobs: "
+        "Jenkins request failed for /api/json?[redacted]"
+    )
+
+    assert reached_jenkins(result) is True
+    assert refused(result) is False
+    assert allowed(result) is True
+
+
+def test_sanitized_jenkins_status_error_means_policy_allowed() -> None:
+    result = tool_error(
+        "Jenkins returned 403. Permission denied; check the Jenkins account's permissions."
+    )
+
+    assert reached_jenkins(result) is True
+    assert refused(result) is False
+    assert allowed(result) is True
 
 
 async def test_explicit_minibridge_policy_error_means_refused() -> None:
