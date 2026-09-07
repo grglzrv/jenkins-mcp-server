@@ -40,6 +40,44 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.8] - 2026-09-07
+
+### Highlights
+
+- Keep Jenkins transport failures safe and actionable even when HTTPX cannot attach a request.
+- Require positive evidence of policy enforcement in the Minibridge smoke probe.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Exercise production tool functions through real MCP client/server sessions for transport, HTTP, policy, input-validation, and unexpected failures.
+- Align troubleshooting guidance with sanitized error messages and existing readiness diagnostics.
+
+### Bug Fixes
+
+- Avoid a secondary exception when an HTTPX transport error has no attached request, preserving the expected MCP tool-error contract.
+- Stop treating generic MCP protocol errors as successful allowed calls or generic tool crashes as confirmed policy refusals in the Minibridge smoke probe.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Omit request paths as well as queries and raw transport text from client-visible transport errors.
+- Reject ambiguous smoke-probe results and require explicit policy refusals or known Jenkins outcomes before reporting enforcement as healthy.
+
+### Upgrade Notes
+
+- No configuration changes are required. Upgrade the application and chart together. Transport-error messages no longer include the request path; use the existing `jenkins.last_transport_error` readiness field and server diagnostics to investigate connectivity.
+
 ## [2.10.7] - 2026-09-07
 
 ### Highlights
