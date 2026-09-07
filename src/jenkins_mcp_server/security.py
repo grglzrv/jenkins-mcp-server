@@ -4,9 +4,11 @@ import fnmatch
 import re
 from dataclasses import dataclass
 
+from mcp.server.mcpserver.exceptions import ToolError
 
-class PolicyError(PermissionError):
-    pass
+
+class PolicyError(PermissionError, ToolError):
+    """Expected policy refusal that is safe to return as an MCP tool error."""
 
 
 # Actions that irreversibly remove or overwrite state. Each is gated by its
@@ -23,14 +25,10 @@ def _job_segments(job_name: str) -> list[str]:
     if not job_name.strip("/").strip():
         raise PolicyError("Job name must not be empty")
     if job_name != job_name.strip("/") or "//" in job_name:
-        raise PolicyError(
-            f"Job '{job_name}' has leading, trailing, or repeated '/' separators"
-        )
+        raise PolicyError(f"Job '{job_name}' has leading, trailing, or repeated '/' separators")
     segments = job_name.split("/")
     if any(part in {".", ".."} for part in segments):
-        raise PolicyError(
-            f"Job '{job_name}' contains path traversal segments and is rejected"
-        )
+        raise PolicyError(f"Job '{job_name}' contains path traversal segments and is rejected")
     return segments
 
 
@@ -94,9 +92,7 @@ class Policy:
         }[action]
         self.require_write(category, job_name)
         if not self.allow_destructive:
-            raise PolicyError(
-                f"Destructive action '{action}' is disabled by MCP_ALLOW_DESTRUCTIVE"
-            )
+            raise PolicyError(f"Destructive action '{action}' is disabled by MCP_ALLOW_DESTRUCTIVE")
         per_action = {
             "job.delete": self.allow_job_delete,
             "job.update": self.allow_job_update,
