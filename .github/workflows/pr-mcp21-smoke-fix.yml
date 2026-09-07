@@ -1,4 +1,4 @@
-name: PR MCP 2.1 smoke compatibility
+name: PR MCP 2.1 error contract hardening
 
 on:
   push:
@@ -18,116 +18,235 @@ jobs:
           ref: dependabot/pip/python-dependencies-d6ef873569
           fetch-depth: 0
 
-      - name: Adapt smoke assertions to MCP 2.1 exception redaction
+      - name: Harden expected MCP tool errors
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          path = Path('.github/workflows/chart-smoke.yml')
-          text = path.read_text(encoding='utf-8')
+          client = Path('src/jenkins_mcp_server/client.py')
+          text = client.read_text(encoding='utf-8')
 
           replacements = [
               (
-                  '      - name: Audit file configuration is live and healthy',
-                  '      - name: Audit, policy, and client error redaction are healthy',
+                  'import httpx\n\nfrom . import __version__',
+                  'import httpx\nfrom mcp.server.mcpserver.exceptions import ToolError\n\nfrom . import __version__',
               ),
               (
-                  '\n'.join([
-                      '          marker = "SMOKE-QUERY-CREDENTIAL-MARKER"',
-                      '',
-                      '          async def exercise_policy_and_redaction():',
-                  ]),
-                  '\n'.join([
-                      '          marker = "SMOKE-QUERY-CREDENTIAL-MARKER"',
-                      '',
-                      '          def assert_redacted_tool_error(result, *forbidden: str) -> None:',
-                      '              assert result.is_error, result',
-                      '              wire_error = str(result)',
-                      '              assert "Error executing tool jenkins_admin_request" in wire_error, result',
-                      '              for value in forbidden:',
-                      '                  assert value not in wire_error, result',
-                      '',
-                      '          async def exercise_policy_and_redaction():',
-                  ]),
+                  'from .audit import AuditLogger, redact_query',
+                  'from .audit import AuditLogger',
               ),
               (
-                  '\n'.join([
-                      '                      assert result.is_error, result',
-                      '                      assert "MCP_MAX_REQUEST_BYTES" in str(result), result',
-                  ]),
-                  '\n'.join([
-                      '                      assert_redacted_tool_error(',
-                      '                          result, "MCP_MAX_REQUEST_BYTES"',
-                      '                      )',
-                  ]),
+                  'class JenkinsError(RuntimeError):\n    pass\n',
+                  '''class JenkinsError(RuntimeError, ToolError):
+    """Anticipated Jenkins failure whose message is safe for MCP clients.
+
+    MCP 2.1 masks ordinary exceptions as crashes. Domain failures use ToolError
+    intentionally, so agents retain actionable errors without exposing Python
+    exception details. Every message raised through this type must therefore be
+    bounded operational text rather than raw Jenkins response/transport data.
+    """
+
+
+class JenkinsInputError(ValueError, ToolError):
+    """Validated caller input that is safe and useful to return to the agent."""
+''',
               ),
               (
-                  '\n'.join([
-                      '                      assert result.is_error, result',
-                      '                      assert "MCP_MAX_REQUEST_TARGET_BYTES" in str(result), result',
-                  ]),
-                  '\n'.join([
-                      '                      assert_redacted_tool_error(',
-                      '                          result, "MCP_MAX_REQUEST_TARGET_BYTES"',
-                      '                      )',
-                  ]),
+                  'raise JenkinsError(f"Could not reach the Jenkins crumb issuer: {exc}") from exc',
+                  'raise JenkinsError("Could not reach the Jenkins crumb issuer") from exc',
               ),
               (
-                  '\n'.join([
-                      '                      # The health handler deliberately matches the complete',
-                      '                      # request target and therefore returns 404 when a query',
-                      '                      # is attached. Requiring that error plus the audit status',
-                      '                      # below proves the call reached HTTPX, rather than being',
-                      '                      # refused before the leak-prone logging path.',
-                      '                      assert result.is_error, result',
-                      '                      assert "Jenkins returned 404" in str(result), result',
-                  ]),
-                  '\n'.join([
-                      '                      # MCP 2.1 deliberately keeps an unexpected tool',
-                      '                      # exception\'s original text on the server. The generic',
-                      '                      # wire error proves that boundary; the audit assertions',
-                      '                      # below prove the request still reached HTTPX and that',
-                      '                      # the query was redacted before persistence/logging.',
-                      '                      assert_redacted_tool_error(',
-                      '                          result, "Jenkins returned 404", marker',
-                      '                      )',
-                  ]),
+                  '''                detail = f": {body}" if body else ""
+                raise JenkinsError(
+                    f"Jenkins returned {response.status_code}{detail}.{hint}".rstrip()
+                )''',
+                  '''                # Never put Jenkins response bodies on the MCP wire. They can
+                # contain plugin diagnostics, echoed parameters, or proxy/SSO data.
+                # Status plus our fixed operational hint is sufficient for agents;
+                # audit records retain the status for operators.
+                raise JenkinsError(
+                    f"Jenkins returned {response.status_code}.{hint}".rstrip()
+                )''',
+              ),
+              (
+                  '''        # Transport exceptions can include the request URL. Do not return a
+        # caller-supplied query credential through the MCP error channel.
+        error_detail = redact_query(str(last_error)) if last_error else "unknown"
+        raise JenkinsError(f"Jenkins request failed: {error_detail}")''',
+                  '''        # Transport exceptions can contain URLs, proxy details and caller
+        # query strings. The audit record above stores only the exception type;
+        # keep the MCP-facing message deliberately static.
+        raise JenkinsError("Jenkins request failed due to a transport error")''',
               ),
           ]
-
           for old, new in replacements:
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f'expected one smoke fragment, found {count}: {old[:80]!r}')
+                  raise SystemExit(f'client patch expected one match, found {count}: {old[:90]!r}')
               text = text.replace(old, new)
 
-          path.write_text(text, encoding='utf-8')
+          # All explicit ValueErrors in this module are deliberate semantic
+          # validation failures. Preserve ValueError compatibility for library
+          # callers while making them intentional MCP ToolErrors under 2.1.
+          count = text.count('raise ValueError(')
+          if count < 5:
+              raise SystemExit(f'unexpectedly few explicit input validations: {count}')
+          text = text.replace('raise ValueError(', 'raise JenkinsInputError(')
+          client.write_text(text, encoding='utf-8')
+
+          security = Path('src/jenkins_mcp_server/security.py')
+          text = security.read_text(encoding='utf-8')
+          old = 'from dataclasses import dataclass\n\n\nclass PolicyError(PermissionError):\n    pass\n'
+          new = '''from dataclasses import dataclass
+
+from mcp.server.mcpserver.exceptions import ToolError
+
+
+class PolicyError(PermissionError, ToolError):
+    """Expected policy refusal that is safe to return as an MCP tool error."""
+'''
+          if text.count(old) != 1:
+              raise SystemExit('security patch did not match PolicyError block exactly once')
+          security.write_text(text.replace(old, new), encoding='utf-8')
 
           changelog = Path('CHANGELOG.md')
           text = changelog.read_text(encoding='utf-8')
-          old = '- Preserve hash-checked container installs and the existing dependency-review, CodeQL, and pip-audit guardrails for the refreshed dependency set.'
-          new = '\n'.join([
-              old,
-              '- Validate MCP 2.1.1 error redaction end to end: internal exception details remain server-side while audit records retain the exact policy, request-limit, HTTP-status, and redacted-path evidence needed for operations.',
-          ])
-          if text.count(old) != 1:
-              raise SystemExit('expected exactly one 2.10.7 security note')
-          changelog.write_text(text.replace(old, new), encoding='utf-8')
+          anchors = [
+              (
+                  '- Use MCP v2\'s public `mcp.server.MCPServer` import instead of its implementation-module path.',
+                  '- Use MCP v2\'s public `mcp.server.MCPServer` import instead of its implementation-module path.\n- Classify anticipated Jenkins, policy, and semantic-validation failures as MCP 2.1 `ToolError`s so agents receive actionable `is_error` results instead of expected denials being treated as server crashes.',
+              ),
+              (
+                  '- Keep the offline Docker wheel set resolver-consistent with package metadata so image builds do not retain MCP 2.0.0 after the minimum runtime requirement moves to MCP 2.1.1.',
+                  '- Keep the offline Docker wheel set resolver-consistent with package metadata so image builds do not retain MCP 2.0.0 after the minimum runtime requirement moves to MCP 2.1.1.\n- Restore actionable MCP errors for policy, request-limit, validation, and Jenkins operational failures after MCP 2.1 stopped exposing unexpected exception text.',
+              ),
+              (
+                  '- Preserve hash-checked container installs and the existing dependency-review, CodeQL, and pip-audit guardrails for the refreshed dependency set.',
+                  '- Preserve hash-checked container installs and the existing dependency-review, CodeQL, and pip-audit guardrails for the refreshed dependency set.\n- Keep Jenkins response bodies and transport exception strings out of client-visible MCP errors; agents receive sanitized status/hints while audit records retain bounded operational evidence.',
+              ),
+          ]
+          for old, new in anchors:
+              if text.count(old) != 1:
+                  raise SystemExit(f'changelog anchor expected once: {old!r}')
+              text = text.replace(old, new)
+          changelog.write_text(text, encoding='utf-8')
           PY
 
-      - name: Sanity-check the patch
+      - name: Add regression coverage
         run: |
-          git diff --check
-          grep -Fq 'assert "MCP_MAX_REQUEST_BYTES" not in wire_error' .github/workflows/chart-smoke.yml || true
-          grep -Fq 'assert value not in wire_error' .github/workflows/chart-smoke.yml
-          grep -Fq 'MCP 2.1.1 error redaction end to end' CHANGELOG.md
+          cat > tests/test_mcp_error_contract.py <<'PY'
+          """MCP 2.1 regression coverage for expected, sanitized tool failures."""
 
-      - name: Commit final changes and remove maintenance workflow
+          import httpx
+          import pytest
+          from mcp.server.mcpserver.exceptions import ToolError
+
+          from jenkins_mcp_server.audit import AuditLogger
+          from jenkins_mcp_server.client import JenkinsClient, JenkinsError, JenkinsInputError
+          from jenkins_mcp_server.config import Settings
+          from jenkins_mcp_server.security import Policy, PolicyError
+
+
+          def _settings(**overrides: object) -> Settings:
+              values: dict[str, object] = {
+                  "JENKINS_URL": "https://jenkins.test",
+                  "JENKINS_USERNAME": "admin",
+                  "JENKINS_TOKEN": "token",
+                  "JENKINS_MAX_RETRIES": 0,
+              }
+              values.update(overrides)
+              return Settings(**values)  # type: ignore[arg-type]
+
+
+          def _policy() -> Policy:
+              return Policy(
+                  read_only=False,
+                  allow_job_write=True,
+                  allow_build_write=True,
+                  allow_node_write=True,
+                  allow_admin_request=True,
+                  job_patterns=["*"],
+              )
+
+
+          def _client(handler, **overrides: object) -> JenkinsClient:
+              return JenkinsClient(
+                  _settings(**overrides),
+                  _policy(),
+                  AuditLogger(None),
+                  transport=httpx.MockTransport(handler),
+              )
+
+
+          def test_expected_domain_errors_are_mcp_tool_errors() -> None:
+              assert issubclass(JenkinsError, ToolError)
+              assert issubclass(JenkinsError, RuntimeError)
+              assert issubclass(JenkinsInputError, ToolError)
+              assert issubclass(JenkinsInputError, ValueError)
+              assert issubclass(PolicyError, ToolError)
+              assert issubclass(PolicyError, PermissionError)
+
+
+          @pytest.mark.asyncio
+          async def test_request_limit_is_an_actionable_tool_error() -> None:
+              def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
+                  raise AssertionError(f"oversized request reached Jenkins: {request.url}")
+
+              jc = _client(handler, MCP_MAX_REQUEST_BYTES=64)
+              with pytest.raises(JenkinsInputError, match="MCP_MAX_REQUEST_BYTES"):
+                  await jc.admin_request("POST", "/api/json", "A" * 128)
+              await jc.close()
+
+
+          @pytest.mark.asyncio
+          async def test_jenkins_http_error_never_exposes_response_body() -> None:
+              marker = "JENKINS-RESPONSE-SECRET-MARKER"
+
+              def handler(request: httpx.Request) -> httpx.Response:
+                  return httpx.Response(404, text=f"plugin diagnostics {marker}")
+
+              jc = _client(handler)
+              with pytest.raises(JenkinsError) as captured:
+                  await jc.admin_request("GET", "/readyz")
+              message = str(captured.value)
+              assert "Jenkins returned 404" in message
+              assert marker not in message
+              assert "plugin diagnostics" not in message
+              await jc.close()
+
+
+          @pytest.mark.asyncio
+          async def test_transport_error_never_exposes_request_target() -> None:
+              marker = "QUERY-CREDENTIAL-MARKER"
+
+              def handler(request: httpx.Request) -> httpx.Response:
+                  raise httpx.ConnectError(
+                      f"connection failed for {request.url}", request=request
+                  )
+
+              jc = _client(handler)
+              with pytest.raises(JenkinsError) as captured:
+                  await jc.admin_request("GET", f"/readyz?token={marker}")
+              message = str(captured.value)
+              assert message == "Jenkins request failed due to a transport error"
+              assert marker not in message
+              assert "jenkins.test" not in message
+              await jc.close()
+          PY
+
+      - name: Validate the patch locally
+        run: |
+          python -m pip install --disable-pip-version-check -e . pytest pytest-asyncio ruff
+          ruff check src tests/test_mcp_error_contract.py
+          pytest -q tests/test_mcp_error_contract.py tests/test_client_hardening.py
+          python -m compileall -q src
+          git diff --check
+
+      - name: Commit product changes
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git rm .github/workflows/pr-mcp21-smoke-fix.yml
-          git add .github/workflows/chart-smoke.yml CHANGELOG.md
+          git add src/jenkins_mcp_server/client.py src/jenkins_mcp_server/security.py tests/test_mcp_error_contract.py CHANGELOG.md
           git diff --cached --check
-          git commit -m 'ci: align smoke errors with MCP 2.1 redaction'
+          git commit -m 'fix: align expected failures with MCP 2.1 error handling'
           git push origin HEAD:dependabot/pip/python-dependencies-d6ef873569
