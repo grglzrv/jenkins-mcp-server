@@ -89,7 +89,39 @@ async def test_transport_error_never_exposes_request_target() -> None:
     with pytest.raises(JenkinsError) as captured:
         await jc.admin_request("GET", f"/readyz?token={marker}")
     message = str(captured.value)
-    assert message == "Jenkins request failed for /readyz?[redacted]"
+    assert message == "Jenkins request failed due to a transport error"
     assert marker not in message
     assert "jenkins.test" not in message
     await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_transport_error_never_exposes_decoded_path() -> None:
+    marker = "PATH-CREDENTIAL-MARKER"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError(f"connection failed for {request.url}", request=request)
+
+    jc = _client(handler)
+    try:
+        with pytest.raises(JenkinsError) as captured:
+            await jc.admin_request("GET", f"/plugin/{marker}/status")
+        assert marker not in str(captured.value)
+    finally:
+        await jc.close()
+
+
+@pytest.mark.asyncio
+async def test_transport_error_without_request_remains_an_expected_error(monkeypatch) -> None:
+    jc = _client(lambda request: httpx.Response(200))
+
+    async def fail(*args, **kwargs):
+        raise httpx.ConnectError("PROXY-CREDENTIAL-MARKER")
+
+    monkeypatch.setattr(jc, "_send", fail)
+    try:
+        with pytest.raises(JenkinsError) as captured:
+            await jc.admin_request("GET", "/readyz")
+        assert "PROXY-CREDENTIAL-MARKER" not in str(captured.value)
+    finally:
+        await jc.close()
