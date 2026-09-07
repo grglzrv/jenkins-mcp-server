@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from typing import Any
@@ -9,7 +9,7 @@ from mcp.server import MCPServer
 
 from . import __version__
 from .audit import AuditLogger
-from .client import JenkinsClient
+from .client import JenkinsClient, JenkinsInputError
 from .config import Settings, get_settings
 from .diagnostics import JenkinsContact
 from .security import Policy
@@ -64,6 +64,17 @@ def get_jenkins_contact() -> JenkinsContact:
 @lru_cache
 def get_client() -> JenkinsClient:
     return create_client(get_settings(), get_audit_logger(), get_jenkins_contact())
+
+
+def _build_template(factory: Callable[..., str], *args: str) -> str:
+    """Translate safe template validation into an expected MCP tool failure."""
+    try:
+        return factory(*args)
+    except ValueError as exc:
+        # Template validators intentionally use ValueError for normal library
+        # callers. At the MCP boundary, bad agent input is anticipated rather
+        # than a server crash, so preserve the safe field-level message.
+        raise JenkinsInputError(str(exc)) from exc
 
 
 @asynccontextmanager
@@ -186,7 +197,7 @@ async def create_pipeline_job(
     workflow-cps, both included in the workflow-aggregator plugin. Reference
     Jenkins credential IDs; do not put plaintext secrets in the Jenkinsfile.
     The generated XML must fit MCP_MAX_REQUEST_BYTES."""
-    config_xml = pipeline_job_xml(jenkinsfile, description)
+    config_xml = _build_template(pipeline_job_xml, jenkinsfile, description)
     return await get_client().create_job(job_name, config_xml)
 
 
@@ -208,7 +219,8 @@ async def create_multibranch_pipeline(
     never pass a token, password or private key in that field. script_path must
     be a canonical repository-relative path. The generated XML must fit
     MCP_MAX_REQUEST_BYTES."""
-    config_xml = multibranch_github_xml(
+    config_xml = _build_template(
+        multibranch_github_xml,
         repository_url,
         credentials_id,
         script_path,

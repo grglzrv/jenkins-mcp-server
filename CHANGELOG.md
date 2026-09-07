@@ -55,12 +55,14 @@ from the matching version entry after CI validates it.
 - Upgrade MCP to 2.1.1, Pydantic to 2.13.5, Ruff to 0.16.6, and build to 1.6.0.
 - Use MCP v2's public `mcp.server.MCPServer` import instead of its implementation-module path.
 - Classify anticipated Jenkins, policy, and semantic-validation failures as MCP 2.1 `ToolError`s so agents receive actionable `is_error` results instead of expected denials being treated as server crashes.
+- Translate Pipeline and multibranch template validation at the MCP boundary as the same anticipated input-error class, while preserving `ValueError` behavior for direct template-library callers.
 - Regenerate the hash-checked runtime dependency lock with matching `mcp-types` 2.1.1 and `pydantic-core` 2.46.5 releases.
 
 ### Bug Fixes
 
 - Keep the offline Docker wheel set resolver-consistent with package metadata so image builds do not retain MCP 2.0.0 after the minimum runtime requirement moves to MCP 2.1.1.
 - Restore actionable MCP errors for policy, request-limit, validation, and Jenkins operational failures after MCP 2.1 stopped exposing unexpected exception text.
+- Keep invalid repository URLs, script paths, and XML 1.0 template inputs actionable under MCP 2.1 instead of reporting them as generic tool crashes.
 
 ### Breaking Changes
 
