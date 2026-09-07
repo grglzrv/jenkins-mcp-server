@@ -40,6 +40,47 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.7] - 2026-09-07
+
+### Highlights
+
+- Refresh the MCP, Pydantic, Ruff, and Python build dependency set while preserving Jenkins, transport, Helm, Kubernetes, and Minibridge behavior.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Upgrade MCP to 2.1.1, Pydantic to 2.13.5, Ruff to 0.16.6, and build to 1.6.0.
+- Use MCP v2's public `mcp.server.MCPServer` import instead of its implementation-module path.
+- Classify anticipated Jenkins, policy, and semantic-validation failures as MCP 2.1 `ToolError`s so agents receive actionable `is_error` results instead of expected denials being treated as server crashes.
+- Translate Pipeline and multibranch template validation at the MCP boundary as the same anticipated input-error class, while preserving `ValueError` behavior for direct template-library callers.
+- Regenerate the hash-checked runtime dependency lock with matching `mcp-types` 2.1.1 and `pydantic-core` 2.46.5 releases.
+
+### Bug Fixes
+
+- Keep the offline Docker wheel set resolver-consistent with package metadata so image builds do not retain MCP 2.0.0 after the minimum runtime requirement moves to MCP 2.1.1.
+- Restore actionable MCP errors for policy, request-limit, validation, and Jenkins operational failures after MCP 2.1 stopped exposing unexpected exception text.
+- Keep invalid repository URLs, script paths, and XML 1.0 template inputs actionable under MCP 2.1 instead of reporting them as generic tool crashes.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None.
+
+### Security
+
+- Preserve hash-checked container installs and the existing dependency-review, CodeQL, and pip-audit guardrails for the refreshed dependency set.
+- Keep Jenkins response bodies and transport exception strings out of client-visible MCP errors; agents receive sanitized status/hints while audit records retain bounded operational evidence.
+
+### Upgrade Notes
+
+- No Jenkins, MCP transport, Minibridge, Kubernetes, Helm, credential, ingress, or policy configuration change is required.
+
 ## [2.10.6] - 2026-08-25
 
 ### Highlights

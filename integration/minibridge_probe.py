@@ -41,21 +41,16 @@ def check(condition: bool, description: str) -> None:
         failures.append(description)
 
 
-# The smoke cluster has no Jenkins, so an allowed tool fails on connection.
-# For CallToolResult errors, classify by what a Jenkins transport failure looks
-# like. Raised MCP errors use Minibridge's explicit convention below instead of
-# treating every exception as a refusal.
+# The smoke cluster has no Jenkins, so an allowed tool fails after Minibridge
+# permits it to reach the server. MCP 2.1 hardening deliberately removes raw
+# transport/Jenkins response text from client-visible errors, giving us a small
+# stable error family to recognize. Keep these markers specific: broad terms
+# such as "connection" or "certificate" could also appear in a policy denial
+# and would make the smoke test falsely report enforcement as healthy.
 JENKINS_ERRORS = (
-    "connect",
-    "connection",
-    "resolve",
-    "timeout",
-    "timed out",
-    "name or service not known",
-    "temporary failure in name resolution",
-    "getaddrinfo",
-    "ssl",
-    "certificate",
+    "jenkins request failed",
+    "jenkins returned ",
+    "timed out waiting for a jenkins concurrency slot",
 )
 
 # Minibridge follows HTTP semantics for an enforced policer verdict: it returns
@@ -72,7 +67,8 @@ def error_text(result) -> str:
 
 def reached_jenkins(result) -> bool:
     """The call got past policy and failed trying to talk to Jenkins."""
-    return any(marker in error_text(result) for marker in JENKINS_ERRORS)
+    text = error_text(result)
+    return any(marker in text for marker in JENKINS_ERRORS)
 
 
 def raised_mcp_refused(exc: MCPError) -> bool:

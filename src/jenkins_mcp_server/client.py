@@ -12,16 +12,27 @@ from typing import Any
 from urllib.parse import quote, unquote, urlsplit
 
 import httpx
+from mcp.server.mcpserver.exceptions import ToolError
 
 from . import __version__
-from .audit import AuditLogger, redact_query
+from .audit import AuditLogger
 from .config import Settings
 from .diagnostics import JenkinsContact
 from .security import Policy, PolicyError
 
 
-class JenkinsError(RuntimeError):
-    pass
+class JenkinsError(RuntimeError, ToolError):
+    """Anticipated Jenkins failure whose message is safe for MCP clients.
+
+    MCP 2.1 masks ordinary exceptions as crashes. Domain failures use ToolError
+    intentionally, so agents retain actionable errors without exposing Python
+    exception details. Every message raised through this type must therefore be
+    bounded operational text rather than raw Jenkins response/transport data.
+    """
+
+
+class JenkinsInputError(ValueError, ToolError):
+    """Validated caller input that is safe and useful to return to the agent."""
 
 
 TRAVERSAL_SEGMENTS = {".", ".."}
@@ -41,9 +52,7 @@ CRUMB_REJECTION_MARKERS = (
 # A reverse proxy or SSO layer commonly redirects unauthenticated API traffic
 # to one of these controller routes. Typed write tools accept Jenkins' normal
 # same-controller 302 responses, so these must be distinguished from success.
-AUTHENTICATION_REDIRECT_ROUTES = frozenset(
-    {"login", "loginerror", "securityrealm"}
-)
+AUTHENTICATION_REDIRECT_ROUTES = frozenset({"login", "loginerror", "securityrealm"})
 
 BUILD_ALIASES = frozenset(
     {
@@ -137,10 +146,7 @@ JOB_INFO_TREE = ",".join(
         *JOB_INFO_FIELDS,
         f"healthReport[{','.join(JOB_HEALTH_FIELDS)}]",
         f"builds[{','.join(BUILD_REFERENCE_FIELDS)}]",
-        *(
-            f"{field}[{','.join(BUILD_REFERENCE_FIELDS)}]"
-            for field in JOB_BUILD_REFERENCE_FIELDS
-        ),
+        *(f"{field}[{','.join(BUILD_REFERENCE_FIELDS)}]" for field in JOB_BUILD_REFERENCE_FIELDS),
     ]
 )
 
@@ -213,15 +219,10 @@ RUNNING_BUILD_TREE = (
 )
 
 
-def _selected_scalar_fields(
-    payload: dict[str, Any], fields: tuple[str, ...]
-) -> dict[str, Any]:
+def _selected_scalar_fields(payload: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
     """Project fields whose public contract is a JSON scalar."""
     return {
-        name: payload[name]
-        for name in fields
-        if name in payload
-        and _is_json_scalar(payload[name])
+        name: payload[name] for name in fields if name in payload and _is_json_scalar(payload[name])
     }
 
 
@@ -273,14 +274,11 @@ def _parameter_is_sensitive(
         return False
     normalized_name = name.casefold()
     if any(
-        fnmatch.fnmatchcase(normalized_name, pattern.casefold())
-        for pattern in configured_patterns
+        fnmatch.fnmatchcase(normalized_name, pattern.casefold()) for pattern in configured_patterns
     ):
         return True
     component_list = [
-        component
-        for component in re.split(r"[^a-z0-9]+", normalized_name)
-        if component
+        component for component in re.split(r"[^a-z0-9]+", normalized_name) if component
     ]
     components = set(component_list)
     compact_name = "".join(component_list)
@@ -328,14 +326,10 @@ def _project_job_info(payload: Any) -> dict[str, Any]:
             payload["healthReport"], JOB_HEALTH_FIELDS, error
         )
     if "builds" in payload:
-        result["builds"] = _project_object_list(
-            payload["builds"], BUILD_REFERENCE_FIELDS, error
-        )
+        result["builds"] = _project_object_list(payload["builds"], BUILD_REFERENCE_FIELDS, error)
     for field in JOB_BUILD_REFERENCE_FIELDS:
         if field in payload:
-            result[field] = _project_optional_object(
-                payload[field], BUILD_REFERENCE_FIELDS, error
-            )
+            result[field] = _project_optional_object(payload[field], BUILD_REFERENCE_FIELDS, error)
     return result
 
 
@@ -349,9 +343,7 @@ def _project_build_info(
     result = _selected_scalar_fields(payload, BUILD_INFO_FIELDS)
     for field in ("previousBuild", "nextBuild"):
         if field in payload:
-            result[field] = _project_optional_object(
-                payload[field], BUILD_REFERENCE_FIELDS, error
-            )
+            result[field] = _project_optional_object(payload[field], BUILD_REFERENCE_FIELDS, error)
     if "actions" in payload:
         if not isinstance(payload["actions"], list):
             raise JenkinsError(error)
@@ -361,11 +353,7 @@ def _project_build_info(
                 raise JenkinsError(error)
             if "parameters" in action:
                 actions.append(
-                    {
-                        "parameters": _project_parameters(
-                            action["parameters"], configured_patterns
-                        )
-                    }
+                    {"parameters": _project_parameters(action["parameters"], configured_patterns)}
                 )
         if actions:
             result["actions"] = actions
@@ -389,9 +377,7 @@ def _project_queue_item(payload: dict[str, Any]) -> dict[str, Any]:
     if executable is not None:
         if not isinstance(executable, dict):
             raise JenkinsError("Jenkins returned malformed queue JSON")
-        summary["executable"] = _selected_scalar_fields(
-            executable, QUEUE_EXECUTABLE_FIELDS
-        )
+        summary["executable"] = _selected_scalar_fields(executable, QUEUE_EXECUTABLE_FIELDS)
     return summary
 
 
@@ -404,50 +390,54 @@ def _node_path(node_name: str) -> str:
     and reported success for a node it never touched.
     """
     if not node_name or not node_name.strip():
-        raise ValueError("node_name must not be empty")
+        raise JenkinsInputError("node_name must not be empty")
     if any(part in TRAVERSAL_SEGMENTS for part in node_name.split("/")):
-        raise ValueError("node_name must not contain '.' or '..' segments")
+        raise JenkinsInputError("node_name must not contain '.' or '..' segments")
     return quote(node_name, safe="")
 
 
 def _job_path(full_name: str) -> str:
     if not full_name.strip("/").strip():
-        raise ValueError("job_name must not be empty")
+        raise JenkinsInputError("job_name must not be empty")
     if full_name != full_name.strip("/") or "//" in full_name:
-        raise ValueError(
+        raise JenkinsInputError(
             "job_name must not have leading, trailing, or repeated '/' separators"
         )
     parts = full_name.split("/")
     if any(part in TRAVERSAL_SEGMENTS for part in parts):
-        raise ValueError(f"job_name must not contain '.' or '..' path segments: {full_name!r}")
+        raise JenkinsInputError(
+            f"job_name must not contain '.' or '..' path segments: {full_name!r}"
+        )
     return "/".join(f"job/{quote(part, safe='')}" for part in parts)
 
 
 def _build_selector(build_number: int | str) -> str:
     """Validate the path component used to address a Jenkins build."""
     if isinstance(build_number, bool):
-        raise ValueError("build_number must be a positive integer or Jenkins alias")
+        raise JenkinsInputError("build_number must be a positive integer or Jenkins alias")
     if isinstance(build_number, int):
         if build_number < 1:
-            raise ValueError("build_number must be positive")
+            raise JenkinsInputError("build_number must be positive")
         return str(build_number)
     if build_number in BUILD_ALIASES:
         return build_number
     if build_number.isdecimal() and int(build_number) > 0:
         return str(int(build_number))
-    raise ValueError("build_number must be a positive integer or a supported Jenkins build alias")
+    raise JenkinsInputError(
+        "build_number must be a positive integer or a supported Jenkins build alias"
+    )
 
 
 def _new_job_parts(job_name: str) -> tuple[str, str]:
     """Return a canonical parent/name pair for job creation."""
     if job_name != job_name.strip("/") or "//" in job_name:
-        raise ValueError(
+        raise JenkinsInputError(
             "new job names must not have leading, trailing, or repeated '/' separators"
         )
     _job_path(job_name)
     parent, _, leaf = job_name.rpartition("/")
     if not leaf:
-        raise ValueError("new job name must not be empty")
+        raise JenkinsInputError("new job name must not be empty")
     return parent, leaf
 
 
@@ -685,7 +675,7 @@ class JenkinsClient:
                     self.settings.max_response_bytes,
                 )
             except httpx.TransportError as exc:
-                raise JenkinsError(f"Could not reach the Jenkins crumb issuer: {exc}") from exc
+                raise JenkinsError("Could not reach the Jenkins crumb issuer") from exc
             if response.status_code == 404:
                 # CSRF protection is off on this controller. Remember it,
                 # otherwise every write pays for a 404 round trip first.
@@ -769,23 +759,15 @@ class JenkinsClient:
         """Decode a queue ID and return its configured-origin canonical URL."""
         location = response.headers.get("Location")
         if not location:
-            raise JenkinsError(
-                "Jenkins accepted the build trigger without a queue Location header"
-            )
+            raise JenkinsError("Jenkins accepted the build trigger without a queue Location header")
         try:
             target = response.request.url.join(location)
         except (httpx.InvalidURL, ValueError) as exc:
-            raise JenkinsError(
-                "Jenkins returned an invalid build queue Location header"
-            ) from exc
+            raise JenkinsError("Jenkins returned an invalid build queue Location header") from exc
         if target.scheme not in {"http", "https"}:
-            raise JenkinsError(
-                "Jenkins returned a build queue Location with an unsupported scheme"
-            )
+            raise JenkinsError("Jenkins returned a build queue Location with an unsupported scheme")
         if target.query or target.fragment:
-            raise JenkinsError(
-                "Jenkins returned a build queue Location with a query or fragment"
-            )
+            raise JenkinsError("Jenkins returned a build queue Location with a query or fragment")
         route = unquote(target.path)
         # Jenkins often advertises a public root URL while this client reaches
         # it through an internal Service URL, and the two may have different
@@ -794,9 +776,7 @@ class JenkinsClient:
         # supports that topology without returning or following a foreign URL.
         match = re.search(r"(?:^|/)queue/item/([1-9][0-9]*)/?$", route)
         if not match:
-            raise JenkinsError(
-                "Jenkins returned a build trigger Location that is not a queue item"
-            )
+            raise JenkinsError("Jenkins returned a build trigger Location that is not a queue item")
         queue_id = int(match.group(1))
         canonical = self.http.base_url.join(f"queue/item/{queue_id}/")
         return str(canonical), queue_id
@@ -839,9 +819,7 @@ class JenkinsClient:
             async with asyncio.timeout(self.settings.jenkins_timeout_seconds):
                 await self._concurrency.acquire()
         except TimeoutError as exc:
-            raise httpx.PoolTimeout(
-                "Timed out waiting for a Jenkins concurrency slot"
-            ) from exc
+            raise httpx.PoolTimeout("Timed out waiting for a Jenkins concurrency slot") from exc
         try:
             return await self._send_unbounded(method, path, request_kwargs, response_limit)
         finally:
@@ -915,24 +893,16 @@ class JenkinsClient:
         if isinstance(data, bytearray):
             data = bytes(data)
         if isinstance(data, str | bytes):
-            request = httpx.Request(
-                "POST", "http://request-size.invalid/", content=data
-            )
+            request = httpx.Request("POST", "http://request-size.invalid/", content=data)
         elif isinstance(data, Mapping):
-            request = httpx.Request(
-                "POST", "http://request-size.invalid/", data=data
-            )
+            request = httpx.Request("POST", "http://request-size.invalid/", data=data)
         elif data is not None:
             # Preserve the generic internal request API while forcing any
             # iterable body to be consumed and bounded before Jenkins contact.
-            request = httpx.Request(
-                "POST", "http://request-size.invalid/", data=data
-            )
+            request = httpx.Request("POST", "http://request-size.invalid/", data=data)
             request.read()
         else:
-            request = httpx.Request(
-                "POST", "http://request-size.invalid/", json=json_body
-            )
+            request = httpx.Request("POST", "http://request-size.invalid/", json=json_body)
         return request.content, request.headers.get("Content-Type")
 
     async def _enforce_target_size(
@@ -960,7 +930,7 @@ class JenkinsClient:
             target_bytes=size,
             target_limit_bytes=limit,
         )
-        raise ValueError(
+        raise JenkinsInputError(
             f"Request target for {action} is {size} bytes, over the "
             f"{limit} byte MCP_MAX_REQUEST_TARGET_BYTES limit. Reduce the "
             "encoded path or query, or raise the limit only if every proxy "
@@ -986,7 +956,7 @@ class JenkinsClient:
             request_bytes=size,
             request_limit_bytes=limit,
         )
-        raise ValueError(
+        raise JenkinsInputError(
             f"Request body for {action} is {size} bytes, over the "
             f"{limit} byte MCP_MAX_REQUEST_BYTES limit. Raise the limit "
             "or send a smaller definition."
@@ -1162,10 +1132,11 @@ class JenkinsClient:
                         )
                 else:
                     hint = ""
-                detail = f": {body}" if body else ""
-                raise JenkinsError(
-                    f"Jenkins returned {response.status_code}{detail}.{hint}".rstrip()
-                )
+                # Never put Jenkins response bodies on the MCP wire. They can
+                # contain plugin diagnostics, echoed parameters, or proxy/SSO data.
+                # Status plus our fixed operational hint is sufficient for agents;
+                # audit records retain the status for operators.
+                raise JenkinsError(f"Jenkins returned {response.status_code}.{hint}".rstrip())
             except httpx.TransportError as exc:
                 last_error = exc
                 # Connection establishment and pool acquisition fail before a
@@ -1187,10 +1158,24 @@ class JenkinsClient:
             path=path,
             error=type(last_error).__name__ if last_error else "unknown",
         )
-        # Transport exceptions can include the request URL. Do not return a
-        # caller-supplied query credential through the MCP error channel.
-        error_detail = redact_query(str(last_error)) if last_error else "unknown"
-        raise JenkinsError(f"Jenkins request failed: {error_detail}")
+        # Preserve only diagnostics generated by this process or a bounded,
+        # redacted request target. Never surface the transport exception text:
+        # HTTPX/proxy errors can contain origins, credentials, and full queries.
+        if (
+            isinstance(last_error, httpx.PoolTimeout)
+            and str(last_error) == "Timed out waiting for a Jenkins concurrency slot"
+        ):
+            message = "Timed out waiting for a Jenkins concurrency slot"
+        else:
+            failed_request = getattr(last_error, "request", None)
+            if failed_request is not None:
+                safe_target = failed_request.url.path
+                if failed_request.url.query:
+                    safe_target += "?[redacted]"
+                message = f"Jenkins request failed for {safe_target}"
+            else:
+                message = "Jenkins request failed due to a transport error"
+        raise JenkinsError(message) from last_error
 
     async def api(
         self,
@@ -1257,9 +1242,7 @@ class JenkinsClient:
 
     async def get_job(self, job_name: str) -> Any:
         await self._check_job(job_name)
-        return _project_job_info(
-            await self.api(_job_path(job_name), depth=0, tree=JOB_INFO_TREE)
-        )
+        return _project_job_info(await self.api(_job_path(job_name), depth=0, tree=JOB_INFO_TREE))
 
     async def get_job_config(self, job_name: str) -> str:
         await self._check_job(job_name)
@@ -1381,9 +1364,9 @@ class JenkinsClient:
     ) -> dict[str, Any]:
         await self._require_destructive("build.stop", job_name)
         if isinstance(build_number, bool) or build_number < 1:
-            raise ValueError("build_number must be positive")
+            raise JenkinsInputError("build_number must be positive")
         if mode not in {"stop", "term", "kill"}:
-            raise ValueError("mode must be stop, term, or kill")
+            raise JenkinsInputError("mode must be stop, term, or kill")
         await self.request(
             "POST",
             f"/{_job_path(job_name)}/{build_number}/{mode}",
@@ -1421,7 +1404,7 @@ class JenkinsClient:
         await self._check_job(job_name)
         selector = _build_selector(build_number)
         if isinstance(start, bool) or not isinstance(start, int) or start < 0:
-            raise ValueError("start must be a non-negative integer")
+            raise JenkinsInputError("start must be a non-negative integer")
         response = await self.request(
             "GET",
             f"/{_job_path(job_name)}/{selector}/logText/progressiveText",
@@ -1491,7 +1474,7 @@ class JenkinsClient:
 
     async def queue_item(self, item_id: int) -> dict[str, Any]:
         if isinstance(item_id, bool) or not isinstance(item_id, int) or item_id < 1:
-            raise ValueError("item_id must be a positive integer")
+            raise JenkinsInputError("item_id must be a positive integer")
         item = await self.api(
             f"queue/item/{item_id}",
             depth=0,
@@ -1514,7 +1497,7 @@ class JenkinsClient:
 
     async def cancel_queue(self, item_id: int) -> dict[str, Any]:
         if isinstance(item_id, bool) or item_id < 1:
-            raise ValueError("item_id must be positive")
+            raise JenkinsInputError("item_id must be positive")
         await self._require_destructive(
             "queue.cancel",
             target=str(item_id),
@@ -1578,9 +1561,9 @@ class JenkinsClient:
                     continue
                 running.append(
                     {
-                        "node": _selected_scalar_fields(
-                            computer, ("displayName",)
-                        ).get("displayName"),
+                        "node": _selected_scalar_fields(computer, ("displayName",)).get(
+                            "displayName"
+                        ),
                         **_selected_scalar_fields(current, RUNNING_BUILD_FIELDS),
                     }
                 )
@@ -1683,13 +1666,13 @@ class JenkinsClient:
         # /%6aob/... and /%73criptText cannot evade literal string checks.
         decoded_path = unquote(path)
         if "\\" in decoded_path:
-            raise ValueError("path must not contain backslash separators")
+            raise JenkinsInputError("path must not contain backslash separators")
         if ";" in decoded_path:
-            raise ValueError("path must not contain semicolon path parameters")
+            raise JenkinsInputError("path must not contain semicolon path parameters")
         if any(ord(character) < 32 or ord(character) == 127 for character in decoded_path):
-            raise ValueError("path must not contain control characters")
+            raise JenkinsInputError("path must not contain control characters")
         if any(part in TRAVERSAL_SEGMENTS for part in decoded_path.split("/")):
-            raise ValueError("path must not contain '.' or '..' segments")
+            raise JenkinsInputError("path must not contain '.' or '..' segments")
 
         # Compare the decoded route name rather than only an exact raw spelling.
         first_segment = next(
@@ -1730,9 +1713,9 @@ class JenkinsClient:
         # prefixes miss such as '//host/x', ' https://host' and 'HtTpS://host'.
         parsed = urlsplit(path)
         if parsed.scheme or parsed.netloc:
-            raise ValueError("path must be a Jenkins-relative absolute path")
+            raise JenkinsInputError("path must be a Jenkins-relative absolute path")
         if not parsed.path.startswith("/"):
-            raise ValueError("path must be a Jenkins-relative absolute path")
+            raise JenkinsInputError("path must be a Jenkins-relative absolute path")
         # _check_admin_path validates both policy and the decoded path shape.
         # urlsplit separates components but deliberately does not normalise or
         # percent-decode the path.
