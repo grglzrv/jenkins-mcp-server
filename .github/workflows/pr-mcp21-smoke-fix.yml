@@ -1,0 +1,133 @@
+name: PR MCP 2.1 smoke compatibility
+
+on:
+  push:
+    branches:
+      - dependabot/pip/python-dependencies-d6ef873569
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dependabot/pip/python-dependencies-d6ef873569
+          fetch-depth: 0
+
+      - name: Adapt smoke assertions to MCP 2.1 exception redaction
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/chart-smoke.yml')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  '      - name: Audit file configuration is live and healthy',
+                  '      - name: Audit, policy, and client error redaction are healthy',
+              ),
+              (
+                  '\n'.join([
+                      '          marker = "SMOKE-QUERY-CREDENTIAL-MARKER"',
+                      '',
+                      '          async def exercise_policy_and_redaction():',
+                  ]),
+                  '\n'.join([
+                      '          marker = "SMOKE-QUERY-CREDENTIAL-MARKER"',
+                      '',
+                      '          def assert_redacted_tool_error(result, *forbidden: str) -> None:',
+                      '              assert result.is_error, result',
+                      '              wire_error = str(result)',
+                      '              assert "Error executing tool jenkins_admin_request" in wire_error, result',
+                      '              for value in forbidden:',
+                      '                  assert value not in wire_error, result',
+                      '',
+                      '          async def exercise_policy_and_redaction():',
+                  ]),
+              ),
+              (
+                  '\n'.join([
+                      '                      assert result.is_error, result',
+                      '                      assert "MCP_MAX_REQUEST_BYTES" in str(result), result',
+                  ]),
+                  '\n'.join([
+                      '                      assert_redacted_tool_error(',
+                      '                          result, "MCP_MAX_REQUEST_BYTES"',
+                      '                      )',
+                  ]),
+              ),
+              (
+                  '\n'.join([
+                      '                      assert result.is_error, result',
+                      '                      assert "MCP_MAX_REQUEST_TARGET_BYTES" in str(result), result',
+                  ]),
+                  '\n'.join([
+                      '                      assert_redacted_tool_error(',
+                      '                          result, "MCP_MAX_REQUEST_TARGET_BYTES"',
+                      '                      )',
+                  ]),
+              ),
+              (
+                  '\n'.join([
+                      '                      # The health handler deliberately matches the complete',
+                      '                      # request target and therefore returns 404 when a query',
+                      '                      # is attached. Requiring that error plus the audit status',
+                      '                      # below proves the call reached HTTPX, rather than being',
+                      '                      # refused before the leak-prone logging path.',
+                      '                      assert result.is_error, result',
+                      '                      assert "Jenkins returned 404" in str(result), result',
+                  ]),
+                  '\n'.join([
+                      '                      # MCP 2.1 deliberately keeps an unexpected tool',
+                      '                      # exception\'s original text on the server. The generic',
+                      '                      # wire error proves that boundary; the audit assertions',
+                      '                      # below prove the request still reached HTTPX and that',
+                      '                      # the query was redacted before persistence/logging.',
+                      '                      assert_redacted_tool_error(',
+                      '                          result, "Jenkins returned 404", marker',
+                      '                      )',
+                  ]),
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one smoke fragment, found {count}: {old[:80]!r}')
+              text = text.replace(old, new)
+
+          path.write_text(text, encoding='utf-8')
+
+          changelog = Path('CHANGELOG.md')
+          text = changelog.read_text(encoding='utf-8')
+          old = '- Preserve hash-checked container installs and the existing dependency-review, CodeQL, and pip-audit guardrails for the refreshed dependency set.'
+          new = '\n'.join([
+              old,
+              '- Validate MCP 2.1.1 error redaction end to end: internal exception details remain server-side while audit records retain the exact policy, request-limit, HTTP-status, and redacted-path evidence needed for operations.',
+          ])
+          if text.count(old) != 1:
+              raise SystemExit('expected exactly one 2.10.7 security note')
+          changelog.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
+      - name: Sanity-check the patch
+        run: |
+          git diff --check
+          grep -Fq 'assert "MCP_MAX_REQUEST_BYTES" not in wire_error' .github/workflows/chart-smoke.yml || true
+          grep -Fq 'assert value not in wire_error' .github/workflows/chart-smoke.yml
+          grep -Fq 'MCP 2.1.1 error redaction end to end' CHANGELOG.md
+
+      - name: Commit final changes and remove maintenance workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/pr-mcp21-smoke-fix.yml
+          git add .github/workflows/chart-smoke.yml CHANGELOG.md
+          git diff --cached --check
+          git commit -m 'ci: align smoke errors with MCP 2.1 redaction'
+          git push origin HEAD:dependabot/pip/python-dependencies-d6ef873569
