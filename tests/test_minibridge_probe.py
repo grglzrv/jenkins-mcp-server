@@ -42,7 +42,7 @@ def tool_error(message: str) -> SimpleNamespace:
         "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed",
     ],
 )
-async def test_raised_jenkins_mcp_errors_mean_policy_allowed(message: str) -> None:
+async def test_raised_non_policy_mcp_errors_mean_policy_allowed(message: str) -> None:
     session = RaisingSession(MCPError(code=-32000, message=message))
 
     was_refused, detail = await call(session, "list_jobs", {})
@@ -70,6 +70,16 @@ def test_sanitized_jenkins_status_error_means_policy_allowed() -> None:
     assert reached_jenkins(result) is True
     assert refused(result) is False
     assert allowed(result) is True
+
+
+def test_policy_error_with_network_word_stays_refused() -> None:
+    result = tool_error(
+        "request blocked: connection to delete_job is not permitted by policy"
+    )
+
+    assert reached_jenkins(result) is False
+    assert refused(result) is True
+    assert allowed(result) is False
 
 
 async def test_explicit_minibridge_policy_error_means_refused() -> None:
