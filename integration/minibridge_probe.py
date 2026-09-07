@@ -43,23 +43,14 @@ def check(condition: bool, description: str) -> None:
 
 # The smoke cluster has no Jenkins, so an allowed tool fails after Minibridge
 # permits it to reach the server. MCP 2.1 hardening deliberately removes raw
-# transport/Jenkins response text from client-visible errors. Recognize both
-# the stable sanitized Jenkins error family and older low-level network wording
-# so this probe tests the policy boundary rather than depending on leaked
-# transport details.
+# transport/Jenkins response text from client-visible errors, giving us a small
+# stable error family to recognize. Keep these markers specific: broad terms
+# such as "connection" or "certificate" could also appear in a policy denial
+# and would make the smoke test falsely report enforcement as healthy.
 JENKINS_ERRORS = (
     "jenkins request failed",
     "jenkins returned ",
-    "connect",
-    "connection",
-    "resolve",
-    "timeout",
-    "timed out",
-    "name or service not known",
-    "temporary failure in name resolution",
-    "getaddrinfo",
-    "ssl",
-    "certificate",
+    "timed out waiting for a jenkins concurrency slot",
 )
 
 # Minibridge follows HTTP semantics for an enforced policer verdict: it returns
