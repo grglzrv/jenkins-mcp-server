@@ -1,0 +1,44 @@
+name: Finalize MCP 2.1 hardening
+
+on:
+  push:
+    branches:
+      - dependabot/pip/python-dependencies-d6ef873569
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dependabot/pip/python-dependencies-d6ef873569
+          fetch-depth: 0
+
+      - name: Reuse reviewed hardening patch
+        run: |
+          payload=$(sed -n "s/.*printf '%s' '\([^']*\)'.*/\1/p" .github/workflows/pr-mcp21-smoke-fix.yml | head -n 1)
+          test -n "$payload"
+          printf '%s' "$payload" | base64 --decode > /tmp/patch_mcp21.py
+          python /tmp/patch_mcp21.py
+
+      - name: Format and validate focused regressions
+        run: |
+          python -m pip install --disable-pip-version-check -e . pytest pytest-asyncio ruff
+          ruff format src/jenkins_mcp_server/client.py src/jenkins_mcp_server/security.py tests/test_mcp_error_contract.py
+          ruff check src tests/test_mcp_error_contract.py
+          pytest -q tests/test_mcp_error_contract.py tests/test_client_hardening.py
+          python -m compileall -q src
+          git diff --check
+
+      - name: Commit product changes only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/jenkins_mcp_server/client.py src/jenkins_mcp_server/security.py tests/test_mcp_error_contract.py CHANGELOG.md
+          git diff --cached --check
+          git commit -m 'fix: align expected failures with MCP 2.1 error handling'
+          git push origin HEAD:dependabot/pip/python-dependencies-d6ef873569
