@@ -239,7 +239,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.10.7 \
+  --version 2.10.8 \
   --namespace jenkins-mcp \
   --values examples/values/existing-secret.yaml \
   --set-string jenkins.url=https://jenkins.example.com
@@ -260,8 +260,8 @@ The chart defaults `preStopDelaySeconds` to 5 so a terminating pod continues
 serving while EndpointSlice, Service proxy, ingress, and load-balancer state
 propagates. Set it to `0` to disable, or tune it from rollout measurements; it
 must remain below `terminationGracePeriodSeconds` because the hook and process
-shutdown share that total budget. A terminated pod's in-memory MCP sessions are
-not migrated, so affected clients still reconnect and initialize again.
+shutdown share that total budget. Minibridge sessions are not migrated from a
+terminated pod, so affected clients must reconnect and initialize again.
 
 ## 🔌 Connecting a client
 
@@ -269,6 +269,11 @@ not migrated, so affected clients still reconnect and initialize again.
 
 The MCP specification defines two transports, and this server implements both.
 Select with `MCP_TRANSPORT` or `--transport`.
+
+The direct HTTP server runs in stateless mode: it does not retain MCP sessions
+between requests. MCP 2.2's idle-session timeout and concurrent-session cap do
+not apply to that endpoint. Minibridge manages its own sessions around the
+private stdio process; Python SDK HTTP session settings do not control them.
 
 | Transport | Value | Use for |
 | --- | --- | --- |
@@ -312,11 +317,12 @@ surrounding structure.
 | Raw manifests, in-cluster | `http://jenkins-mcp.jenkins-mcp.svc.cluster.local:8000/mcp` |
 | Behind an ingress | `https://<ingress-host>/mcp` |
 
-Every shipped Kubernetes MCP Service uses `ClientIP` affinity with a 600-second
-timeout so the requests in one stateful Streamable HTTP session reach the same
-replica. An ingress controller that bypasses Service load balancing or hides the
-original client address needs equivalent controller-specific affinity. Affinity
-cannot preserve in-memory sessions when their owning pod restarts; clients must
+Every shipped Kubernetes MCP Service retains `ClientIP` affinity with a
+600-second timeout. The direct HTTP server is stateless; affinity is needed for
+Minibridge's stateful sessions when using multiple replicas. For Minibridge,
+an ingress controller that bypasses Service load balancing or hides the original
+client address needs equivalent controller-specific affinity. Affinity cannot
+preserve Minibridge sessions when their owning pod restarts; clients must
 reconnect and initialize a new session.
 
 The Helm chart derives the Service name from the release, so a release named
@@ -504,7 +510,7 @@ the trade for that guarantee.
 To cut a release: complete every `[Unreleased]` category in `CHANGELOG.md`, then
 
 ```bash
-NEW_VERSION=2.10.7
+NEW_VERSION=2.10.8
 make version VERSION="$NEW_VERSION"   # promotes the notes, rewrites every version pin
 ```
 

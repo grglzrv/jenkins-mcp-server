@@ -40,6 +40,44 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.8] - 2026-09-14
+
+### Highlights
+
+- Update the MCP runtime to 2.2.0 with a matching, hash-checked container dependency set.
+- Restore container builds and prepare synchronized application, Helm, and deployment versions for this dependency update.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Upgrade MCP and mcp-types to 2.2.0, Ruff to 0.16.7, and build to 1.6.1, including build's Windows isolated-environment regression fix.
+- Clarify that the direct HTTP endpoint is stateless while Minibridge owns separate sessions around its private stdio process.
+
+### Bug Fixes
+
+- Refresh the runtime lock so offline image installation can satisfy the new MCP minimum; the original dependency PR retained MCP 2.1.1 and failed Docker, Jenkins integration, and Kubernetes smoke builds.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Preserve hash-checked container dependencies and the existing Jenkins credential, policy, and error-redaction boundaries.
+- MCP 2.2 tightens SDK client redirects to the endpoint origin. Clients upgraded separately to this SDK should use the final MCP endpoint URL instead of a cross-origin redirect.
+
+### Upgrade Notes
+
+- No Jenkins, Helm, Kubernetes, or Minibridge configuration migration is required.
+- The direct HTTP endpoint remains stateless, so MCP 2.2's stateful idle-session timeout and session-count limit do not apply. Minibridge session behavior remains controlled by Minibridge.
+
 ## [2.10.7] - 2026-09-07
 
 ### Highlights

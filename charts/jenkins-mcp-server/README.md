@@ -63,7 +63,7 @@ kubectl -n jenkins-mcp create secret generic jenkins-mcp-secrets \
 
 helm upgrade --install jenkins-mcp \
   oci://ghcr.io/grglzrv/charts/jenkins-mcp-server \
-  --version 2.10.7 \
+  --version 2.10.8 \
   --namespace jenkins-mcp \
   --set-string jenkins.url=https://jenkins.example.com \
   --set jenkins.credentials.create.enabled=false \
@@ -427,7 +427,7 @@ does not render direct-listener variables into the ConfigMap.
 | Key | Default | Notes |
 | --- | --- | --- |
 | `service.type` / `port` | `ClusterIP` / `8000` | |
-| `service.sessionAffinity` | `ClientIP`, 600 seconds | Keeps a Streamable HTTP session on the replica that owns its in-memory state; set the whole value to `null` only when affinity is provided upstream or there is one replica |
+| `service.sessionAffinity` | `ClientIP`, 600 seconds | Keeps a Minibridge session on its owning replica. The direct Python HTTP endpoint is stateless. For Minibridge, set the whole value to `null` only when affinity is provided upstream or there is one replica |
 | `service.exposeHealthPort` | `true` | Direct-server `/readyz` reports config state and passive Jenkins transport diagnostics; Minibridge publishes its own `/` health; set false on an externally reachable Service |
 | `ingress.enabled` | `false` | No ingress controller is assumed |
 | `ingress.className` | `""` | Empty uses the cluster default. The template adapts to the class |
@@ -443,9 +443,10 @@ does not render direct-listener variables into the ConfigMap.
 | `tailscale.egress`, `magicDNS`, `proxyGroups` | disabled | See `values.yaml` |
 
 Kubernetes Service affinity sees the source address that reaches the Service.
-When an ingress controller masks client addresses, configure that controller's
-cookie or backend affinity as well. Affinity prevents routine cross-pod session
-loss; it does not migrate a pod's in-memory sessions during restart or eviction.
+For Minibridge, when an ingress controller masks client addresses, configure
+that controller's cookie or backend affinity as well. Affinity prevents routine
+cross-pod Minibridge session loss; it does not migrate sessions during restart
+or eviction. The direct Python HTTP endpoint does not retain MCP sessions.
 
 Kubernetes NetworkPolicy has no portable DNS-name destination selector. For an
 external Jenkins URL protected by a firewall that only admits the cluster, keep
@@ -531,7 +532,7 @@ override `image.tag` explicitly, but the supported release pair is tested and
 published together.
 
 ```bash
-NEW_VERSION=2.10.7
+NEW_VERSION=2.10.8
 make version VERSION="$NEW_VERSION"  # rewrites every version pin
 make verify-version                 # asserts they all agree
 ```

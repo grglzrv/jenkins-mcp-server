@@ -81,10 +81,12 @@ flowchart LR
 ```
 
 Both raw MCP Services use `ClientIP` session affinity with a 600-second timeout.
-This keeps all requests carrying one MCP session ID on the pod that initialized
-it. If an ingress controller bypasses Service load balancing or masks the source
-address, configure equivalent affinity on that controller too. A pod restart
-still requires the client to reconnect and initialize a new session.
+The direct HTTP server is stateless and does not require affinity for MCP
+session routing. Minibridge owns stateful sessions, so its requests must reach
+the pod that initialized them. For Minibridge, if an ingress controller bypasses
+Service load balancing or masks the source address, configure equivalent
+affinity on that controller too. A Minibridge pod restart still requires the
+client to reconnect and initialize a new session.
 
 Both raw deployments also wait 5 seconds in a `preStop` hook before Kubernetes
 sends SIGTERM. That window mitigates the race while terminating EndpointSlice,
