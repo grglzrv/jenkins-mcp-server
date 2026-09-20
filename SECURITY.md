@@ -93,10 +93,12 @@ This service gives an MCP client access to Jenkins using one configured Jenkins 
   five seconds, but each admitted direct-server connection still owns a thread.
   Minibridge publishes its own health endpoint instead.
 - Rotate the Jenkins API token and never commit `.env` or certificates.
-- Never put tokens, passwords, or other credentials in a Jenkins URL query.
-  The server replaces complete query payloads with `?[redacted]` in its audit,
-  HTTPX request, and transport-error output, but Jenkins, Minibridge, ingress,
-  reverse proxies, or other infrastructure may keep their own request logs.
+- Never put tokens, passwords, or other credentials in a Jenkins URL path or query.
+  The server replaces complete query payloads with `?[redacted]` in its audit
+  and HTTPX request logs. Client-visible transport errors omit the entire
+  request target and raw exception text. Paths can still appear in audit or
+  infrastructure logs; Jenkins, Minibridge, ingress, and reverse proxies may
+  keep their own request logs.
 
 ## Secret handling
 

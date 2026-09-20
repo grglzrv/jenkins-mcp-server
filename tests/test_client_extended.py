@@ -255,7 +255,7 @@ async def test_request_retries_network_error(monkeypatch: pytest.MonkeyPatch) ->
     client = make_client(handler, JENKINS_MAX_RETRIES=1)
     with pytest.raises(JenkinsError) as exc_info:
         await client.request("GET", "/api/json", action="test.network")
-    assert str(exc_info.value) == "Jenkins request failed for /api/json"
+    assert str(exc_info.value) == "Jenkins request failed due to a transport error"
     assert "network down" not in str(exc_info.value)
     assert attempts == 2
     await client.close()

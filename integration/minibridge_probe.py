@@ -16,6 +16,7 @@ Run against the proxy's MCP endpoint:
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 
 from mcp import ClientSession
@@ -62,13 +63,14 @@ MINIBRIDGE_POLICY_ERROR_PREFIX = "request blocked:"
 
 
 def error_text(result) -> str:
-    return " ".join(getattr(c, "text", "") for c in (result.content or [])).lower()
+    text = " ".join(getattr(c, "text", "") for c in (result.content or [])).lower()
+    return re.sub(r"^error executing tool \w+: ", "", text)
 
 
 def reached_jenkins(result) -> bool:
     """The call got past policy and failed trying to talk to Jenkins."""
     text = error_text(result)
-    return any(marker in text for marker in JENKINS_ERRORS)
+    return text.startswith(JENKINS_ERRORS)
 
 
 def raised_mcp_refused(exc: MCPError) -> bool:
@@ -76,8 +78,7 @@ def raised_mcp_refused(exc: MCPError) -> bool:
 
     Jenkins transport failures are proof that Minibridge allowed the call to
     reach the server. Minibridge refusals use its explicit code/prefix pair.
-    Other MCP errors are application/server failures, not evidence of policy
-    rejection.
+    Other MCP errors do not prove either a policy rejection or a working route.
     """
     detail = str(exc).lower()
     return (
@@ -87,8 +88,16 @@ def raised_mcp_refused(exc: MCPError) -> bool:
 
 
 def refused(result) -> bool:
-    """Rejected before reaching Jenkins, by the proxy or the server."""
-    return bool(result.is_error) and not reached_jenkins(result)
+    """Recognize explicit refusals exercised by this probe, never generic crashes."""
+    text = error_text(result)
+    return bool(result.is_error) and bool(
+        text.startswith(MINIBRIDGE_POLICY_ERROR_PREFIX)
+        or text == "server is in read-only mode"
+        or re.fullmatch(r"write category '[^']+' is disabled", text)
+        or re.fullmatch(r"destructive action '[^']+' is disabled(?: by mcp_\w+)?", text)
+        or re.fullmatch(r"job '.+' contains path traversal segments and is rejected", text)
+        or re.fullmatch(r"job '.+' is not allowed by mcp_allowed_jobs", text)
+    )
 
 
 def allowed(result) -> bool:
@@ -99,15 +108,21 @@ def allowed(result) -> bool:
 async def call(session, name: str, arguments: dict):
     """Return (refused, detail).
 
-    A refusal can arrive two ways: minibridge rejects the request at the
-    protocol level and the client raises, while the server's own policy returns
-    a result carrying is_error. Both count as refused.
+    Explicit proxy/server policy errors count as refused. A successful result
+    or a known Jenkins failure proves the route is allowed. Anything else aborts
+    the smoke test: a server crash cannot prove either policy outcome.
     """
     try:
         result = await session.call_tool(name, arguments)
     except MCPError as exc:
-        return raised_mcp_refused(exc), str(exc)[:120]
-    return refused(result), error_text(result)[:120]
+        if raised_mcp_refused(exc):
+            return True, str(exc)[:120]
+        raise RuntimeError(f"Inconclusive MCP failure calling {name}: {str(exc)[:120]}") from exc
+    if refused(result):
+        return True, error_text(result)[:120]
+    if allowed(result):
+        return False, error_text(result)[:120]
+    raise RuntimeError(f"Inconclusive tool failure calling {name}: {error_text(result)[:120]}")
 
 
 async def main(url: str) -> int:
