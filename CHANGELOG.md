@@ -40,6 +40,41 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.10] - 2026-09-20
+
+### Highlights
+
+- Refresh Uvicorn and Ruff to current compatible releases while preserving existing Jenkins MCP transport defaults.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Raise the Uvicorn runtime minimum to 0.53.0 and Ruff development minimum to 0.16.8.
+- Refresh the hash-checked runtime lock for Uvicorn 0.53.0.
+
+### Bug Fixes
+
+- Keep offline and container runtime installation aligned with the declared Uvicorn dependency constraint.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- No application policy or credential-handling behavior changes. Uvicorn 0.53.0 is used with the existing HTTP configuration; its experimental HTTP/2/zttp path is not enabled by this release.
+
+### Upgrade Notes
+
+- No Jenkins, Helm, Kubernetes, or Minibridge configuration migration is required.
+
 ## [2.10.9] - 2026-09-20
 
 ### Highlights
