@@ -1589,7 +1589,7 @@ async def test_transport_error_does_not_return_query_secret() -> None:
     await jc.close()
 
     assert marker not in str(caught.value)
-    assert "?[redacted]" in str(caught.value)
+    assert str(caught.value) == "Jenkins request failed due to a transport error"
 
 
 # --- request bodies are bounded --------------------------------------------
