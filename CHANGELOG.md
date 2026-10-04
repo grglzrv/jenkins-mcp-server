@@ -40,6 +40,43 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.12] - 2026-10-04
+
+### Highlights
+
+- Refresh Uvicorn to 0.54.0 while preserving the existing Jenkins MCP HTTP transport configuration.
+- Update the build backend to Hatchling 1.32.4 and synchronize the hash-checked container locks with the declared dependencies.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Raise the Ruff development minimum to 0.16.10 and the Uvicorn runtime minimum to 0.54.0.
+- Pin Hatchling 1.32.4 consistently in package build metadata, the build input, and the build lock.
+
+### Bug Fixes
+
+- Prevent container builds from installing Uvicorn 0.53.0 despite a declared minimum of 0.54.0.
+- Include Hatchling's upstream fixes for build-plugin compatibility and version metadata handling.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Retain the PyJWT 2.15.0 runtime lock from 2.10.11 and hash verification for runtime and build dependencies. Jenkins credentials and tool permission policies are unchanged. Uvicorn's experimental HTTP/2 implementation remains disabled.
+
+### Upgrade Notes
+
+- No Jenkins, Helm, Kubernetes, or Minibridge configuration migration is required. Use the matching 2.10.12 application image and chart; source builds require Hatchling 1.32.4.
+
 ## [2.10.11] - 2026-10-04
 
 ### Highlights
