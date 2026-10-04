@@ -16,7 +16,7 @@
 Use one command to keep all versioned files aligned:
 
 ```bash
-NEW_VERSION=2.10.10
+NEW_VERSION=2.10.11
 make version VERSION="$NEW_VERSION"
 ```
 

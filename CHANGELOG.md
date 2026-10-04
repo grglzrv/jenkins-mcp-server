@@ -40,6 +40,41 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.11] - 2026-10-04
+
+### Highlights
+
+- Update the container's locked PyJWT dependency to 2.15.0, including upstream JWT error-handling fixes.
+- Keep the application, images, deployment examples, and Helm chart synchronized at 2.10.11.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Preserve reproducible container builds with hash-checked PyJWT 2.15.0 wheels and source distributions.
+
+### Bug Fixes
+
+- Include upstream fixes for malformed JWT claims and JWK data in the MCP SDK's transitive dependency.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Upgrade PyJWT from 2.13.0 to 2.15.0, including normalization of deeply nested JWT payload failures to DecodeError. Jenkins credentials, tool permissions, and transport authentication configuration are unchanged.
+
+### Upgrade Notes
+
+- No Jenkins, Helm, Kubernetes, or Minibridge configuration migration is required. Upgrade to the matching 2.10.11 application image and chart to use the refreshed runtime lock.
+
 ## [2.10.10] - 2026-09-20
 
 ### Highlights
