@@ -16,7 +16,7 @@
 Use one command to keep all versioned files aligned:
 
 ```bash
-NEW_VERSION=2.10.12
+NEW_VERSION=2.10.13
 make version VERSION="$NEW_VERSION"
 ```
 
@@ -48,3 +48,17 @@ changes alone do not require a release.
 
 The complete procedure, review checklist, and list of published artifacts are
 in [docs/releasing/RELEASE.md](docs/releasing/RELEASE.md).
+
+## Dependency updates
+
+After raising runtime dependency minimums in `pyproject.toml`, run `make lock`
+on Linux with Python 3.12 and commit the generated `requirements/runtime.txt`
+and any changed build lock. Run `make verify-lock` to confirm the resolver
+reproduces those files. The container builds an offline wheelhouse from these
+hash-checked locks; changing only package metadata can pass Python tests while
+breaking both application images and every cluster smoke test.
+
+Runtime dependency updates require the appropriate patch release and complete
+release notes. Development-only updates do not require a release unless they
+also alter shipped behavior. Review the existing tools, schemas, safe error
+contract, and both transports against SDK updates before merging.

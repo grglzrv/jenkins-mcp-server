@@ -265,15 +265,15 @@ jobs:
         # NetworkPolicy admits legitimate in-cluster traffic.
         run: helm test jenkins-mcp --namespace jenkins-mcp --timeout 3m
 
-      - name: The MCP endpoint answers
+      - name: Verify the direct MCP protocol in every pod
         run: |
-          kubectl -n jenkins-mcp port-forward svc/jenkins-mcp-jenkins-mcp-server 8000:8000 &
-          sleep 5
-          # A POST without a session is expected to be rejected by the protocol,
-          # not to 404: that distinguishes "mounted and serving" from "absent".
-          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8000/mcp || echo 000)
-          echo "POST /mcp -> $code"
-          case "$code" in 400|406|415) echo "endpoint is serving";; *) echo "unexpected"; exit 1;; esac
+          pods=$(kubectl -n jenkins-mcp get pods \
+            -l app.kubernetes.io/instance=jenkins-mcp -o name)
+          test -n "$pods"
+          for pod in $pods; do
+            kubectl -n jenkins-mcp exec -i "$pod" -- python - "$(cat VERSION)" \
+              < integration/direct_protocol_probe.py
+          done
 
       - name: Upgrade over the existing release
         # Catches immutable-field errors and ownership conflicts that a fresh
@@ -288,6 +288,20 @@ jobs:
             --set mcp.allowedJobs='AI/*' \
             --wait --timeout 5m
           helm history jenkins-mcp --namespace jenkins-mcp
+
+      - name: Verify protocol and Service health after upgrade
+        run: |
+          kubectl -n jenkins-mcp rollout status \
+            deploy/jenkins-mcp-jenkins-mcp-server --timeout=180s
+          pods=$(kubectl -n jenkins-mcp get pods \
+            -l app.kubernetes.io/instance=jenkins-mcp -o json | \
+            python3 -c 'import json,sys; print(" ".join("pod/" + p["metadata"]["name"] for p in json.load(sys.stdin)["items"] if not p["metadata"].get("deletionTimestamp")))')
+          test -n "$pods"
+          for pod in $pods; do
+            kubectl -n jenkins-mcp exec -i "$pod" -- python - "$(cat VERSION)" \
+              < integration/direct_protocol_probe.py
+          done
+          helm test jenkins-mcp --namespace jenkins-mcp --timeout 3m
 
       - name: Uninstall cleanly
         run: |
