@@ -1,5 +1,25 @@
 # Kubernetes, Tailscale and Argo CD deployment
 
+## Cluster validation
+
+The reusable `chart-smoke.yml` workflow builds images from the tested commit,
+imports them into real k3s clusters, and checks direct and Minibridge deployments
+across the supported version matrix. Direct tests cover installation, readiness,
+audit configuration, job scope, request limits, secret redaction, the termination
+hook, Service access through NetworkPolicy, upgrade, and clean uninstall.
+
+Before and after an upgrade, `integration/direct_protocol_probe.py` runs inside
+every active direct-server pod. It verifies MCP initialization, the expected
+application version, ping, the complete tool list, descriptions, object input
+schemas, and a safely denied out-of-scope job request. It needs the smoke
+configuration's `AI/*` job scope and does not write to Jenkins. The chart's
+`helm test` checks Service health separately, including after the upgrade.
+
+Separate smoke jobs exercise all Minibridge tools against an isolated Jenkins
+controller, enforce destructive-tool refusals, and verify credential rotation
+for Helm-managed, existing, per-field, and External Secrets sources. These tests
+use isolated CI clusters; they do not verify a production Tailscale installation.
+
 ## Traffic paths
 
 ```text

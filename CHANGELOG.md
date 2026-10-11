@@ -40,6 +40,43 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.13] - 2026-10-11
+
+### Highlights
+
+- Upgrade the MCP SDK to 2.3.0 and Pydantic to the 2.14 line while preserving the existing Jenkins tools and transport contract.
+- Restore reproducible container builds by synchronizing the hash-checked runtime lock with the dependency minimums.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Raise the development type checker minimum to Mypy 2.4.0.
+- Verify direct MCP initialization, the advertised application version, ping, all tool schemas and descriptions, and job-scope enforcement in every k3s smoke pod before and after Helm upgrades.
+
+### Bug Fixes
+
+- Fix direct and Minibridge image builds failing because the wheelhouse contained MCP 2.2.0 despite a declared minimum of 2.3.0.
+- Synchronize MCP Types and Pydantic Core with the updated SDK and Pydantic runtime dependencies.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Preserve hash verification for runtime and build dependencies. The existing Jenkins credential handling and destructive-tool safeguards remain in force.
+
+### Upgrade Notes
+
+- No Jenkins, Helm, Kubernetes, or Minibridge configuration migration is required. Roll out the matching application image and chart; source installations require MCP 2.3.0 or newer and Pydantic 2.14.0 or newer.
+
 ## [2.10.12] - 2026-10-04
 
 ### Highlights
