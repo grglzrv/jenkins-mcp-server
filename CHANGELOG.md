@@ -40,6 +40,41 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.14] - 2026-10-20
+
+### Highlights
+
+- Update Pydantic to 2.14.1 and pydantic-settings to 2.16.0 while preserving the existing configuration and Jenkins tool contracts.
+- Restore reproducible direct and Minibridge container builds by synchronizing the hash-checked runtime lock with the declared dependency minimums.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Raise the development linter minimum to Ruff 0.17.1.
+
+### Bug Fixes
+
+- Fix container builds failing because the locked wheelhouse supplied pydantic-settings 2.15.0 despite the package requiring 2.16.0 or newer.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Preserve hash verification for runtime and build dependencies and the existing credential, configuration, and destructive-tool safeguards.
+
+### Upgrade Notes
+
+- No Jenkins, Helm, Kubernetes, or Minibridge configuration migration is required. Roll out the matching application image and chart; source installations require Pydantic 2.14.1 or newer and pydantic-settings 2.16.0 or newer. Python 3.11 remains the minimum supported version.
+
 ## [2.10.13] - 2026-10-11
 
 ### Highlights
