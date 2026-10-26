@@ -40,6 +40,45 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.15] - 2026-10-27
+
+### Highlights
+
+- Update the trusted CA bundle and settings dependencies while keeping the application, Helm chart and deployment references aligned.
+- Remediate the known OpenTelemetry tracestate parsing denial-of-service vulnerability.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Raise the pydantic-settings runtime minimum to 2.16.1 and the Ruff development minimum to 0.17.2.
+- Synchronize the hash-checked runtime lock with the declared application dependency minimums for reproducible offline Docker image builds.
+
+### Bug Fixes
+
+- Include upstream pydantic-settings 2.16.1 regression fixes for positional tuple arguments and list-of-dict CLI values.
+- Prevent offline wheelhouse installs from using an older pydantic-settings version than the declared application minimum.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Update the locked opentelemetry-api to 1.45.1 to address CVE-2026-114603 (unbounded tracestate header parsing).
+- Update certifi to 2026.10.19 while retaining SHA-256 verification of dependency artifacts.
+
+### Upgrade Notes
+
+- No Jenkins, Helm, Kubernetes or Minibridge configuration migration is required. Deploy the matching 2.10.15 application image and Helm chart together.
+- Source installations require pydantic-settings 2.16.1 or newer; Python 3.11 remains the minimum supported version.
+
 ## [2.10.14] - 2026-10-20
 
 ### Highlights
