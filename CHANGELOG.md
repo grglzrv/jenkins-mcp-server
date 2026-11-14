@@ -40,6 +40,40 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.16] - 2026-11-14
+
+### Highlights
+
+- Update OpenTelemetry API to 1.45.2 to apply upstream trace context validation hardening.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Refresh the hash-checked runtime dependency lock with the OpenTelemetry API 1.45.2 patch release.
+
+### Bug Fixes
+
+- Apply the upstream limit of 512 characters to inbound W3C traceparent headers during context extraction.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Strengthen trace context input validation through the upstream OpenTelemetry API patch update; retain SHA-256 pinned dependency artifacts.
+
+### Upgrade Notes
+
+- No configuration migration is needed. Deploy the matching 2.10.16 application image and Helm chart together.
+
 ## [2.10.15] - 2026-10-27
 
 ### Highlights
