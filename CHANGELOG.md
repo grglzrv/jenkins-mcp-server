@@ -40,6 +40,77 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.17] - 2026-11-14
+
+### Highlights
+
+- Refresh Python runtime and build dependencies while preserving reproducible, hash-checked offline container builds.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Raise the declared Pydantic minimum to 2.14.2 and pydantic-settings minimum to 2.16.2, with the refreshed runtime lock resolving to 2.14.3 and 2.16.3.
+- Update Hatchling to 1.33.0 and raise the pytest, pytest-asyncio, Ruff, and mypy development minimums.
+
+### Bug Fixes
+
+- Resolve Docker and Jenkins integration installation failures caused by the previous runtime lock shipping pydantic-settings 2.16.1 below the newly required minimum.
+- Regenerate the Python 3.12 hash-checked runtime and build locks to match the declared dependency requirements.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Include the upstream Pydantic security fixes and retain OpenTelemetry API 1.45.2 trace-context input hardening from the preceding release.
+
+### Upgrade Notes
+
+- No Jenkins, Kubernetes, Helm or Minibridge configuration changes are needed. Deploy the matching 2.10.17 application image and Helm chart together.
+- Source installations require Pydantic 2.14.2 or newer and pydantic-settings 2.16.2 or newer; Python 3.11 remains supported.
+
+## [2.10.16] - 2026-11-14
+
+### Highlights
+
+- Update OpenTelemetry API to 1.45.2 to apply upstream trace context validation hardening.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Refresh the hash-checked runtime dependency lock with the OpenTelemetry API 1.45.2 patch release.
+
+### Bug Fixes
+
+- Apply the upstream limit of 512 characters to inbound W3C traceparent headers during context extraction.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Strengthen trace context input validation through the upstream OpenTelemetry API patch update; retain SHA-256 pinned dependency artifacts.
+
+### Upgrade Notes
+
+- No configuration migration is needed. Deploy the matching 2.10.16 application image and Helm chart together.
+
 ## [2.10.15] - 2026-10-27
 
 ### Highlights
