@@ -77,6 +77,16 @@ jobs:
           cache: pip
       - name: Verify release dependency locks
         run: make verify-lock
+      - name: Produce corrected release locks for review
+        if: always()
+        run: |
+          make lock
+          echo '---BEGIN_RUNTIME_LOCK---'
+          cat requirements/runtime.txt
+          echo '---END_RUNTIME_LOCK---'
+          echo '---BEGIN_BUILD_LOCK---'
+          cat requirements/build.txt
+          echo '---END_BUILD_LOCK---'
 
   policy:
     name: Guardrail policy
