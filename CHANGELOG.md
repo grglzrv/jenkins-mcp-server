@@ -40,6 +40,43 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.18] - 2026-11-16
+
+### Highlights
+
+- Align Python runtime and development dependency minimums with validated upstream releases.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Require Pydantic 2.14.3 or newer for runtime installations.
+- Raise the pytest-asyncio development minimum to 1.5.0 and Ruff to 0.17.5.
+
+### Bug Fixes
+
+- None.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Preserve the SHA-256 hash-checked runtime and build dependency locks; the runtime lock already includes Pydantic 2.14.3.
+- Retain the existing dependency audit, CodeQL, Jenkins, Docker, Helm, and Kubernetes validation gates.
+
+### Upgrade Notes
+
+- Deploy the matching 2.10.18 application image and Helm chart; no Jenkins, Kubernetes, or Minibridge configuration migration is required.
+- Source installations now require Pydantic 2.14.3 or newer; existing images already use it from the runtime lock.
+
 ## [2.10.17] - 2026-11-14
 
 ### Highlights
