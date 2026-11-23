@@ -40,6 +40,43 @@ from the matching version entry after CI validates it.
 
 - None yet.
 
+## [2.10.19] - 2026-11-23
+
+### Highlights
+
+- Upgrade Python dependency minimums to Pydantic 2.14.4, pydantic-settings 2.16.3, and Ruff 0.17.6 while preserving reproducible offline container images.
+
+### New Features
+
+- None.
+
+### Improvements
+
+- Refresh the Python 3.12 hash-checked runtime lock to Pydantic 2.14.4 and pydantic-core 2.50.5; retain the already-locked pydantic-settings 2.16.3.
+- Adopt Ruff 0.17.6 as the minimum development linter version.
+
+### Bug Fixes
+
+- Restore offline Docker and Minibridge builds, Jenkins TLS integration, and Kubernetes smoke tests by aligning the runtime wheelhouse with the declared Pydantic minimum.
+
+### Breaking Changes
+
+- None.
+
+### Known Issues
+
+- None known.
+
+### Security
+
+- Require pydantic-settings 2.16.3 or newer for source installations, including its upstream fix that prevents secret-file symlinks from resolving outside the configured secrets directory.
+- Continue SHA-256 verification of pinned dependencies without changing the Jenkins credential or authorization model.
+
+### Upgrade Notes
+
+- Deploy the matching 2.10.19 application image and Helm chart together. No Jenkins, Kubernetes, Helm, or Minibridge configuration migration is required.
+- Python 3.11 remains supported; source installations now require Pydantic 2.14.4 and pydantic-settings 2.16.3 or newer.
+
 ## [2.10.18] - 2026-11-16
 
 ### Highlights
